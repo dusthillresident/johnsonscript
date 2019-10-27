@@ -1,0 +1,19 @@
+stringvar test;
+
+print len$ test;
+set test  cat$ "1234" chr$0 "5678";
+print len$ test;
+print test;
+examinestring getref test;
+return 0;
+
+
+
+function examinestring s local i;
+ print "examinestring:";
+ set i 0;
+ while < i len$ $s;
+  print " " mid$$s i 1;
+  set i + i 1;
+ endwhile;
+endfunction;

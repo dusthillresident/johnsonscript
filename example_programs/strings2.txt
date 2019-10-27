@@ -1,0 +1,7 @@
+stringvar t;
+set t  cat$ (str$ 123)
+            (str$ 456)
+            (str$ (len$ (str$ 999)));
+print t;
+
+return 0;

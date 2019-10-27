@@ -1,0 +1,49 @@
+constant numballs 32;
+variable ballarray i;
+constant ball_radius 48;
+
+set ballarray alloc * 4 numballs;    REM  colour, decayspeed, x, y
+
+set i 0;
+while < i numballs;
+ initball (+ballarray * i 4)  (rnd * 256 256 256)  *(+(/ i numballs)0.1)0.15;
+ set i + i 1;
+endwhile;
+
+startgraphics 640 480;
+refreshmode 1;
+
+while ! mouseb;
+ set i 0;
+ cls;
+ while < i numballs;
+  processball (+ballarray * i 4);
+  set i + i 1;
+ endwhile;
+ refresh;
+ wait 16.6;
+endwhile;
+
+return 0;
+
+
+function initball ballp colour decay  local  col ds bx by;
+ set col ballp; set ds + ballp 1; set bx + ballp 2; set by + ballp 3;
+ if > decay 1; set decay 1; endif;
+ set Dds decay
+ set Dcol colour;
+endfunction;
+
+function processball ballp  local  col ds bx by;
+ set col ballp; set ds + ballp 1; set bx + ballp 2; set by + ballp 3;
+ REM -----
+ set Dbx  + (* mousex Dds) (* Dbx (- 1 Dds)); 
+ set Dby  + (* mousey Dds) (* Dby (- 1 Dds)); 
+ REM -----
+ gcol Dcol;
+ circlef Dbx Dby ball_radius;
+ gcol -1;
+ circle  Dbx Dby ball_radius;
+ REMprint Dbx" "Dby" "Dds"   "ballp;
+endfunction;
+ 

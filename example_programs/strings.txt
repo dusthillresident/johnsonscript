@@ -1,0 +1,23 @@
+
+print mid$ "this_is_a_test" 5 4;
+print (cat$ "penis_" "denis_") 1234.5;
+print (cat$ "this_" "is_" "a_" "test");
+print mid$ (cat$ "this_" "is_" "a_" "test") 5 4;
+
+print;
+print "here...";
+
+stringvar mystring;
+
+variable mynumbervar;
+set mynumbervar 12345.6;
+
+set mystring "this is my string.";
+set mystring  cat$ mystring  str$ mynumbervar (cat$ "this_" "is_" "a_" "test");
+
+print mystring;
+print $ getref mystring;
+
+
+return 6;
+return 1;  
