@@ -1,11 +1,11 @@
 variable a b result;
 set a  / (rnd 10000000) 1000000;
 set b  / (rnd 10000000) 1000000;
-set result  fmod a b;
-print "'fmod " a " " b "' returns " result;
+set result  _fmod a b;
+print "'_fmod " a " " b "' returns " result;
 return result;
 
-function fmod a b;
+function _fmod a b;
  set b * (abs b) (sgn a);
 return - a (* b int (/ a b));
 
