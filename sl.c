@@ -10,6 +10,11 @@
  #include "NewBase.c"
 #endif
 
+#ifndef DISABLE_ALIGN_STUFF
+ // this is for testing. I discovered that messing with __attribute__((aligned(x))) can make a difference to how fast things run
+ #define ALIGN_ATTRIB_CONSTANT 1
+#endif
+
 // memory problem debugging stuff
 #if 0
  void* mymallocfordebug(size_t size    ,int n, char *f){
@@ -100,52 +105,66 @@ typedef struct token token;
 #define t_valS		38	//	val$ [string]			NUM		return value of number in string
 #define t_lenS		39	//	len$ [string]			NUM		return length of string
 #define t_cmpS		40	//	cmp$ [string] [string]		NUM		strcmp 
+#define t_instrS	41	//	instr$ [stringa] [stringb]	NUM		return the position of stringb in stringa or -1 if not found
 // =========================================================
 
-#define t_rnd		41	//	rnd [number]	built in function: pseudo random numbers	takes one parameter
+#define t_rnd		42	//	rnd [number]	built in function: pseudo random numbers	takes one parameter
 
-#define t_alloc		42	//	alloc [n]	allocate [n] number of items from the vars array
+#define t_alloc		43	//	alloc [n]	allocate [n] number of items from the vars array
 
-#define t_referredstringconst 43	// getref "stringconst"		creates an unnamed string variable which the stringconstant is copied to, then returns the reference number of the new string variable. note that the copy happens only once so any modifications to the string variable are permanent
+#define t_referredstringconst 44	// getref "stringconst"		creates an unnamed string variable which the stringconstant is copied to, then returns the reference number of the new string variable. note that the copy happens only once so any modifications to the string variable are permanent
 
 // ------- maths -----------
 
-#define t_tan		44	//	tan
-#define t_tanh		45	//	tanh
-#define t_atan		46	//	atan
-#define t_atan2		47	//	atan2
-#define t_acos		48	//	acos
-#define t_cos		49	//	cos
-#define t_cosh		50	//	cosh
-#define t_asin		51	//	asin
-#define t_sin		52	//	sin
-#define t_sinh		53	//	sinh
-#define t_exp		54	//	exp
-#define t_log		55	//	log
-#define t_log10		56	//	log10
-#define t_pow		57	//	pow
-#define t_sqr		58	//	sqr
-#define t_ceil		59	//	ceil
-#define t_floor		60	//	floor
-#define t_fmod		61	//	fmod
+#define t_tan		45	//	tan
+#define t_tanh		46	//	tanh
+#define t_atan		47	//	atan
+#define t_atan2		48	//	atan2
+#define t_acos		49	//	acos
+#define t_cos		50	//	cos
+#define t_cosh		51	//	cosh
+#define t_asin		52	//	asin
+#define t_sin		53	//	sin
+#define t_sinh		54	//	sinh
+#define t_exp		55	//	exp
+#define t_log		56	//	log
+#define t_log10		57	//	log10
+#define t_pow		58	//	pow
+#define t_sqr		59	//	sqr
+#define t_ceil		60	//	ceil
+#define t_floor		61	//	floor
+#define t_fmod		62	//	fmod
 
-#define t_leftb		62	//	(
+// ------- functions related to file handling -----------
+// these return the 'file number' of the file that was opened or 0 if there was an error
+#define t_openin	63	//	openin [stringval]		open a file in read only mode. 
+#define t_openout	64	//	openout [stringval]		open a file in write only mode
+#define t_openup	65	//	openup [stringval]		open a file in read/write mode
+// ----				
+#define t_eof		66	//	eof [filenumber]		check if reached end of file
+#define t_bget		67	//	bget [filenumber]		read byte from file
+#define t_vget		68	//	vget [filenumber]		read 8 byte double from file
+#define t_ptr		69	//	ptr  [filenumber]		check current position in file
+#define t_ext		70	//	ext [filenumber]		check the current length of the file
+// ------------------------------------------------------
+
+#define t_leftb		71	//	(
 
 #define VALUES_END	t_leftb
 
 #ifdef enable_graphics_extension
  // graphics extension functions 
- #define t_winw			63	// takes no parameters, returns current window width
- #define t_winh			64	// takes no parameters, returns current window height
- #define t_mousex		65	// takes no parameters, returns current mouse x position	
- #define t_mousey		66	// takes no parameters, returns current mouse y position
- #define t_mousez		67	// takes no parameters, returns a value that changes when the mouse button is scrolled
- #define t_mouseb		68	// takes no parameters, returns bitfield of the mouse buttons currently pressed
- #define t_readkey		69	// takes no parameters, pulls a byte from the keyboard buffer and returns it
- #define t_keypressed		70	// takes one parameter, checks the iskeypressed array and returns info about whether or not that key is currently pressed
- #define t_expose		71	// takes no parameters, returns the state of a flag variable that gets set whenever there's an expose xwindows event, the flag is cleared after reading
- #define t_wmclose		72	// takes no parameters, returns the state of a flag that gets set when the window manager close button has been clicked, flag is cleared after reading
- #define t_keybuffer		73	// return the number of characters in the keyboard buffer
+ #define t_winw		72		// takes no parameters, returns current window width
+ #define t_winh		73		// takes no parameters, returns current window height
+ #define t_mousex	74		// takes no parameters, returns current mouse x position	
+ #define t_mousey	75		// takes no parameters, returns current mouse y position
+ #define t_mousez	76		// takes no parameters, returns a value that changes when the mouse button is scrolled
+ #define t_mouseb	77		// takes no parameters, returns bitfield of the mouse buttons currently pressed
+ #define t_readkey	78		// takes no parameters, pulls a byte from the keyboard buffer and returns it
+ #define t_keypressed	79		// takes one parameter, checks the iskeypressed array and returns info about whether or not that key is currently pressed
+ #define t_expose	80		// takes no parameters, returns the state of a flag variable that gets set whenever there's an expose xwindows event, the flag is cleared after reading
+ #define t_wmclose	81		// takes no parameters, returns the state of a flag that gets set when the window manager close button has been clicked, flag is cleared after reading
+ #define t_keybuffer	82		// return the number of characters in the keyboard buffer
  #undef VALUES_END
  #define VALUES_END t_keybuffer
 #endif
@@ -158,64 +177,70 @@ typedef struct token token;
 
 // misc syntax stuff
 
-#define t_rightb		74	//	)
-#define t_endstatement		75	//	;		end of statement marker
-#define t_comma			76	//	,
+#define t_rightb	83		//	)
+#define t_endstatement	84		//	;		end of statement marker
+#define t_comma		85		//	,
 
-#define t_deffn			77	//	function [F value] ([ P num_params L num_locals] or [ param_id_one param_id_two [...] [local local_id_one local_id_two] ] ) ;
-#define t_local			78	//	local				used with 'function' keyword. ids after this are local variable names
-#define t_ellipsis		79	//	...				used with 'function' keyword. when put at the end of param list, specifies that function takes unlimited parameters.
+#define t_deffn		86		//	function [F value] ([ P num_params L num_locals] or [ param_id_one param_id_two [...] [local local_id_one local_id_two] ] ) ;
+#define t_local		87		//	local				used with 'function' keyword. ids after this are local variable names
+#define t_ellipsis	88		//	...				used with 'function' keyword. when put at the end of param list, specifies that function takes unlimited parameters.
 
-#define t_label			80	//	.label		place label
+#define t_label		89		//	.label		place label
 
 // ========= commands ========= 
 
-#define t_return		81	//	return
-#define t_while			82	//	while
-#define t_endwhile		83	//	endwhile
-#define t_if			84	//	if
-#define t_else			85	//	else
-#define t_endif			86	//	endif
-#define t_set			87	//	set
-#define t_var			88	//	variable [identifier] ([identifier]) ... ;		declare variables	
-#define t_arr			89	//	array [identifier] value;	declare an array
-#define t_const			90	//	constant [identifier] value;	declare a constant
-#define t_stringvar		91	//	stringvar [identifier] ([number]) ... ; declare string variables. Optionally specify the starting bufsize
-#define t_print			92	//	print, will print string constants and/or values until it finds ';'
-#define t_endfn			93	//	endfunction	return from a function without returning a value (will return 0)
-#define t_goto			94	//	goto [string];		will search for a label with matching string and execution will continue from there
-// --- not implemented yet ---
-#define t_option		95	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
-// ---------------------------
-#define t_wait			96	//	wait [value];		usleep value*1000
+#define t_return	90		//	return
+#define t_while		91		//	while
+#define t_endwhile	92		//	endwhile
+#define t_if		93		//	if
+#define t_else		94		//	else
+#define t_endif		95		//	endif
+#define t_set		96		//	set
+#define t_var		97		//	variable [identifier] ([identifier]) ... ;		declare variables	
+#define t_arr		98		//	array [identifier] value;	declare an array
+#define t_const		99		//	constant [identifier] value;	declare a constant
+#define t_stringvar	100		//	stringvar [identifier] ([number]) ... ; declare string variables. Optionally specify the starting bufsize
+#define t_print		101		//	print, will print string constants and/or values until it finds ';'
+#define t_endfn		102		//	endfunction	return from a function without returning a value (will return 0)
+#define t_goto		103		//	goto [string];		will search for a label with matching string and execution will continue from there
+#define t_option	104		//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
+#define t_wait		105		//	wait [value];		usleep value*1000
+#define t_oscli		106		//	oscli [stringvalue];	system("string");
+// ----- commands related to file handling -----
+#define t_sptr		107		//	sptr [filenumber] [value] ;			set position in file to [value]
+#define t_bput		108		//	bput [filenumber] [value] [...] ;		write bytes to file
+#define t_vput		109		//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
+#define t_sput		110		//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
+#define t_close		111		//	close [filenumber] ;				close an open file
+// ---------------------------------------------
 // ===== end of commands ======
 
 // ===== fast modified versions of loop/control flow commands =====
-#define t_gotof			97      //      jump to position in token.i
-#define t_whilef		98	//	position of matching 'endwhile' in token.i
-#define t_endwhilef		99	//	position of matching 'while'+1 in token.i
-#define t_iff			100	//	position of matching else/endif in token.i
-#define t_elsef			101	//	position of matching endif in token.i
-#define t_endiff		102	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
+#define t_gotof		112	     //      jump to position in token.i
+#define t_whilef	113		//	position of matching 'endwhile' in token.i
+#define t_endwhilef	114		//	position of matching 'while'+1 in token.i
+#define t_iff		115		//	position of matching else/endif in token.i
+#define t_elsef		116		//	position of matching endif in token.i
+#define t_endiff	117		//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
 // ===================================
 
 // ===== string functions & stuff that's a 'string value' ======
 					//	EXAMPLE				RETURNS		DESCRIPTION
-#define t_stringconst		103	//	"string"					string constant
-#define t_stringconstf		104	//							string constant (fast), eliminates the need to call strlen()
-#define t_rightS		105	//	right$ [string] [n]		STR		get the last n characters of string
-#define t_leftS			106	//	left$  [string] [n]		STR		get the first n characters of string
-#define t_midS			107	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
-#define t_chrS			108	//	chr$ [num]			STR		return a string with the character [num]
-#define t_strS			109	//	str$ [num]			STR		return string containing representation of [num]
-#define t_catS			110	//	cat$ [string] [string] ...	STR		concatenate strings
-// ----
-#define t_S			111	//	$		string variable dereference
-#define t_Sf			112	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
+#define t_stringconst	118		//	"string"					string constant
+#define t_stringconstf	119		//							string constant (fast), eliminates the need to call strlen()
+#define t_rightS	120		//	right$ [string] [n]		STR		get the last n characters of string
+#define t_leftS		121		//	left$  [string] [n]		STR		get the first n characters of string
+#define t_midS		122		//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
+#define t_chrS		123		//	chr$ [num]			STR		return a string with the character [num]
+#define t_strS		124		//	str$ [num]			STR		return string containing representation of [num]
+#define t_catS		125		//	cat$ [string] [string] ...	STR		concatenate strings
+#define t_S		126		//	$		string variable dereference
+#define t_Sf		127		//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
+#define t_sget		128		//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x00
 #define STRINGVALS_START t_stringconst
-#define STRINGVALS_END   t_Sf
+#define STRINGVALS_END   t_sget
 #ifdef enable_graphics_extension // graphics extension stringvalues
- #define t_readkeyS		113	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
+ #define t_readkeyS	129		// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
  #undef STRINGVALS_END
  #define STRINGVALS_END t_readkeyS
 #endif
@@ -226,23 +251,23 @@ typedef struct token token;
 #ifdef enable_graphics_extension
  // ===== graphics extension commands =====
  // commands
- #define t_startgraphics	114	// startgraphics		winwidth winheight ;
- #define t_stopgraphics		115	// stopgraphics			;
- #define t_winsize		116	// winsize			W H ;
- #define t_pixel		117	// pixel			X Y ([X Y] ...) ;
- #define t_line			118	// line				X Y X Y ([X Y] ...) ;
- #define t_circlef		119	// circlef			X Y R ;
- #define t_circle		120	// circle			X Y R ;
- #define t_rectanglef		121	// rectanglef			X Y W [H] ;
- #define t_rectangle		122	// rectangle			X Y W [H] ;
- #define t_triangle		123	// triangle			X Y X Y X Y ;
- #define t_drawtext		124	// drawtext			X Y S (stringval);
- #define t_refreshmode		125	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		126	// refresh 			;
- #define t_gcol			127	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		128	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			129	// cls				;
- #define t_drawmode		130	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_startgraphics	130	// startgraphics		winwidth winheight ;
+ #define t_stopgraphics		131	// stopgraphics			;
+ #define t_winsize		132	// winsize			W H ;
+ #define t_pixel		133	// pixel			X Y ([X Y] ...) ;
+ #define t_line			134	// line				X Y X Y ([X Y] ...) ;
+ #define t_circlef		135	// circlef			X Y R ;
+ #define t_circle		136	// circle			X Y R ;
+ #define t_rectanglef		137	// rectanglef			X Y W [H] ;
+ #define t_rectangle		138	// rectangle			X Y W [H] ;
+ #define t_triangle		139	// triangle			X Y X Y X Y ;
+ #define t_drawtext		140	// drawtext			X Y S (stringval);
+ #define t_refreshmode		141	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		142	// refresh 			;
+ #define t_gcol			143	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		144	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			145	// cls				;
+ #define t_drawmode		146	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
@@ -326,6 +351,19 @@ void stringslist_addstring(stringslist *s,char *string){
 //--------------------------
 
 //--------------------------
+// file management
+struct file;
+typedef struct file file;
+struct file {
+ int open;
+ int read_access;
+ int write_access;
+ FILE *fp;
+};
+#define DEFAULT_MAX_FILES 8 // must be at least 3 to make space for stdin, stdout, stderr
+//--------------------------
+
+//--------------------------
 #define MAX_FUNCS 256
 struct program {
  token *tokens;
@@ -349,6 +387,9 @@ struct program {
  stringvar **stringvars;
  //int next_free_stringvar;
  // ------------
+ int max_files;
+ file **files;
+ // ------------
  id_info *ids;
  stringslist *program_strings;
 };
@@ -364,11 +405,12 @@ double interpreter(int p, program *prog);
 void free_ids(id_info *ids);
 token* tokenise(stringslist *progstrings, char *text, int *length_return);
 token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_return);
-void process_function_definitions(program *prog);
+void process_function_definitions(program *prog,int startpos);
 void error(char *s);
 stringval getstringvalue( program *prog, int *pos );
 int isstringvalue(unsigned char type);
 int isThisBracketAStringValue(program *prog, int p);
+int isvalue(unsigned char type);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -396,10 +438,46 @@ program* newprog(int maxlen, int vsize, int ssize){
  for(i=0; i<DEFAULT_STRING_ACCUMULATOR_LEVELS; i++){
   out->string_accumulator[ i ] = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE);
  }
+ // initialise file array
+ out->max_files = DEFAULT_MAX_FILES;
+ out->files    = calloc(DEFAULT_MAX_FILES,sizeof(void*));
+ out->files[0] = calloc(DEFAULT_MAX_FILES,sizeof(file));
+ for(i=1; i<DEFAULT_MAX_FILES; i++){
+  out->files[i] = (out->files[0] + i);
+ }
+ out->files[0]->open=1; out->files[0]->read_access=1;  out->files[0]->fp = stdin;  // stdin
+ out->files[1]->open=1; out->files[1]->write_access=1; out->files[1]->fp = stdout; // stout
+ out->files[2]->open=1; out->files[2]->write_access=1; out->files[2]->fp = stderr; // sterr
  // initialise id list
  out->ids = calloc(1,sizeof(id_info));
  return out;
 }
+
+// -------------------------------------------------------------------------------------------
+int get_free_fileslot(program *prog){
+ int i;
+ // look for the next free fileslot.
+ // start at 3 because 0,1,2 are reserved for stdin, stdout, stderr
+ for(i=3; i < prog->max_files; i++){
+  if(!prog->files[i]->open) return i;
+ }
+ // if one was not found, create a new one
+ prog->max_files += 1;
+ prog->files = realloc(prog->files, sizeof(void*) * prog->max_files);
+ if(prog->files == NULL) error("get_free_fileslot: realloc failed\n");
+ prog->files[prog->max_files-1] = calloc(1,sizeof(file));
+ return prog->max_files-1;
+}
+file* getfile(program *prog, int file_reference_number, int read, int write){
+ int fileindex = file_reference_number - 1;
+ if( fileindex<0 || fileindex>=prog->max_files ) error("bad file access (filenumber out of range)\n");
+ file *out = prog->files[fileindex];
+ if( ! out->open ) error("bad file access (not open)\n");
+ if( read  && ! out->read_access  ) error("bad file access (not readable)\n");
+ if( write && ! out->write_access ) error("bad file access (not writable)\n");
+ return out;
+}
+// -------------------------------------------------------------------------------------------
 
 token maketoken( unsigned char type ){
  token out;
@@ -485,7 +563,7 @@ program* init_program( char *str,int str_is_filepath ){
  prog->tokens = tokens; prog->length = tokens_length; prog->maxlen = tokens_length;
  prog->program_strings = program_strings;
  // search for function definitions and process them
- process_function_definitions(prog);
+ process_function_definitions(prog,0);
  return prog;
 }
 
@@ -609,7 +687,7 @@ void process_function_definition(int pos,program *prog){
   break;
  case t_id:
   // check if the id is allowed, eg, if it's not already used
-   if( find_id(prog->ids, (char*)prog->tokens[pos].data.pointer) ){ printf("process_function_definition: this identifier is already used\n"); goto process_function_definition_errorout; }
+   if( find_id(prog->ids, (char*)prog->tokens[pos].data.pointer) ){ printf("process_function_definition: this identifier '%s' is already used\n",(char*)prog->tokens[pos].data.pointer); goto process_function_definition_errorout; }
   // find the next unused function number, error if there are no unused function numbers
    {int i;
     for(i=0; i<MAX_FUNCS; i++){
@@ -720,9 +798,9 @@ void process_function_definition(int pos,program *prog){
  free( out );
  return; 
 }
-void process_function_definitions(program *prog){
+void process_function_definitions(program *prog,int startpos){
  int i;
- for(i=0; i<prog->length; i++){ 
+ for(i=startpos; i<prog->length; i++){ 
   if( prog->tokens[i].type == t_deffn ) process_function_definition(i+1,prog);
  }
 }
@@ -753,6 +831,7 @@ void option( program *prog, int *p ){
   stringval id_string = getstringvalue( prog, p );
   if( !strncmp( "vsize", id_string.string, id_string.len ) ){ opt_number=0; goto option__identify_option_string_out;}	//	vsize		Set the size of the variables array
   if( !strncmp( "ssize", id_string.string, id_string.len ) ){ opt_number=1; goto option__identify_option_string_out;}	//	ssize		Set the size of the stack array
+  if( !strncmp( "import", id_string.string, id_string.len ) ){ opt_number=2; goto option__identify_option_string_out;}	//	import		Import functions from another file
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
   if( opt_number != -1 && prog->tokens[id_stringconst_pos].type == t_stringconst ){
@@ -793,6 +872,24 @@ void option( program *prog, int *p ){
   prog->vars = realloc( prog->vars, sizeof(double) * prog->vsize ); // reallocate vars+stack array
   if( prog->vars == NULL ) error("option: ssize: realloc failed\n");
   prog->stack = prog->vars + (prog->vsize - prog->ssize);
+  break;
+ }
+ case 2:
+ {
+  token *tokens; int tokens_length; stringval filename;
+  // get filename
+  filename = getstringvalue(prog,p);
+  char holdthis = filename.string[filename.len]; filename.string[filename.len]=0;
+  // load text file and process it, getting the tokens (program code data) and program_strings
+  tokens = loadtokensfromtext(prog->program_strings,filename.string,&tokens_length);
+  filename.string[filename.len]=holdthis;
+  if( tokens == NULL ) error("import: couldn't open file\n");
+  // resize array and append new code
+  prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length)*sizeof(token));
+  memcpy(prog->tokens + prog->maxlen, tokens, sizeof(token) * tokens_length);
+  prog->length += tokens_length; prog->maxlen+=tokens_length;
+  // process function definitions for imported code
+  process_function_definitions(prog,prog->maxlen - tokens_length);
   break;
  }
  default: error("option: unrecognised option\n");
@@ -1082,9 +1179,29 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   out = maketoken( t_goto ); goto gettoken_normalout;
  }
 
+ if( wordmatch( pos,"oscli", text) ){	//	
+  out = maketoken( t_oscli ); goto gettoken_normalout;
+ }
+
  // '_num_params', alias for L0, which is the parameter telling you the number of parameters a function has
  if( wordmatch( pos,"_num_params", text) ){	//	
   out = maketoken_stackaccess( 0 ); goto gettoken_normalout;
+ }
+ // '_stdin', alias for '1'. '1' reserved as the file reference number for stdin
+ if( wordmatch( pos,"_stdin", text) ){
+  out = maketoken_num( 1 ); goto gettoken_normalout;
+ }
+ // '_stdout', alias for '2'. '2' reserved as the file reference number for stdout
+ if( wordmatch( pos,"_stdout", text) ){
+  out = maketoken_num( 2 ); goto gettoken_normalout;
+ }
+ // '_stderr', alias for '3'. '3' reserved as the file reference number for stderr
+ if( wordmatch( pos,"_stderr", text) ){
+  out = maketoken_num( 3 ); goto gettoken_normalout;
+ }
+ // '_pi', alias for '3.14159265358979323846264338327950288'
+ if( wordmatch( pos,"_pi", text) ){
+  out = maketoken_num( 3.14159265358979323846264338327950288 ); goto gettoken_normalout;
  }
 
  if( wordmatch( pos,"getref", text) ){	//	getref
@@ -1101,7 +1218,7 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   while( text[*pos]!='"' ){
    switch( text[*pos] ){
    case 0: error("missing \"\n");
-   case 10: error("missing \" on this line\n");
+   //case 10: error("missing \" on this line\n");
    }//endswitch
    l+=1;
    *pos += 1;
@@ -1145,6 +1262,9 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  }
  if( wordmatch( pos,"cmp$", text) ){	//	cmp$ (strcmp)
   out = maketoken( t_cmpS ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"instr$", text) ){	//	cmp$ (strcmp)
+  out = maketoken( t_instrS ); goto gettoken_normalout;
  }
 
  if( wordmatch( pos,"rnd", text) ){	//	rnd
@@ -1316,6 +1436,54 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  }
  // ========= end of maths ========
 
+ // ========= file related keywords ==========
+ if( wordmatch( pos,"openin", text) ){	//	
+  out = maketoken( t_openin ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"openout", text) ){	//	
+  out = maketoken( t_openout ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"openup", text) ){	//	
+  out = maketoken( t_openup ); goto gettoken_normalout;
+ }
+
+ if( wordmatch( pos,"eof", text) ){	//	
+  out = maketoken( t_eof ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"bget", text) ){	//	
+  out = maketoken( t_bget ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"vget", text) ){	//	
+  out = maketoken( t_vget ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"ptr", text) ){	//	
+  out = maketoken( t_ptr ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"ext", text) ){	//	
+  out = maketoken( t_ext ); goto gettoken_normalout;
+ }
+
+ if( wordmatch( pos,"sget", text) ){	//	
+  out = maketoken( t_sget ); goto gettoken_normalout;
+ }
+
+ if( wordmatch( pos,"sptr", text) ){	//	
+  out = maketoken( t_sptr ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"bput", text) ){	//	
+  out = maketoken( t_bput ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"vput", text) ){	//	
+  out = maketoken( t_vput ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"sput", text) ){	//	
+  out = maketoken( t_sput ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"close", text) ){	//	
+  out = maketoken( t_close ); goto gettoken_normalout;
+ }
+ // ====== end of file related keywords ======
+
  // identifier
  if( text[*pos]=='_' || (text[*pos]>='a' && text[*pos]<='z') ){	
   l = patternmatch( *pos+1,"_qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890", text);
@@ -1473,6 +1641,27 @@ char* tokenstring(token t){
  case t_valS:		return "val$";
  case t_lenS:		return "len$";
  case t_cmpS:		return "cmp$";
+ case t_instrS:		return "instr$";
+
+ // ------ file stuff ------------------
+ case t_openin:		return "openin";
+ case t_openout:	return "openout";
+ case t_openup:		return "openup";
+
+ case t_eof:		return "eof";
+ case t_bget:		return "bget";
+ case t_vget:		return "vget";
+ case t_ptr:		return "ptr";
+ case t_ext:		return "ext";
+
+ case t_sptr:		return "sptr";
+ case t_bput:		return "bput";
+ case t_vput:		return "vput";
+ case t_sput:		return "sput";
+ case t_close:		return "close";
+
+ case t_sget:		return "sget"; 
+ // ------------------------------------
 
  case t_stringvar:	return "stringvar";
  case t_S:		return "$";
@@ -1482,6 +1671,7 @@ char* tokenstring(token t){
  case t_alloc:		return "alloc";
  case t_endfn:		return "endfunction";
  case t_option:		return "option";
+ case t_oscli:		return "oscli";
 
  case  t_tanh:		return "tanh";
  case  t_tan:		return "tan";
@@ -1508,12 +1698,20 @@ char* tokenstring(token t){
  case t_printentirestack: return "printentirestack";
 #endif
  
+ case t_Df:
+ {
+  snprintf(tokenstringbuf,sizeof(tokenstringbuf),"Df(%x)",t.data.pointer);
+  return tokenstringbuf;
+ }
  case t_stackaccess:
  {
+  /*
   if(t.data.i<=0)
    snprintf(tokenstringbuf,sizeof(tokenstringbuf),"stackaccess(P%d)",-t.data.i);
   else
    snprintf(tokenstringbuf,sizeof(tokenstringbuf),"stackaccess(L%d)",t.data.i);
+  */
+  snprintf(tokenstringbuf,sizeof(tokenstringbuf),"stackaccess(%d)",t.data.i);
   return tokenstringbuf;
  }
  case t_id:
@@ -1612,9 +1810,11 @@ void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int pr
   return;
  }
  int new_bufsize = bufsize_required+(256-bufsize_required % 256);
+ //if( new_bufsize <= bufsize_required ) error("still happening");
  if(preserve){
   sv->string = realloc(sv->string, new_bufsize);
   if(sv->string == NULL) error("stringvar_adjustsize: realloc failed\n");
+  sv->bufsize = new_bufsize;
  }else{
   free(sv->string);
   sv->bufsize = new_bufsize;
@@ -1639,7 +1839,11 @@ int isThisBracketAStringValue(program *prog, int p){
  return(isstringvalue(prog->tokens[p].type));
 }
 
-stringval getstringvalue( program *prog, int *pos ){
+stringval
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+getstringvalue( program *prog, int *pos ){
  int level = prog->getstringvalue_level;
  // check if there's a string accumulator for this level & if not, prepare one 
  if(level >= prog->max_string_accumulator_levels){
@@ -1776,6 +1980,43 @@ stringval getstringvalue( program *prog, int *pos ){
   *pos += 1;
   return out;
  }
+ case t_sget:
+ {
+  file *f = getfile(prog, getvalue(pos,prog), 1,0);
+  int num_bytes_to_read = -10;
+  if( isvalue( prog->tokens[*pos].type ) ) num_bytes_to_read = getvalue(pos,prog);
+  accumulator->len=0;
+  if( num_bytes_to_read <= 0 ){
+   // ======= reading until a specified character is found =====
+   int read_until = -num_bytes_to_read; // read until we find this specific character (or EOF)
+   int ch;
+   while( 1 ){
+    ch = fgetc(f->fp);
+    if( ch == read_until || ch == -1 ) break;
+    accumulator->string[ accumulator->len ] = ch;
+    accumulator->len += 1;
+    if( accumulator->len >= accumulator->bufsize-1 ){
+     //printf("fuck1 %d, %d\n",accumulator->len, accumulator->bufsize);
+     stringvar_adjustsizeifnecessary(accumulator, accumulator->bufsize + 1, 1);
+     //printf("fuck2 %d, %d\n",accumulator->len, accumulator->bufsize);
+     //if( accumulator->len >= accumulator->bufsize ) error("FUCK PENIS FUCK\n"); //remove later
+    }
+   }
+   // ==========================================================
+  }else{ 
+   // ======= reading a specific number of bytes ===============
+   if( accumulator->bufsize <= num_bytes_to_read ){
+    stringvar_adjustsizeifnecessary(accumulator, num_bytes_to_read, 1);
+    //if( accumulator->bufsize <= num_bytes_to_read ) error("FUCK ###########################################\n"); //remove later
+   }//endif bufsize
+   accumulator->len = fread( (void*)accumulator->string, sizeof(char), num_bytes_to_read, f->fp );
+   // ==========================================================
+  }//endif whether or not we're reading a set number of bytes, or reading until a specific character
+  stringval out;
+  out.len = accumulator->len;
+  out.string = accumulator->string;
+  return out;
+ }//end case block
  #ifdef enable_graphics_extension 
  // ============================================================================================
  // ======= GRAPHICS EXTENSION =================================================================
@@ -1798,7 +2039,8 @@ stringval getstringvalue( program *prog, int *pos ){
  }//endswitch
 }//endproc
 
-stringvar* create_new_stringvar(program *prog,size_t bufsize){
+stringvar* create_new_stringvar(program *prog,int bufsize){
+ if( bufsize <= 0 ) error("create_new_stringvar: requested buffer size is less than or equal to 0\n");
  int svnum = prog->max_stringvars;
  prog->stringvars = realloc(prog->stringvars, sizeof(void*)*(svnum+1));
  prog->stringvars[svnum] = newstringvar(bufsize);
@@ -1831,7 +2073,11 @@ int isvalue(unsigned char type){
 // ========================================================
 
 // this __attribute__ seems to make the interpreter run faster (tested with "spdtest_")
-double __attribute__((aligned(32))) getvalue(int *p, program *prog){
+double
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+getvalue(int *p, program *prog){
  token t;
  getvalue_start:
  t = prog->tokens[*p]; *p += 1;
@@ -2081,18 +2327,129 @@ double __attribute__((aligned(32))) getvalue(int *p, program *prog){
  case t_valS:
  {
   stringval sv = getstringvalue(prog,p);
-  return strtod(sv.string,NULL);
+  char hold = sv.string[sv.len]; sv.string[sv.len]=0;
+  double result = strtod(sv.string,NULL);
+  sv.string[sv.len] = hold;
+  return result;
  }
  case t_lenS:
  {
   stringval sv = getstringvalue(prog,p);
   return (double)sv.len;
  }
- /*
  case t_cmpS:
  {
+  stringval sv1 = getstringvalue(prog,p);
+  prog->getstringvalue_level += 1;
+  stringval sv2 = getstringvalue(prog,p);
+  prog->getstringvalue_level -= 1;
+  
+  if( sv1.len == sv2.len ){
+   return strncmp( sv1.string, sv2.string, sv1.len );
+  }
+  int result = strncmp( sv1.string, sv2.string, sv1.len < sv2.len ? sv1.len : sv2.len );
+  if( result == 0 ){
+   return sv1.len > sv2.len ? 1 : -1; /*sv1.len > sv2.len ? sv1.string[sv1.len-1] : -sv2.string[sv2.len-1];*/
+  }
+  return result;
  }
- */
+ case t_instrS:
+ {
+  stringval sv1 = getstringvalue(prog,p);
+  prog->getstringvalue_level += 1;
+  stringval sv2 = getstringvalue(prog,p);
+  prog->getstringvalue_level -= 1;
+
+  if( sv1.len < sv2.len ) return -1;
+  
+  int i;
+  for(i=0; i <= sv1.len - sv2.len; i++){
+   if( (sv1.string[i] == sv2.string[0])
+        &&
+       (sv1.string[i+sv2.len-1] == sv2.string[sv2.len-1])
+        &&
+       (!strncmp( sv1.string + i, sv2.string, sv2.len))
+   ) return i;
+  }//next
+
+  return -1;
+ }//end case block
+
+ // --------- file related functions ---------
+ case t_openin: case t_openup:  case t_openout:
+ {
+  stringval sv = getstringvalue(prog,p);
+  char holdthis = sv.string[sv.len]; sv.string[sv.len]=0; // null terminate the string for fopen()
+  FILE *fp; int read,write;
+  // open the file
+  switch( t.type ){
+  case t_openin:
+   read  = 1;
+   write = 0;
+   fp = fopen(sv.string,"rb");
+   break;
+  case t_openout:
+   read  = 0;
+   write = 1;
+   fp = fopen(sv.string,"wb");
+   break;
+  case t_openup:
+   read  = 1;
+   write = 1;
+   fp = fopen(sv.string,"rb+");
+   break;
+  }
+  // undo null termination
+  sv.string[sv.len]=holdthis;
+  // if the file was opened successfully, add it to the list of open files and return a reference number for it. if not, return 0
+  if( !fp ) return 0;
+  int fileindex = get_free_fileslot(prog);
+  prog->files[fileindex]->open = 1;
+  prog->files[fileindex]->read_access = read;
+  prog->files[fileindex]->write_access = write;
+  prog->files[fileindex]->fp = fp;
+  return fileindex+1;
+ }
+
+ case t_eof:
+ {
+  file *f = getfile(prog, getvalue(p,prog), 0,0);
+  return feof(f->fp);
+ }
+ case t_bget:
+ {
+  file *f = getfile(prog, getvalue(p,prog), 1,0);
+  return fgetc(f->fp);
+ }
+ case t_vget:
+ {
+  file *f = getfile(prog, getvalue(p,prog), 1,0);
+  char db[8];
+  #if 1
+  db[0] = fgetc(f->fp);
+  db[1] = fgetc(f->fp);
+  db[2] = fgetc(f->fp);
+  db[3] = fgetc(f->fp);
+  db[4] = fgetc(f->fp);
+  db[5] = fgetc(f->fp);
+  db[6] = fgetc(f->fp);
+  db[7] = fgetc(f->fp);
+  #else
+  fread( (void*)db, sizeof(double), 1, f->fp);
+  #endif
+  return *((double*)db);
+ }
+ case t_ptr:
+ {
+  file *f = getfile(prog, getvalue(p,prog), 0,0);
+  return ftell(f->fp);
+ }
+ case t_ext:
+ {
+  file *f = getfile(prog, getvalue(p,prog), 0,0);
+  return Ext(f->fp);
+ }
+ // ----- end of file related functions ------
 
  /* ======== start of maths ======== */
  case  t_tan:
@@ -2204,7 +2561,7 @@ double __attribute__((aligned(32))) getvalue(int *p, program *prog){
   {
    case t_F:
    finfo_cur = prog->current_function;
-   fnum = getvalue(p,prog); if( (fnum<0 || fnum>MAX_FUNCS) || !prog->functions[fnum] ) error("getvalue: bad function call\n");
+   fnum = getvalue(p,prog); if( (fnum<0 || fnum>(MAX_FUNCS-1)) || !prog->functions[fnum] ) error("getvalue: bad function call\n");
    func_info *finfo_new = prog->functions[fnum];
    goto getvalue_functioncall;
    
@@ -2317,7 +2674,7 @@ double __attribute__((aligned(32))) getvalue(int *p, program *prog){
  // ============================================================================================
  #endif
  default:
-  printf("getvalue: t.type == %d (%s)\n", t.type, tokenstring(t) );
+  printf("getvalue: t.type == %d '%s'\n", t.type, tokenstring(t) );
   error("getvalue: expected a value\n");
  }//endswitch t.type
 }//endproc getvalue
@@ -2356,7 +2713,11 @@ int _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen
  return 0;
 }//endproc
 
-double interpreter(int p, program *prog){
+double
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+interpreter(int p, program *prog){
  token t;
  interpreter_start:
  t = prog->tokens[p];
@@ -2535,7 +2896,7 @@ double interpreter(int p, program *prog){
   p+=1;
   while( prog->tokens[p].type != t_endstatement ){
    if( prog->tokens[p].type != t_id ) error("interpreter: bad 'variable' command\n");
-   if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error("interpreter: variable: this identifier is already used\n");
+   //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error("interpreter: variable: this identifier is already used\n");
    add_id(prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
    p+=1;
   }
@@ -2546,7 +2907,7 @@ double interpreter(int p, program *prog){
   p+=1;
   if( prog->tokens[p].type != t_id ) error("interpreter: bad 'constant' command\n");
   char *idstring = (char*)prog->tokens[p].data.pointer;
-  if( find_id(prog->ids, idstring) ) error("interpreter: constant: this identifier is already used\n");
+  //if( find_id(prog->ids, idstring) ) error("interpreter: constant: this identifier is already used\n");
   p+=1;
   add_id(prog->ids, make_id( idstring, maketoken_num( getvalue(&p, prog) ) ) );
   break;
@@ -2634,6 +2995,60 @@ double interpreter(int p, program *prog){
   option( prog, &p );
   break;
  }
+ case t_oscli:
+ {
+  p+=1;
+  stringval sv = getstringvalue( prog, &p );
+  char holdthis = sv.string[sv.len]; sv.string[sv.len]=0;
+  //printf("oscli: '%s'\n",sv.string);
+  system(sv.string);
+  sv.string[sv.len]=holdthis;
+  break;
+ }
+ // ------------ file related commands ------------------
+ case t_sptr:
+ {
+  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,0);
+  SetPtr(f->fp, getvalue(&p,prog));
+  break;
+ }
+ case t_bput:
+ {
+  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,1);
+  do{
+   fputc( getvalue(&p,prog), f->fp );
+  }while( isvalue( prog->tokens[p].type ) );
+  break;
+ }
+ case t_vput:
+ {
+  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,1);
+  double val;
+  do{
+   val = getvalue(&p,prog);
+   fwrite((void*)&val, sizeof(double), 1, f->fp);
+  }while( isvalue( prog->tokens[p].type ) );
+  break;
+ }
+ case t_sput:
+ {
+  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,1);
+  stringval sv;
+  do{
+   sv = getstringvalue( prog, &p );
+   fwrite( (void*)sv.string, sizeof(char), sv.len, f->fp );
+   //fputc(0, f->fp);
+  }while( isstringvalue( prog->tokens[p].type ) );
+  break;
+ }
+ case t_close:
+ {
+  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,0);
+  f->open = 0;
+  fclose(f->fp);
+  break;
+ }
+ // --------- end of file related commands --------------
  #ifdef enable_graphics_extension 
  // ============================================================================================
  // ======= GRAPHICS EXTENSION =================================================================
@@ -2866,9 +3281,13 @@ int main(int argc, char **argv){
  list_all_ids(prg); printf("\n");
 #endif
 
+#if main_printstuff
  printf("result: %f\n",result);
+#endif
 
  unloadprog(prg);
+#if main_printstuff
  printf("ended\n");
- return 0;
+#endif
+ return (int)result;
 }
