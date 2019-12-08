@@ -1,0 +1,151 @@
+variable i j k balls col ballp ccc;
+constant step 16;
+constant res 500;
+constant numballs 10;
+constant kk + balls * numballs 6;
+
+startgraphics (- res % res step) (- res % res step);
+set balls alloc * numballs 6; REM x y r c xm ym
+
+bgcol 0
+cls
+refreshmode 1
+
+.balls_start
+
+set k 0;
+while < k numballs;
+ set D( + balls (* k 6) 0 )  rnd winw;
+ set D( + balls (* k 6) 1 )  rnd winh;
+ set D( + balls (* k 6) 2 )  max 120 rnd min winw winh;
+ set D( + balls (* k 6) 3 )  rnd * 256 256 256;
+ set D( + balls (* k 6) 4 )  * 6 / (- rnd(2000) 1000) 1000;
+ set D( + balls (* k 6) 5 )  * 6 / (- rnd(2000) 1000) 1000;
+ set k + k 1;
+endwhile;
+
+.mainloopstart
+
+ REM ------ mouse input -------
+ REM right button: end program
+ REM left button: get a new arrangement of balls
+ if mouseb
+  if & mouseb 4
+   endfunction
+  endif
+  while mouseb
+   wait 1
+  endwhile
+  goto ".balls_start"
+ endif
+ REM --------------------------
+
+ REM ----- move balls -----
+ set ballp balls
+ while < ballp kk
+  set Dballp      + Dballp      D(+ballp 4)
+  set D(+ballp 1) + D(+ballp 1) D + ballp 5 ;
+  limit ballp 
+  set ballp + ballp 6
+ endwhile
+ REM ----------------------
+
+ cls
+
+ REM ---- render balls ----
+ set i 0
+ while < i winh
+
+  set j 0
+  while < j winw
+ 
+   REM ----- get colour -----
+   set col 0
+   set ballp balls
+   while < ballp kk
+    set ccc glowballc Dballp  D( + ballp 1 )  D( + ballp 2 )  D( + ballp 3 )  j  i
+    if ccc
+     set col add_col col ccc
+    endif
+    set ballp + ballp 6
+   endwhile
+   REM ----------------------
+  
+   if col
+    gcol col
+    rectanglef j i step
+    REMpixel j i
+   endif
+
+   set j + j step
+  endwhile
+
+  set i + i step
+ endwhile 
+ refresh
+ REM ---- end of render balls ----
+
+ wait 16.6
+
+goto ".mainloopstart"
+
+
+
+function limit ballp local x y;
+ set x Dballp
+ set y D+ ballp 1
+ if ||   < x 0   > x winw  
+  set Dballp int x
+  set D(+ballp 4) neg D(+ballp 4);
+ endif
+ if ||   < y 0   > y winh
+  set D(+ballp 1) int y
+  set D(+ballp 5) neg D + ballp 5
+ endif
+endfunction
+
+function min a b;
+ if < a b;
+  return a;
+ endif;
+return b;
+
+function max a b;
+ if > a b;
+  return a;
+ endif;
+return b;
+
+
+function _add_col a b;
+ set a + a b
+ if > a 255
+  return 255
+ endif
+return a;
+
+function add_col a b;
+return  |
+        << ( _add_col (& >> a 16 255)
+                       & >> b 16 255   ) 16
+        << ( _add_col (& >> a 8  255)
+                       & >> b 8  255   ) 8
+             _add_col (&    a    255)
+                       &    b    255        ;
+
+
+function glowballc x y r c  xx yy local d result;
+ set r * r 0.5
+ set d dist x y xx yy
+ if > d r
+  endfunction
+ endif
+ set result - 1 / d r
+return | << (* (/ (& >> c 16 255) 255) result 255) 16
+         << (* (/ (& >> c 8  255) 255) result 255) 8 
+            (* (/ (&    c    255) 255) result 255);
+
+
+function dist x1 y1 x2 y2;
+return sqr +  pow (- x1 x2) 2 
+              pow (- y1 y2) 2;

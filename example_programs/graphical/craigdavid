@@ -1,0 +1,132 @@
+constant pid2 / _pi 2;
+
+constant numstars * 64 1.5;
+option "vsize" + 17  * numstars 6;
+
+startgraphics 640 480;
+wait 10;
+refreshmode 1;
+
+variable w;
+variable h;
+set w 640;
+set h 480;
+
+variable f1x f1y
+         f2x f2y
+         f3x f3y;
+
+set f1x  alloc numstars;
+set f1y  alloc numstars;
+set f2x  alloc numstars;
+set f2y  alloc numstars;
+set f3x  alloc numstars;
+set f3y  alloc numstars;
+
+variable i; set i 0;
+while < i numstars;
+ set D(+ f1x i)  rnd (- w 1);
+ set D(+ f1y i)  rnd (- h 1);
+ set D(+ f2x i)  rnd - w 1;
+ set D(+ f2y i)  rnd - h 1;
+ set D(+ f3x i)  rnd - w 1;
+ set D(+ f3y i)  rnd - h 1;
+ set i  + i 1;
+endwhile
+
+variable x y temp;
+
+stringvar craigdavid;
+set craigdavid "On the wayyyy to see my friend, who lived a couple of blocks AWAY from me, ah. As I waaaaaaaaaaaalked, through the subawayyy, it must've been about quarter past threeee. in front of meee eeee, stood a beautiful honey with a beautiful bodyyyyy. She asked me for the tiiime, I said it'll cost you your name a six digit number and a date with me tomorrow at nine, did she decline? No. Didn't she mind? I don't think so. Was it for reeeeal? Damn sure. What was the deeeal, a pretty girl aged twenty four. So was she keen? She couldn't waaait, cinnamon queen? Let me update. What did she sayyyyy? She said she'd love to, rendezvous, she asked me what we were gonna do, said we'd start with a bottle of moet for two (monday). Took her for a drink on tuesdayyy, we were making love by wednesday. And on thursday friday and saturday we chilled on sunday I met this girl on monday. Took her for a drink on tuesdayyyy, we were making love by wednesday. And on thursday friday and saturday we chilled on sunday.      Nine.      Was the time, cos I'll be getting mine, and she was looking fine, smooth talker. She told me she'd love to unfold me all night long.    Ooh.  I love the way she kicked it, from the front to the back she flicked it (the way she kicked it) and I, oh oh oh oh I yeah, hope that she'd care, cos I'm a man who'll always beee there. I'm not a man to play around baby.  Cos a one night stand isn't really fair from the first impression girl. And you don't seem to be like that, cos there's no need to chat, for there'll be plenty time for that, from the subaway, to my home. Endless ringing up on my phone, when you're feeling all alone... all you gotta do, is just call me, call me. (Monday.) Took her for a drink on tuesdayyy, we were making love by wednesday. And on thursday friday and saturday we chilled on sunday I met this girl on monday. Took her for a drink on tuesdayyyy, we were making love by wednesday. And on thursday friday and saturday we chilled on sunday.     Break it down. Huhh. Break it down.     Since I met this special lady, oooo yeah. I can't get her off my mind. She's one of a kind. And I ain't about to deny it. It's a special kind of thing, with youuuuuuuu ohhhhhhhhhhh (monday). Took her for a drink on tuesdayyy, we were making love by wednesday. And on thursday friday and saturday we chilled on sunday I met this girl on monday. Took her for a drink on tuesday, we were making love by wednesday, and on thursday friday and saturday we chilled on sunday.";
+
+while ! & mouseb 4;
+
+ set x  +  x  * (+ (sin * temp 0.01) (sin * temp 0.024))   5
+ set y  +  y  * (+ (sin * temp 0.04) (sin * temp 0.01134)) 5;
+
+ procstarfield x y
+ textscroller @craigdavid
+ refresh
+ wait 16.6
+
+endwhile
+stopgraphics;
+return 0;
+
+function procstarfield x y;
+ gcol -1;
+ cls;
+ proc_field f1x f1y  x          y         
+ proc_field f2x f2y  (* x 0.5 ) * y 0.5   ;
+ proc_field f3x f3y  (* x 0.25) * y 0.25  ;
+endfunction
+
+function proc_field fx fy ox oy  local i;
+ set ox  % ox w
+ set oy  % oy h
+ if >= ox 0; set w  neg w; endif
+ if >= oy 0; set h  neg h; endif
+ set i 0
+ while < i numstars;
+  bigpixel (+ ox   D +fx i ) (+ oy   D +fy i )
+           (+ ox   D +fx i ) (+ oy h D +fy i )
+           (+ ox w D +fx i ) (+ oy   D +fy i )
+           (+ ox w D +fx i )  + oy h D +fy i 
+  set i + i 1
+ endwhile
+ set w abs w
+ set h abs h
+endfunction
+
+REM ========================================
+
+function bigpixel ... local i;
+ set i 0
+ while < i _num_params
+  rectanglef Pi P(+i 1) 2
+  set i + i 2
+ endwhile
+endfunction
+
+REM ========================================
+
+REM   R  G  B  R
+REM   0        1
+
+function textcol_ p; 
+return + 74 * 181 + 0.5  * sin p 0.5;
+function textcol p;
+ gcol textcol_  p 
+      textcol_ (+ p * pid2 1)
+      textcol_  + p * pid2 2
+endfunction
+
+function textscroller  s  local i;
+ set i 0
+ while < i + 1 / winw 8 ;
+  textcol * 0.12 + temp i 
+  drawtext (+ neg % temp 8 * i 8 )
+           ( + (* winh 0.5) * sin ( * 0.04 + temp i) 95 )
+           1
+           (mid$  $s   % (+ i / temp 8) len$$s   1 )
+  set i + i 1
+ endwhile
+ set temp + temp 1
+endfunction
+
+REM ========================================
+
+function round in local t s;
+ set s   sgn in;
+ set in  abs in;
+ set t   - in int in;
+ if < t 0.5;
+  set in  int in;
+ else;
+  set in  + 1 int in;
+ endif;
+return * in s;
+
+REM ========================================
+
+
