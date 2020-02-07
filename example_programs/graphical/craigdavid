@@ -68,10 +68,10 @@ function proc_field fx fy ox oy  local i;
  if >= oy 0; set h  neg h; endif
  set i 0
  while < i numstars;
-  bigpixel (+ ox   D +fx i ) (+ oy   D +fy i )
-           (+ ox   D +fx i ) (+ oy h D +fy i )
-           (+ ox w D +fx i ) (+ oy   D +fy i )
-           (+ ox w D +fx i )  + oy h D +fy i 
+  bigpixel (+ ox   A fx i ) (+ oy   A fy i )
+           (+ ox   A fx i ) (+ oy h A fy i )
+           (+ ox w A fx i ) (+ oy   A fy i )
+           (+ ox w A fx i )  + oy h A fy i 
   set i + i 1
  endwhile
  set w abs w

@@ -1,0 +1,91 @@
+constant pi 3.14159265358979323846264338327950288;
+variable a b c i thisv;
+
+startgraphics 800 600;
+
+
+.begin
+drawmode 3
+cls
+
+set thisv * (+ winw winh ) 0.5 1.706666667
+
+set a / fnrnd 10000 10000
+set b / fnrnd 10000 10000
+set c / fnrnd 10000 10000
+
+
+if < fnrnd 100 99;
+ set i 0;
+ while < i 500
+  gcol (* fnr a) (* fnr b) (* fnr c)
+  circlef fnrnd winw fnrnd winh fnrnd / winh 6
+  set i + i 1
+ endwhile
+endif
+
+drawmode 10
+gcol -1;
+
+if 1
+ triangle	fnrnd winw fnrnd winh
+		fnrnd winw fnrnd winh
+		fnrnd winw fnrnd winh;
+endif
+
+if >= fnrnd 100 50;
+ procc fnrnd winw  fnrnd winh  fnrnd 200
+ procr fnrnd winw  fnrnd winh  fnrnd 200
+else 
+ procs fnrnd winw  fnrnd winh  fnrnd 16  (* pi 2 (/ fnrnd 1000 1000)) (* pi (/ fnrnd 1000 1000))
+endif
+
+while && ! mouseb ! expose
+ wait 16.6
+endwhile
+if & mouseb 4
+ endfunction
+endif
+while mouseb wait 1 endwhile
+goto ".begin"
+
+
+function fnrnd r;
+return + rnd r 1;
+
+function procr x y s local i;
+ set i 0
+ while < i thisv
+  rectangle (- x i) (- y i) * i 2
+  set i + i s
+ endwhile
+endfunction
+
+function proc_s  x y s a  local i;
+ set i 0;
+ while < i 4
+  line (+ x * s cos( + a * i (/ (* pi 2) 4) ))
+       (+ y * s sin( + a * i (/ (* pi 2) 4) ))
+       (+ x * s cos( + a * (+i 1) (/ (* pi 2) 4) ))
+       (+ y * s sin( + a * (+i 1) (/ (* pi 2) 4) ));
+  set i + i 1
+ endwhile
+endfunction
+function procs x y s a as local i;
+ set i 0
+ while < i thisv
+  proc_s x y i (+ a / (* as i) s )
+  set i + i s
+ endwhile
+endfunction
+
+function procc x y s local i;
+ set i 0
+ while < i thisv
+  circle x y i
+  set i + i s
+ endwhile
+endfunction
+
+function fnr;
+return rnd 256;

@@ -1,0 +1,18 @@
+
+startgraphics 640 480;
+wait 10;
+while ! & mouseb 4;
+ gcol rnd 256 rnd 256 rnd 256;
+ line (rnd winw) (rnd winh) (rnd winw) (rnd winh);
+ drawtext (rnd winw) (rnd winh) (rnd 4) "Text string";
+ gcol 255 255 255;
+ if mouseb;
+  circlef mousex mousey 12;
+ else;
+  circle mousex mousey 12;
+ endif;
+ wait 40;
+endwhile;
+stopgraphics;
+print "bye";
+return 1.2345;

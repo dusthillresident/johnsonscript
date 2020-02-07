@@ -1,0 +1,91 @@
+REM
+/* 
+  -----------------
+  -- Forest Fire --
+  -----------------
+  Adapted from https://rosettacode.org/wiki/Forest_fire#BBC_BASIC
+*/
+
+constant arraysize 150;
+constant arraysizem1 - arraysize 1;
+option "vsize" + 32 * arraysize arraysize 2;
+
+variable old new x y v p f;
+set old alloc * arraysize arraysize;
+set new alloc * arraysize arraysize;
+
+constant wtime * 16.6 1;
+
+constant col1 ~ << 255 16;
+constant col2 ~ << 255 8;
+constant col15 ~ -1;
+
+startgraphics (* arraysize 2) (* arraysize 2);
+bgcol col15;
+cls;
+set p 0.01;
+set f 0.0001;
+ 
+.loopstart
+ wait wtime;
+
+ set x 1;
+ while < x arraysizem1; REM {
+
+  set y 1;
+  while < y arraysizem1; REM {
+
+   set v D( + old x * y arraysize );
+   if = v 0;
+    if > p /  >>> rnd 0 1  >>> -1 1;
+     set D( + new x * y arraysize ) 1;
+     gcol col2;
+     rectanglef (* 2 x) (* 2 y) 2;
+    endif
+    goto ".endcase";
+   endif;
+
+   if = v 1;
+    if || (> f /  >>> rnd 0 1  >>> -1 1)
+          =D( + old (- x 1) * (  y  ) arraysize )2
+          =D( + old (+ x 1) * (  y  ) arraysize )2
+          =D( + old (- x 1) * (- y 1) arraysize )2
+          =D( + old (  x  ) * (- y 1) arraysize )2
+          =D( + old (+ x 1) * (- y 1) arraysize )2
+          =D( + old (- x 1) * (+ y 1) arraysize )2
+          =D( + old (  x  ) * (+ y 1) arraysize )2
+          =D( + old (+ x 1) * (+ y 1) arraysize )2;
+     REM then
+     set D( + new x * y arraysize ) 2;
+     gcol col1;
+     rectanglef (* 2 x) (* 2 y) 2;
+    endif
+    goto ".endcase";
+   endif;
+
+   if = v 2;
+    set D( + new x * y arraysize ) 0;
+    gcol col15;
+    rectanglef (* 2 x) (* 2 y) 2;
+   endif;
+
+   .endcase
+
+   set y + y 1;
+  endwhile; REM }
+
+  set x + x 1;
+ endwhile; REM }
+
+ copyarea old new * arraysize arraysize;
+
+goto ".loopstart";
+
+function copyarea dest src len;
+ set len + dest len;
+ while < dest len;
+  set Ddest Dsrc;
+  set dest + dest 1;
+  set src + src 1;
+ endwhile;
+endfunction; 

@@ -2,10 +2,11 @@ variable i j k balls col ballp ccc;
 constant step 16;
 constant res 500;
 constant numballs 10;
-constant kk + balls * numballs 6;
 
 startgraphics (- res % res step) (- res % res step);
 set balls alloc * numballs 6; REM x y r c xm ym
+
+constant kk + balls * numballs 6;
 
 bgcol 0
 cls
@@ -43,8 +44,8 @@ endwhile;
  REM ----- move balls -----
  set ballp balls
  while < ballp kk
-  set Dballp      + Dballp      D(+ballp 4)
-  set D(+ballp 1) + D(+ballp 1) D + ballp 5 ;
+  set Dballp  +  Dballp    Aballp 4
+  set Aballp 1  + Aballp 1  Aballp 5 ;
   limit ballp 
   set ballp + ballp 6
  endwhile
@@ -63,7 +64,7 @@ endwhile;
    set col 0
    set ballp balls
    while < ballp kk
-    set ccc glowballc Dballp  D( + ballp 1 )  D( + ballp 2 )  D( + ballp 3 )  j  i
+    set ccc glowballc Dballp  A ballp 1  A ballp 2   A ballp 3   j  i
     if ccc
      set col add_col col ccc
     endif
@@ -93,14 +94,15 @@ goto ".mainloopstart"
 
 function limit ballp local x y;
  set x Dballp
- set y D+ ballp 1
+ set y A ballp 1
  if ||   < x 0   > x winw  
   set Dballp int x
-  set D(+ballp 4) neg D(+ballp 4);
+  REM set D(+ballp 4) neg D(+ballp 4);
+  set Aballp 4  neg Aballp 4
  endif
  if ||   < y 0   > y winh
-  set D(+ballp 1) int y
-  set D(+ballp 5) neg D + ballp 5
+  set Aballp 1 int y
+  set Aballp 5 neg A ballp 5
  endif
 endfunction
 

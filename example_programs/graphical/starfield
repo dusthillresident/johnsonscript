@@ -1,0 +1,102 @@
+constant numstars * 64 1.5;
+option "vsize" + 17  * numstars 6;
+variable w;
+variable h;
+set w 640;
+set h 480;
+
+variable f1x f1y
+         f2x f2y
+         f3x f3y;
+
+set f1x  alloc numstars;
+set f1y  alloc numstars;
+set f2x  alloc numstars;
+set f2y  alloc numstars;
+set f3x  alloc numstars;
+set f3y  alloc numstars;
+
+variable i; set i 0;
+while < i numstars;
+ set D(+ f1x i)  rnd (- w 1);
+ set D(+ f1y i)  rnd (- h 1);
+ set D(+ f2x i)  rnd - w 1;
+ set D(+ f2y i)  rnd - h 1;
+ set D(+ f3x i)  rnd - w 1;
+ set D(+ f3y i)  rnd - h 1;
+ set i  + i 1;
+endwhile
+
+variable x y xm ym decay omx omy;
+variable temp;
+
+set xm 0.11;
+set decay 0.96;
+set omx mousex;
+set omy mousey;
+
+startgraphics 640 480;
+wait 16.6;
+refreshmode 1;
+
+while ! & mouseb 4;
+ 
+
+ if mouseb;
+  set xm  - mousex omx;
+  set ym  - mousey omy;
+ else;
+  set xm  * xm decay;
+  set ym  * ym decay;
+ endif;
+ set omx mousex;
+ set omy mousey;
+
+ set x  + x xm;
+ set y  + y ym;
+ if < 0.1 + abs xm abs ym;
+  procstarfield x y;
+  refresh;
+ else 
+  if expose;
+   refresh;
+  endif;
+ endif;
+ 
+ wait 16.6;
+endwhile;
+stopgraphics;
+return 0;
+
+function procstarfield x y;
+ gcol -1;
+ cls;
+ proc_field f1x f1y  x          y         
+ proc_field f2x f2y  (* x 0.5 ) * y 0.5   ;
+ proc_field f3x f3y  (* x 0.25) * y 0.25  ;
+endfunction
+
+function proc_field fx fy ox oy  local i;
+ set ox  % ox w
+ set oy  % oy h
+ if >= ox 0; set w  neg w; endif
+ if >= oy 0; set h  neg h; endif
+ set i 0
+ while < i numstars;
+  bigpixel (+ ox   D +fx i ) (+ oy   D +fy i )
+           (+ ox   D +fx i ) (+ oy h D +fy i )
+           (+ ox w D +fx i ) (+ oy   D +fy i )
+           (+ ox w D +fx i )  + oy h D +fy i 
+  set i + i 1
+ endwhile
+ set w abs w
+ set h abs h
+endfunction
+
+function bigpixel ... local i;
+ set i 0
+ while < i _num_params 
+  rectanglef Pi P(+i 1) 2
+  set i + i 2
+ endwhile
+endfunction

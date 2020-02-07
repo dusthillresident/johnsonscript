@@ -1,0 +1,63 @@
+REM 
+/*
+  --------------------
+  -- Mandelbrot set --
+  --------------------
+  Adapted from https://www.rosettacode.org/wiki/Mandelbrot_set#BBC_BASIC
+*/
+
+constant dwh 800;
+startgraphics dwh dwh;
+
+while ! mouseb
+ if expose;
+  cls
+  drawtext (+ -32 /winw 2) (/winh 2) 1 "Click to begin";
+ endif;
+endwhile;
+
+constant step 1;
+constant maxiter 128;
+constant wh  min winw winh;
+constant whm * wh 0.6666;
+variable _X _Y _I xi yi x y xt;
+set _X 0;
+while < _X winw;
+ set xi -(/ _X whm) 2;
+ set _Y 0;
+ while < _Y winh;
+  set yi / _Y whm;
+  set x 0;
+  set y 0;
+  set _I 1;
+  while <= _I maxiter;
+   if > (+ (* x x) (* y y)) 4;
+    goto ".exit_for";
+   endif;
+   set xt  + xi (* x x) (neg * y y);
+   set y  + yi * 2 x y;
+   set x  xt;
+   set _I + _I 1;
+  endwhile;
+  .exit_for
+  if > _I maxiter;
+   set _I 0;
+  endif
+  gcol (* _I 15) (* _I 8) 0;
+  pixel _X ( + _Y / winh 2) _X (+ neg _Y /winh 2);
+  set _Y + _Y step;
+ endwhile;
+ set _X + _X step;
+endwhile;
+
+while ! mouseb;
+ wait 16.6;
+endwhile;
+
+return 0;
+
+function min a b;
+ if < a b;
+  return a;
+ endif;
+return b;
