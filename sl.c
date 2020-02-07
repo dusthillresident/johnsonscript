@@ -818,6 +818,8 @@ void process_function_definitions(program *prog,int startpos){
 
 #define opt_vsize	0	// set variable array size
 #define opt_ssize	1	// set stack array size
+#define opt_import	2	// import functions from another file
+#define opt_seedrnd	3	// seed RNG
 
 void option( program *prog, int *p ){
  *p += 1; // advance p out of the way of the 'option' command itself
@@ -829,9 +831,10 @@ void option( program *prog, int *p ){
 
  if(  isThisBracketAStringValue(prog, *p)  ){ // identify option string
   stringval id_string = getstringvalue( prog, p );
-  if( !strncmp( "vsize", id_string.string, id_string.len ) ){ opt_number=0; goto option__identify_option_string_out;}	//	vsize		Set the size of the variables array
-  if( !strncmp( "ssize", id_string.string, id_string.len ) ){ opt_number=1; goto option__identify_option_string_out;}	//	ssize		Set the size of the stack array
-  if( !strncmp( "import", id_string.string, id_string.len ) ){ opt_number=2; goto option__identify_option_string_out;}	//	import		Import functions from another file
+  if( !strncmp( "vsize", id_string.string, id_string.len ) ){ opt_number = opt_vsize; goto option__identify_option_string_out;}	//	vsize		Set the size of the variables array
+  if( !strncmp( "ssize", id_string.string, id_string.len ) ){ opt_number = opt_ssize; goto option__identify_option_string_out;}	//	ssize		Set the size of the stack array
+  if( !strncmp( "import", id_string.string, id_string.len )){opt_number = opt_import; goto option__identify_option_string_out;}	//	import		Import functions from another file
+  if( !strncmp( "seedrnd", id_string.string, id_string.len)){opt_number= opt_seedrnd; goto option__identify_option_string_out;}	//	seedrnd		Seed RNG
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
   if( opt_number != -1 && prog->tokens[id_stringconst_pos].type == t_stringconst ){
@@ -844,7 +847,7 @@ void option( program *prog, int *p ){
  option_process_id_number:
  
  switch(opt_number){
- case 0: // vsize
+ case opt_vsize: // vsize
  {
   int new_vsize = getvalue(p,prog);
   //printf("new_vsize %d \n",new_vsize);
@@ -862,7 +865,7 @@ void option( program *prog, int *p ){
   prog->stack = newvarray + new_vsize;
   break;
  }
- case 1: // ssize
+ case opt_ssize: // ssize
  {
   int new_ssize = getvalue(p,prog);
   if( new_ssize <= 0 ) error("option: ssize: new ssize is less than or equal to 0\n");
@@ -874,7 +877,7 @@ void option( program *prog, int *p ){
   prog->stack = prog->vars + (prog->vsize - prog->ssize);
   break;
  }
- case 2:
+ case opt_import: // import
  {
   token *tokens; int tokens_length; stringval filename;
   // get filename
@@ -890,6 +893,18 @@ void option( program *prog, int *p ){
   prog->length += tokens_length; prog->maxlen+=tokens_length;
   // process function definitions for imported code
   process_function_definitions(prog,prog->maxlen - tokens_length);
+  break;
+ }
+ case opt_seedrnd: // seed random number generator
+ {
+  int vp=0;
+  int v[3] = { 0, 0, 0 };
+  do{
+   v[vp] = getvalue(p,prog); vp++;
+  }while( isvalue( prog->tokens[*p].type ) );
+  XRANDrand = v[0];
+  XRANDranb = v[1];
+  XRANDranc = v[2];
   break;
  }
  default: error("option: unrecognised option\n");
