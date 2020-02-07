@@ -1,0 +1,22 @@
+variable in out;
+set in  rnd 15;
+set out factorial in;
+print "'factorial " in "' returns " out;
+print "'testnow   " in "' returns " testnow in;
+return out;
+
+function factorial n;
+ if = n 0;
+  return 1;
+ endif;
+return * n factorial - n 1 ;
+
+
+function testnow n local out;
+ set out n;
+ while > n 1;
+  set n - n 1;
+  set out * out n;
+ endwhile
+return out;
+
