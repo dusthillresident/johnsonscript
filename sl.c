@@ -440,10 +440,9 @@ program* newprog(int maxlen, int vsize, int ssize){
  }
  // initialise file array
  out->max_files = DEFAULT_MAX_FILES;
- out->files    = calloc(DEFAULT_MAX_FILES,sizeof(void*));
- out->files[0] = calloc(DEFAULT_MAX_FILES,sizeof(file));
- for(i=1; i<DEFAULT_MAX_FILES; i++){
-  out->files[i] = (out->files[0] + i);
+ out->files = calloc(DEFAULT_MAX_FILES,sizeof(void*));
+ for(i=0; i<DEFAULT_MAX_FILES; i++){
+  out->files[i] = calloc(1,sizeof(file));
  }
  out->files[0]->open=1; out->files[0]->read_access=1;  out->files[0]->fp = stdin;  // stdin
  out->files[1]->open=1; out->files[1]->write_access=1; out->files[1]->fp = stdout; // stout
@@ -537,6 +536,14 @@ void unloadprog(program *prog){
   free( prog->stringvars[i] );
  }
  free( prog->stringvars );
+ // close all open files (but ONLY if they're not stdin or stdout or stderr), free the file structs, and finally free the file array
+ for(i=0; i<prog->max_files; i++){
+  if( prog->files[i]->open  &&  prog->files[i]->fp != stdin  &&  prog->files[i]->fp != stdout  &&  prog->files[i]->fp != stderr ){
+   fclose( prog->files[i]->fp );
+  }
+  free( prog->files[i] );
+ }
+ free( prog->files );
  // free the program struct itself
  free( prog );
 }
