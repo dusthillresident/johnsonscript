@@ -3,7 +3,7 @@
 #define tb() TB_(__LINE__,__FILE__)
 void TB_(int n,char *f){
  printf("tb %d, %s\n",n,f);
- system("beep -f 100 -l 2 &");
+ if( system("beep -f 100 -l 2 &") );
 }
 
 // =============== load and save ints to files ===============

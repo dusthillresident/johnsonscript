@@ -5,6 +5,12 @@
 #include <ctype.h> // isspace
 #include <unistd.h> // usleep
 #include <math.h>
+
+// Apparently isnan() returns 0 for -nan when GCC optimisations are enabled.
+// So I needed to find my own replacement for isnan() that behaves how I want.
+//#define MyIsnan(value) (isnan(value))
+#define MyIsnan(value) ( (int)value && value==0.0 )
+
 #ifdef enable_graphics_extension
  #define myxlib_notstandalonetest
  #include "NewBase.c"
@@ -55,229 +61,9 @@ struct token {
 };
 typedef struct token token;
 
-#define t_nul		0
-#define t_plus		1	// 	+		built in function: addition.		takes at least 2 parameters
-#define t_minus		2	//	-		built in function: subtraction.		takes at least 2 parameters
-#define t_slash		3	// 	/		built in function: division.		takes at least 2 parameters
-#define t_star		4	//	*		built in function: multiplication.	takes at least 2 parameters
-#define t_mod		5	//	%		built in function: modulo.		takes 2 parameters
-#define t_shiftleft	6	//	<<		built in function: shift left.		takes 2 parameters
-#define t_shiftright	7	//	>>		built in function: shift right.		takes 2 parameters
-#define t_lshiftright	8	//	>>>		built in function: logical shift right.	takes 2 parameters
-#define t_and		9	//	&		built in function: bitwise and.		takes at least 2 parameters
-#define t_or		10	//	|		built in function: bitwise or.		takes at least 2 parameters
-#define t_eor		11	//	^		built in function: bitwise exclusive or. takes at least 2 parameters
-#define t_not		12	//	~		built in function: bitwise not.		takes 1 parameter
 
-#define t_abs		13	//	abs		built in function: absolute value	takes 1 parameter
-#define t_int		14	//	int		built in function: integer		takes 1 parameter
-#define t_sgn		15	//	sgn		built in function: signum		takes 1 parameter
-#define t_neg		16	//	neg		built in function: negative		takes 1 parameter
+#include "tokenslist.c"
 
-#define t_lessthan	17	//	<		built in function: less than		takes 2 parameters
-#define t_morethan	18	//	>		built in function: greater than		takes 2 parameters
-#define t_lesseq	19	//	<=		built in function: less than or equal	takes 2 parameters
-#define t_moreeq	20	//	>=		built in function: greater than or eq.	takes 2 parameters
-#define t_equal		21	//	=		built in function: equal		takes 2 parameters
-
-#define t_land		22	//	&&		built in function: logical and		takes at least 2 parameters
-#define t_lor		23	//	||		built in function: logical or		takes at least 2 parameters
-#define t_lnot		24	//	!		built in function: logical not		takes 1 parameter
-
-#define t_D		25	//	D		variable access (access the vars array)		takes 1 parameter
-#define t_A		26	//	A		array access (indexed access of the vars array)	takes 2 parameters
-#define t_L		27	//	L		local variable access (access values on the stack >= the stack pointer)
-#define t_P		28	//	P		function parameter variables (access values on the stack above the local variables)
-#define t_F		29	//	F		function call
-
-#define t_Df		30	//			fast variable access (basically D but with a direct pointer to the variable in token.data.pointer)
-#define t_Af		31	//			fast array access (basically A but with the array start index in token.data.i)
-#define t_stackaccess	32	//			access a value on the stack relative to the stack pointer, with token.data.i as the offset
-#define t_Ff		33	//			fast function call (basically F but with pointer to func_info in token.data.pointer)
-
-#define t_number	34	//			number constant
-#define t_id		35	//			identifier
-#define t_getref	36	//	getref		'get reference'. returns function number for named functions, variable array index for variables and stack accesses
-
-// ===== string related functions that return numbers ======
-				//	EXAMPLE				RETURNS		DESCRIPTION
-#define t_ascS		37	//	asc$ [string]			NUM		return number for first character of string
-#define t_valS		38	//	val$ [string]			NUM		return value of number in string
-#define t_lenS		39	//	len$ [string]			NUM		return length of string
-#define t_cmpS		40	//	cmp$ [string] [string]		NUM		strcmp 
-#define t_instrS	41	//	instr$ [stringa] [stringb]	NUM		return the position of stringb in stringa or -1 if not found
-// =========================================================
-
-#define t_rnd		42	//	rnd [number]	built in function: pseudo random numbers	takes one parameter
-
-#define t_alloc		43	//	alloc [n]	allocate [n] number of items from the vars array
-
-#define t_referredstringconst 44	// getref "stringconst"		creates an unnamed string variable which the stringconstant is copied to, then returns the reference number of the new string variable. note that the copy happens only once so any modifications to the string variable are permanent
-
-// ------- maths -----------
-
-#define t_tan		45	//	tan
-#define t_tanh		46	//	tanh
-#define t_atan		47	//	atan
-#define t_atan2		48	//	atan2
-#define t_acos		49	//	acos
-#define t_cos		50	//	cos
-#define t_cosh		51	//	cosh
-#define t_asin		52	//	asin
-#define t_sin		53	//	sin
-#define t_sinh		54	//	sinh
-#define t_exp		55	//	exp
-#define t_log		56	//	log
-#define t_log10		57	//	log10
-#define t_pow		58	//	pow
-#define t_sqr		59	//	sqr
-#define t_ceil		60	//	ceil
-#define t_floor		61	//	floor
-#define t_fmod		62	//	fmod
-
-// ------- functions related to file handling -----------
-// these return the 'file number' of the file that was opened or 0 if there was an error
-#define t_openin	63	//	openin [stringval]		open a file in read only mode. 
-#define t_openout	64	//	openout [stringval]		open a file in write only mode
-#define t_openup	65	//	openup [stringval]		open a file in read/write mode
-// ----				
-#define t_eof		66	//	eof [filenumber]		check if reached end of file
-#define t_bget		67	//	bget [filenumber]		read byte from file
-#define t_vget		68	//	vget [filenumber]		read 8 byte double from file
-#define t_ptr		69	//	ptr  [filenumber]		check current position in file
-#define t_ext		70	//	ext [filenumber]		check the current length of the file
-// ------------------------------------------------------
-
-#define t_leftb		71	//	(
-
-#define VALUES_END	t_leftb
-
-#ifdef enable_graphics_extension
- // graphics extension functions 
- #define t_winw		72		// takes no parameters, returns current window width
- #define t_winh		73		// takes no parameters, returns current window height
- #define t_mousex	74		// takes no parameters, returns current mouse x position	
- #define t_mousey	75		// takes no parameters, returns current mouse y position
- #define t_mousez	76		// takes no parameters, returns a value that changes when the mouse button is scrolled
- #define t_mouseb	77		// takes no parameters, returns bitfield of the mouse buttons currently pressed
- #define t_readkey	78		// takes no parameters, pulls a byte from the keyboard buffer and returns it
- #define t_keypressed	79		// takes one parameter, checks the iskeypressed array and returns info about whether or not that key is currently pressed
- #define t_expose	80		// takes no parameters, returns the state of a flag variable that gets set whenever there's an expose xwindows event, the flag is cleared after reading
- #define t_wmclose	81		// takes no parameters, returns the state of a flag that gets set when the window manager close button has been clicked, flag is cleared after reading
- #define t_keybuffer	82		// return the number of characters in the keyboard buffer
- #undef VALUES_END
- #define VALUES_END t_keybuffer
-#endif
-
-// =============================================================================================================================
-// =============================================================================================================================
-// ============ beyond here: not a 'value' =====================================================================================
-// =============================================================================================================================
-// =============================================================================================================================
-
-// misc syntax stuff
-
-#define t_rightb	83		//	)
-#define t_endstatement	84		//	;		end of statement marker
-#define t_comma		85		//	,
-
-#define t_deffn		86		//	function [F value] ([ P num_params L num_locals] or [ param_id_one param_id_two [...] [local local_id_one local_id_two] ] ) ;
-#define t_local		87		//	local				used with 'function' keyword. ids after this are local variable names
-#define t_ellipsis	88		//	...				used with 'function' keyword. when put at the end of param list, specifies that function takes unlimited parameters.
-
-#define t_label		89		//	.label		place label
-
-// ========= commands ========= 
-
-#define t_return	90		//	return
-#define t_while		91		//	while
-#define t_endwhile	92		//	endwhile
-#define t_if		93		//	if
-#define t_else		94		//	else
-#define t_endif		95		//	endif
-#define t_set		96		//	set
-#define t_var		97		//	variable [identifier] ([identifier]) ... ;		declare variables	
-#define t_arr		98		//	array [identifier] value;	declare an array
-#define t_const		99		//	constant [identifier] value;	declare a constant
-#define t_stringvar	100		//	stringvar [identifier] ([number]) ... ; declare string variables. Optionally specify the starting bufsize
-#define t_print		101		//	print, will print string constants and/or values until it finds ';'
-#define t_endfn		102		//	endfunction	return from a function without returning a value (will return 0)
-#define t_goto		103		//	goto [string];		will search for a label with matching string and execution will continue from there
-#define t_option	104		//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
-#define t_wait		105		//	wait [value];		usleep value*1000
-#define t_oscli		106		//	oscli [stringvalue];	system("string");
-// ----- commands related to file handling -----
-#define t_sptr		107		//	sptr [filenumber] [value] ;			set position in file to [value]
-#define t_bput		108		//	bput [filenumber] [value] [...] ;		write bytes to file
-#define t_vput		109		//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
-#define t_sput		110		//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
-#define t_close		111		//	close [filenumber] ;				close an open file
-// ---------------------------------------------
-// ===== end of commands ======
-
-// ===== fast modified versions of loop/control flow commands =====
-#define t_gotof		112	     //      jump to position in token.i
-#define t_whilef	113		//	position of matching 'endwhile' in token.i
-#define t_endwhilef	114		//	position of matching 'while'+1 in token.i
-#define t_iff		115		//	position of matching else/endif in token.i
-#define t_elsef		116		//	position of matching endif in token.i
-#define t_endiff	117		//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
-// ===================================
-
-// ===== string functions & stuff that's a 'string value' ======
-					//	EXAMPLE				RETURNS		DESCRIPTION
-#define t_stringconst	118		//	"string"					string constant
-#define t_stringconstf	119		//							string constant (fast), eliminates the need to call strlen()
-#define t_rightS	120		//	right$ [string] [n]		STR		get the last n characters of string
-#define t_leftS		121		//	left$  [string] [n]		STR		get the first n characters of string
-#define t_midS		122		//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
-#define t_chrS		123		//	chr$ [num]			STR		return a string with the character [num]
-#define t_strS		124		//	str$ [num]			STR		return string containing representation of [num]
-#define t_catS		125		//	cat$ [string] [string] ...	STR		concatenate strings
-#define t_S		126		//	$		string variable dereference
-#define t_Sf		127		//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
-#define t_sget		128		//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x00
-#define STRINGVALS_START t_stringconst
-#define STRINGVALS_END   t_sget
-#ifdef enable_graphics_extension // graphics extension stringvalues
- #define t_readkeyS	129		// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
- #undef STRINGVALS_END
- #define STRINGVALS_END t_readkeyS
-#endif
-
-
-// ===== end of string functions & stuff that's a 'string value' ======
-
-#ifdef enable_graphics_extension
- // ===== graphics extension commands =====
- // commands
- #define t_startgraphics	130	// startgraphics		winwidth winheight ;
- #define t_stopgraphics		131	// stopgraphics			;
- #define t_winsize		132	// winsize			W H ;
- #define t_pixel		133	// pixel			X Y ([X Y] ...) ;
- #define t_line			134	// line				X Y X Y ([X Y] ...) ;
- #define t_circlef		135	// circlef			X Y R ;
- #define t_circle		136	// circle			X Y R ;
- #define t_rectanglef		137	// rectanglef			X Y W [H] ;
- #define t_rectangle		138	// rectangle			X Y W [H] ;
- #define t_triangle		139	// triangle			X Y X Y X Y ;
- #define t_drawtext		140	// drawtext			X Y S (stringval);
- #define t_refreshmode		141	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		142	// refresh 			;
- #define t_gcol			143	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		144	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			145	// cls				;
- #define t_drawmode		146	// drawmode			dm ;		set the drawing mode to 'dm'
-#endif
-
-
-#if allow_debug_commands
- #define t_tb		200	//	testbeep
- #define t_printstackframe 201	//	print everything in the current stack frame
- #define t_printentirestack 202	//	print everything in the stack up to the current stack frame
-#endif
-
-#define t_bad		255	//			bad data
 
 //--------------------------
 struct id_info;
@@ -313,13 +99,16 @@ struct stringvar { // string variable
  char *string;
  size_t len, bufsize;
  int string_variable_number; // used by 'getref'
+ int unclaimed; // used by 'S'
 };
 typedef struct stringvar stringvar;
+// ----
 struct stringval { // string value
  char *string;
  size_t len;
 };
 typedef struct stringval stringval;
+// ----
 stringvar* newstringvar(size_t bufsize){
  stringvar *out = calloc(1,sizeof(stringvar));
  out->string = calloc(bufsize,sizeof(char));
@@ -409,8 +198,8 @@ void process_function_definitions(program *prog,int startpos);
 void error(char *s);
 stringval getstringvalue( program *prog, int *pos );
 int isstringvalue(unsigned char type);
-int isThisBracketAStringValue(program *prog, int p);
 int isvalue(unsigned char type);
+int determine_valueorstringvalue(program *prog, int p);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -827,6 +616,7 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_ssize	1	// set stack array size
 #define opt_import	2	// import functions from another file
 #define opt_seedrnd	3	// seed RNG
+#define opt_unclaim	4	// unclaim a string (so it can be re-used by 'S')
 
 void option( program *prog, int *p ){
  *p += 1; // advance p out of the way of the 'option' command itself
@@ -836,12 +626,15 @@ void option( program *prog, int *p ){
 
  int opt_number=-1;
 
- if(  isThisBracketAStringValue(prog, *p)  ){ // identify option string
+
+ if(  determine_valueorstringvalue(prog, *p)  ){ // identify option string
   stringval id_string = getstringvalue( prog, p );
+  if( id_string.len == 0 ){ opt_number=-1; goto option__identify_option_string_out; } // FUCK OFF! for FUCK'S sake...
   if( !strncmp( "vsize", id_string.string, id_string.len ) ){ opt_number = opt_vsize; goto option__identify_option_string_out;}	//	vsize		Set the size of the variables array
   if( !strncmp( "ssize", id_string.string, id_string.len ) ){ opt_number = opt_ssize; goto option__identify_option_string_out;}	//	ssize		Set the size of the stack array
   if( !strncmp( "import", id_string.string, id_string.len )){opt_number = opt_import; goto option__identify_option_string_out;}	//	import		Import functions from another file
   if( !strncmp( "seedrnd", id_string.string, id_string.len)){opt_number= opt_seedrnd; goto option__identify_option_string_out;}	//	seedrnd		Seed RNG
+  if( !strncmp( "unclaim", id_string.string, id_string.len)){opt_number= opt_unclaim; goto option__identify_option_string_out;} //	unclaim [string ref num]	Unclaim a string
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
   if( opt_number != -1 && prog->tokens[id_stringconst_pos].type == t_stringconst ){
@@ -912,6 +705,16 @@ void option( program *prog, int *p ){
   XRANDrand = v[0];
   XRANDranb = v[1];
   XRANDranc = v[2];
+  break;
+ }
+ case opt_unclaim:
+ {
+  int stringvar_num = (int)getvalue(p,prog);
+  if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+   printf("stringvar_num: %d\n",stringvar_num);
+   error("unclaim: bad stringvariable access\n");
+  }
+  prog->stringvars[stringvar_num]->unclaimed=1;
   break;
  }
  default: error("option: unrecognised option\n");
@@ -1145,6 +948,9 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  }
  if( wordmatch( pos,"$", text) ){	//	$
   out =  maketoken( t_S ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"S", text) ){	//	$
+  out =  maketoken( t_SS ); goto gettoken_normalout;
  }
 
  if( wordmatch( pos,";", text) ){	//	;
@@ -1506,6 +1312,19 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  }
  // ====== end of file related keywords ======
 
+ if( wordmatch( pos,"caseof", text) ){	//	
+  out = maketoken( t_caseof ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"when ", text) ){	//	
+  out = maketoken( t_when ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"otherwise", text) ){	//	
+  out = maketoken( t_otherwise ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"endcase", text) ){	//	
+  out = maketoken( t_endcase ); goto gettoken_normalout;
+ }
+
  // identifier
  if( text[*pos]=='_' || (text[*pos]>='a' && text[*pos]<='z') ){	
   l = patternmatch( *pos+1,"_qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890", text);
@@ -1580,7 +1399,8 @@ token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_retur
  if(f==NULL) return NULL;
  int ext = Ext(f);
  unsigned char *text = calloc( ext+1, sizeof(unsigned char));
- fread((void*)text, sizeof(char), ext, f);
+ size_t ReturnValue;
+ ReturnValue = fread((void*)text, sizeof(char), ext, f);
  token *out = tokenise(progstrings, text,length_return);
  fclose(f); free(text);
  return out;
@@ -1621,6 +1441,7 @@ char* tokenstring(token t){
  case t_L:		return "L";
  case t_P:		return "P";
  case t_F:		return "F";
+ case t_SS:		return "S";
  case t_deffn:		return "function";
  case t_local:		return "local";
  case t_ellipsis:	return "...";
@@ -1632,7 +1453,8 @@ char* tokenstring(token t){
  case t_leftb:		return "(";
  case t_rightb:		return ")";
  case t_endstatement:	return ";";
- case t_goto:		return "goto";
+ case t_goto: return "goto";
+ case t_gotof: return "gotoF";
 
  case t_return:		return "return";
  case t_while: case t_whilef:		return "while";
@@ -1722,7 +1544,7 @@ char* tokenstring(token t){
  
  case t_Df:
  {
-  snprintf(tokenstringbuf,sizeof(tokenstringbuf),"Df(%x)",t.data.pointer);
+  snprintf(tokenstringbuf,sizeof(tokenstringbuf),"Df(%p)",t.data.pointer);
   return tokenstringbuf;
  }
  case t_stackaccess:
@@ -1756,6 +1578,13 @@ char* tokenstring(token t){
   snprintf(tokenstringbuf,sizeof(tokenstringbuf),"Stringconstf(%s)",((stringval*)t.data.pointer)->string);
   return tokenstringbuf;
  }
+
+ case t_caseof:		return "caseof";
+ case t_caseofV:		return "caseofV";
+ case t_caseofS:	return "caseofS";
+ case t_when:		return "when";
+ case t_otherwise:	return "otherwise";
+ case t_endcase:	return "endcase";
 
  #ifdef enable_graphics_extension 
  // ============================================================================================
@@ -1853,12 +1682,6 @@ void copy_stringval_to_stringvar(stringvar *dest, stringval src){
 
 int isstringvalue(unsigned char type){
  return (type==t_leftb || type==t_id || (type>=STRINGVALS_START && type<=STRINGVALS_END)) ;
-}
-int isThisBracketAStringValue(program *prog, int p){
- while( prog->tokens[p].type == t_leftb ){
-  p+=1;
- }
- return(isstringvalue(prog->tokens[p].type));
 }
 
 stringval
@@ -1976,7 +1799,7 @@ getstringvalue( program *prog, int *pos ){
  {
   double val = getvalue(pos,prog);
   int snpf_return;
-  if(!isnan(val) && val == (double)(int)val){
+  if(!MyIsnan(val) && val == (double)(int)val){
    snpf_return = snprintf(accumulator->string, accumulator->bufsize, "%d",(int)val);
   }else{
    snpf_return = snprintf(accumulator->string, accumulator->bufsize, "%f",val);
@@ -2395,7 +2218,37 @@ getvalue(int *p, program *prog){
   }//next
 
   return -1;
- }//end case block
+ }//end case block t_instrS
+ case t_SS:
+ {
+  int i;
+  int stringgiven=0;
+//  stringvar *svr = (stringvar*)t.data.pointer;
+//  copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
+  stringvar *svr = NULL;
+  for( i = prog->max_stringvars-1; i>=0; i-- ){
+
+   if( prog->stringvars[i]->unclaimed ){ 
+    prog->stringvars[i]->unclaimed = 0;
+    svr = prog->stringvars[i];
+    break;
+   }
+  }
+  if( svr == NULL ){
+   svr = create_new_stringvar(prog,DEFAULT_NEW_STRINGVAR_BUFSIZE);
+  }
+  if( isvalue( prog->tokens[*p].type ) && isstringvalue( prog->tokens[*p].type ) ){
+   stringgiven = determine_valueorstringvalue(prog, *p);
+  }else{
+   stringgiven = isstringvalue( prog->tokens[*p].type );
+  }
+  if( stringgiven ){
+   copy_stringval_to_stringvar(svr, getstringvalue(prog, p) );
+  }else{
+   svr->len = 0;
+  }
+  return svr->string_variable_number;
+ }
 
  // --------- file related functions ---------
  case t_openin: case t_openup:  case t_openout:
@@ -2531,6 +2384,8 @@ getvalue(int *p, program *prog){
   switch(t.type){
   case t_D: case t_F: case t_S:// this is something you wouldn't really do, but it's supported anyway
    return getvalue(p, prog);
+  case t_A:
+   return (int)getvalue(p, prog) + (int)getvalue(p, prog);
   case t_Ff:
    return ((func_info*)t.data.pointer)->function_number;
   case t_Sf:
@@ -2734,6 +2589,138 @@ int _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen
  error("interpreter: goto: couldn't find label\n");
  return 0;
 }//endproc
+
+struct caseof {
+ int num_whens;
+ int *whens; // position of 'whens'
+ int *whens_; // position of first ';' after each 'when'
+ int otherwise; //position of otherwise (this will point to the 'endcase' if there was no otherwise'
+};
+
+int caseof_skippast(program *prog, int p){ // p must point to the starting 'caseof'
+ int i = p;
+ int level = 1; // 'level'
+ while( (i < prog->length) && level){
+  i+=1;
+  switch( prog->tokens[i].type ){
+  case t_caseof: level += 1; break;
+  case t_endcase: level -= 1; break;
+  }
+ }
+ if(i == prog->length) error("caseof_skippast: missing endcase\n");
+ return i;
+}
+int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the starting 'caseof'
+ int out=0;
+ int i = p+1;
+ while( i < prog->length ){
+  switch( prog->tokens[i].type ){
+  case 0:
+   error("caseof_numwhens: missing endcase\n");
+   break;
+  case t_caseof:
+   i = caseof_skippast( prog, i);
+   break;
+  case t_when:
+   if(co){
+    co->whens[out] = i;
+    if( out>0 && !co->whens_[out-1] ){
+     error("caseof_numwhens:1: 'when' list not terminated by ';'\n"); // this can't always be caught but at least in some cases it'll be nice to be notified by this error message
+    }
+   }
+   out += 1;
+   break;
+  case t_endstatement:
+   if(co && (out>0) && !co->whens_[out-1] ){
+    co->whens_[out-1] = i;
+   }
+   break;
+  case t_otherwise:
+   if(co){
+    co->otherwise = i;
+    if( out>0 && !co->whens_[out-1] ){
+     error("caseof_numwhens:2: 'when' list not terminated by ';'\n");
+    }
+   }
+   break;
+  case t_endcase:
+   return out;
+  }
+  i+=1;
+ }
+ error("caseof_numwhens: this should never happen\n");
+}
+int determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes and error if neither is found
+ int i; i=p; while( prog->tokens[i].type == t_leftb ){ i+=1; } // skip past any left brackets
+ if( prog->tokens[i].type == t_id ) process_id(prog, &prog->tokens[i]); // process it if it's an id
+ if( isstringvalue(prog->tokens[i].type) ) return 1; // return 1 if it's a stringvalue
+ if( isvalue(prog->tokens[i].type) ) return 0; // return 0 if it's a value
+ error("expected a value or a stringvalue\n"); // cause an error because we expected a value or a stringvalue
+}
+#define PROCESSCASEOF_RUBBISH 0
+void _interpreter_processcaseof(program *prog, int p){ int i;
+//  create caseof struct.
+ struct caseof *co = calloc(1, sizeof(struct caseof));
+ int caseofpos = p;
+ int endcasepos = caseof_skippast(prog,p);
+ #if PROCESSCASEOF_RUBBISH
+ printf("fuckk %s\n",tokenstring(prog->tokens[ endcasepos ]));
+ #endif
+//  determine if this is a caseofV or caseofS, or cause an error if there's an inappropriate token after the caseof.
+//  replace the caseof with caseofV_f or caseofS_f appropriately.
+ prog->tokens[caseofpos].type = determine_valueorstringvalue(prog,p+1) ? t_caseofS : t_caseofV;
+//  count the number of whens.
+ int numwhens = caseof_numwhens(prog,p,NULL);
+//  allocate arrays for whens and ';'.
+ co->num_whens = numwhens;
+ co->whens  = calloc(numwhens,sizeof(int));
+ co->whens_ = calloc(numwhens,sizeof(int));
+//  find all the 'whens' and the otherwise
+ caseof_numwhens(prog,p,co);
+ // debug
+ #if PROCESSCASEOF_RUBBISH
+ for(i=0; i<numwhens; i++){
+  printf("ffuck %0d: %d(%s), %d(%s)\n", i, co->whens[i],tokenstring(prog->tokens[co->whens[i]]), co->whens_[i],tokenstring(prog->tokens[co->whens_[i]])  );
+ }
+ #endif
+ // replace otherwise with goto
+ if(co->otherwise){
+  prog->tokens[ co->otherwise ].type = t_gotof;
+  prog->tokens[ co->otherwise ].data.i = endcasepos;
+ }else{
+  co->otherwise = endcasepos;
+ }
+ // replace whens with gotos
+ for(i=0; i<numwhens; i++){
+  token *t = &prog->tokens[ co->whens[i] ]; 
+  t->type = t_gotof;
+  t->data.i = endcasepos;
+ }
+ // replace endcase with ';'
+ prog->tokens[ endcasepos ].type = t_endstatement;
+//  update the caseof token to point to the caseof struct.
+ prog->tokens[caseofpos].data.pointer = co;
+
+ // add the allocated pointers to the strings list
+ //void stringslist_addstring(stringslist *s,char *string);
+ stringslist_addstring(prog->program_strings, (char *) co );
+ stringslist_addstring(prog->program_strings, (char *) co->whens );
+ stringslist_addstring(prog->program_strings, (char *) co->whens_ );  
+ // debug
+ #if PROCESSCASEOF_RUBBISH
+ for(i=0; i<numwhens; i++){
+  printf("ffuck %0d: %d(%s), %d(%s)\n", i, co->whens[i],tokenstring(prog->tokens[co->whens[i]]), co->whens_[i],tokenstring(prog->tokens[co->whens_[i]])  );
+ }
+ #endif
+ // just FUCKING do this right now so you don't need to do it later, save maybe 0.0000001 seconds of processing time god damn it.....
+ for(i=0; i<numwhens; i++){
+  co->whens[i] += 1;
+  co->whens_[i]+= 1;
+ }
+ co->otherwise+=1;
+//  return
+ return;
+}
 
 double
 #ifndef DISABLE_ALIGN_STUFF
@@ -2985,7 +2972,7 @@ interpreter(int p, program *prog){
 
   t_print_value: // =======================================================================
   value = getvalue(&p, prog);
-  if( !isnan(value) && value == (double)(int)value){
+  if( !MyIsnan(value) && value == (double)(int)value){
    printf("%d",(int)value);
   }else{
    printf("%f",value);
@@ -3023,7 +3010,8 @@ interpreter(int p, program *prog){
   stringval sv = getstringvalue( prog, &p );
   char holdthis = sv.string[sv.len]; sv.string[sv.len]=0;
   //printf("oscli: '%s'\n",sv.string);
-  system(sv.string);
+  int SystemReturnValue;
+  SystemReturnValue = system(sv.string);
   sv.string[sv.len]=holdthis;
   break;
  }
@@ -3071,6 +3059,61 @@ interpreter(int p, program *prog){
   break;
  }
  // --------- end of file related commands --------------
+ case t_caseof:
+  _interpreter_processcaseof(prog,p);
+  break;
+ case t_caseofV:
+  { 
+   struct caseof *co = t.data.pointer;
+   p+=1;
+   double v = getvalue(&p,prog);
+   #if PROCESSCASEOF_RUBBISH
+   printf("v: %f\n",v);
+   #endif
+   int i;
+   for(i=0; i < co->num_whens; i++){
+    p=co->whens[i];
+    #if PROCESSCASEOF_RUBBISH
+    printf("shit %s\n",tokenstring(prog->tokens[p]));
+    #endif
+    double v2;
+    while( isvalue( prog->tokens[p].type ) ){
+     v2 = getvalue(&p,prog);
+     #if PROCESSCASEOF_RUBBISH
+     printf("v2: %f\n",v2);
+     #endif
+     if( v == v2 ){
+      #if PROCESSCASEOF_RUBBISH
+      tb(); printf("match %f, %f\n",v,v2);
+      #endif
+      p=co->whens_[i]; goto caseofV_out;
+     }
+    }//endwhile
+   }//next
+   p=co->otherwise;
+  }
+  caseofV_out:
+  break;
+ case t_caseofS:
+  { 
+   struct caseof *co = t.data.pointer;
+   p+=1;
+   stringval v = getstringvalue( prog, &p );
+   int i;
+   for(i=0; i < co->num_whens; i++){
+    p=co->whens[i];
+    stringval v2;
+    while( isstringvalue( prog->tokens[p].type ) ){
+     v2 = getstringvalue( prog, &p );
+     if( (v.len == v2.len) && !strncmp(v.string, v2.string, v.len ) ){
+      p=co->whens_[i]; goto caseofS_out;
+     }
+    }//endwhile
+   }//next
+   p=co->otherwise;
+  }
+  caseofS_out:
+  break;
  #ifdef enable_graphics_extension 
  // ============================================================================================
  // ======= GRAPHICS EXTENSION =================================================================
@@ -3283,6 +3326,14 @@ int main(int argc, char **argv){
   printf("%s [program text or path to a file containing program text]\n",argv[0]);
   return 0;
  }
+
+#if 1
+ add_id(prg->ids, make_id( "_argc", maketoken_num( argc-2 ) ) );
+ int i;
+ for(i=2; i<argc; i++){
+  copy_stringval_to_stringvar(   create_new_stringvar(prg,strlen( argv[i] ) ), (stringval) { argv[i], strlen(argv[i]) } );
+ }
+#endif
 
 #if main_printstuff
  printf("ok\n\n");

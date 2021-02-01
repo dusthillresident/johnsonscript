@@ -1,0 +1,27 @@
+
+variable c counter;
+stringvar st;
+stringvar sought;
+set sought "COCKSPENIS";
+
+while 1
+
+ set c bget _stdin
+ if = c -1
+  return 0
+ endif
+  
+ set st cat$ st chr$ c;
+ if ! cmp$ st left$ sought len$ st
+  if = len$ st len$ sought
+   set st ""
+   sput _stdout str$ counter
+   set counter + counter 1
+  endif
+ else
+  sput _stdout st
+  set st ""
+ endif
+ 
+endwhile
+
