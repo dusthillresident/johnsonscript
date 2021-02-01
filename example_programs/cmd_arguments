@@ -1,0 +1,13 @@
+
+
+
+variable i;
+
+print "_argc is " _argc;
+
+while < i _argc
+ print "'$ " i "' is '" $ i "'";
+ set i + i 1
+endwhile
+
+return 0;
