@@ -162,6 +162,7 @@
 #define t_option		COCKSPENIS	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
 #define t_wait			COCKSPENIS	//	wait [value];		usleep value*1000
 #define t_oscli			COCKSPENIS	//	oscli [stringvalue];	system("string");
+#define t_quit			COCKSPENIS	//	quit ([value]);		exit(value);
 // ----- commands related to file handling -----
 #define t_sptr			COCKSPENIS	//	sptr [filenumber] [value] ;			set position in file to [value]
 #define t_bput			COCKSPENIS	//	bput [filenumber] [value] [...] ;		write bytes to file

@@ -163,41 +163,42 @@
 #define t_option		111	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
 #define t_wait			112	//	wait [value];		usleep value*1000
 #define t_oscli			113	//	oscli [stringvalue];	system("string");
+#define t_quit			114	//	quit ([value]);		exit(value);
 // ----- commands related to file handling -----
-#define t_sptr			114	//	sptr [filenumber] [value] ;			set position in file to [value]
-#define t_bput			115	//	bput [filenumber] [value] [...] ;		write bytes to file
-#define t_vput			116	//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
-#define t_sput			117	//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
-#define t_close			118	//	close [filenumber] ;				close an open file
+#define t_sptr			115	//	sptr [filenumber] [value] ;			set position in file to [value]
+#define t_bput			116	//	bput [filenumber] [value] [...] ;		write bytes to file
+#define t_vput			117	//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
+#define t_sput			118	//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
+#define t_close			119	//	close [filenumber] ;				close an open file
 // ---------------------------------------------
 // ===== end of commands ======
 
 // ===== fast modified versions of loop/control flow commands =====
-#define t_gotof			119	//      jump to position in token.i
-#define t_whilef		120	//	position of matching 'endwhile' in token.i
-#define t_endwhilef		121	//	position of matching 'while'+1 in token.i
-#define t_iff			122	//	position of matching else/endif in token.i
-#define t_elsef			123	//	position of matching endif in token.i
-#define t_endiff		124	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
+#define t_gotof			120	//      jump to position in token.i
+#define t_whilef		121	//	position of matching 'endwhile' in token.i
+#define t_endwhilef		122	//	position of matching 'while'+1 in token.i
+#define t_iff			123	//	position of matching else/endif in token.i
+#define t_elsef			124	//	position of matching endif in token.i
+#define t_endiff		125	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
 // ===================================
 
 // ===== string functions & stuff that's a 'string value' ======
 					//	EXAMPLE				RETURNS		DESCRIPTION
-#define t_stringconst		125	//	"string"					string constant
-#define t_stringconstf		126	//							string constant (fast), eliminates the need to call strlen()
-#define t_rightS		127	//	right$ [string] [n]		STR		get the last n characters of string
-#define t_leftS			128	//	left$  [string] [n]		STR		get the first n characters of string
-#define t_midS			129	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
-#define t_chrS			130	//	chr$ [num]			STR		return a string with the character [num]
-#define t_strS			131	//	str$ [num]			STR		return string containing representation of [num]
-#define t_catS			132	//	cat$ [string] [string] ...	STR		concatenate strings
-#define t_S			133	//	$		string variable dereference
-#define t_Sf			134	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
-#define t_sget			135	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x00
+#define t_stringconst		126	//	"string"					string constant
+#define t_stringconstf		127	//							string constant (fast), eliminates the need to call strlen()
+#define t_rightS		128	//	right$ [string] [n]		STR		get the last n characters of string
+#define t_leftS			129	//	left$  [string] [n]		STR		get the first n characters of string
+#define t_midS			130	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
+#define t_chrS			131	//	chr$ [num]			STR		return a string with the character [num]
+#define t_strS			132	//	str$ [num]			STR		return string containing representation of [num]
+#define t_catS			133	//	cat$ [string] [string] ...	STR		concatenate strings
+#define t_S			134	//	$		string variable dereference
+#define t_Sf			135	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
+#define t_sget			136	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x00
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_sget
 #ifdef enable_graphics_extension // graphics extension stringvalues
- #define t_readkeyS		136	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
+ #define t_readkeyS		137	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
  #undef STRINGVALS_END
  #define STRINGVALS_END t_readkeyS
 #endif
@@ -208,30 +209,30 @@
 #ifdef enable_graphics_extension
  // ===== graphics extension commands =====
  // commands
- #define t_startgraphics	137	// startgraphics		winwidth winheight ;
- #define t_stopgraphics		138	// stopgraphics			;
- #define t_winsize		139	// winsize			W H ;
- #define t_pixel		140	// pixel			X Y ([X Y] ...) ;
- #define t_line			141	// line				X Y X Y ([X Y] ...) ;
- #define t_circlef		142	// circlef			X Y R ;
- #define t_circle		143	// circle			X Y R ;
- #define t_rectanglef		144	// rectanglef			X Y W [H] ;
- #define t_rectangle		145	// rectangle			X Y W [H] ;
- #define t_triangle		146	// triangle			X Y X Y X Y ;
- #define t_drawtext		147	// drawtext			X Y S (stringval);
- #define t_refreshmode		148	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		149	// refresh 			;
- #define t_gcol			150	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		151	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			152	// cls				;
- #define t_drawmode		153	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_startgraphics	138	// startgraphics		winwidth winheight ;
+ #define t_stopgraphics		139	// stopgraphics			;
+ #define t_winsize		140	// winsize			W H ;
+ #define t_pixel		141	// pixel			X Y ([X Y] ...) ;
+ #define t_line			142	// line				X Y X Y ([X Y] ...) ;
+ #define t_circlef		143	// circlef			X Y R ;
+ #define t_circle		144	// circle			X Y R ;
+ #define t_rectanglef		145	// rectanglef			X Y W [H] ;
+ #define t_rectangle		146	// rectangle			X Y W [H] ;
+ #define t_triangle		147	// triangle			X Y X Y X Y ;
+ #define t_drawtext		148	// drawtext			X Y S (stringval);
+ #define t_refreshmode		149	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		150	// refresh 			;
+ #define t_gcol			151	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		152	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			153	// cls				;
+ #define t_drawmode		154	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
 #if allow_debug_commands
- #define t_tb		154	//	testbeep
- #define t_printstackframe 155	//	print everything in the current stack frame
- #define t_printentirestack 156	//	print everything in the stack up to the current stack frame
+ #define t_tb		155	//	testbeep
+ #define t_printstackframe 156	//	print everything in the current stack frame
+ #define t_printentirestack 157	//	print everything in the stack up to the current stack frame
 #endif
 
 #define t_bad		255	//			bad data

@@ -1324,6 +1324,9 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"endcase", text) ){	//	
   out = maketoken( t_endcase ); goto gettoken_normalout;
  }
+ if( wordmatch( pos,"quit", text) ){	//	
+  out = maketoken( t_quit ); goto gettoken_normalout;
+ }
 
  // identifier
  if( text[*pos]=='_' || (text[*pos]>='a' && text[*pos]<='z') ){	
@@ -1585,6 +1588,8 @@ char* tokenstring(token t){
  case t_when:		return "when";
  case t_otherwise:	return "otherwise";
  case t_endcase:	return "endcase";
+
+ case t_quit:		return "quit";
 
  #ifdef enable_graphics_extension 
  // ============================================================================================
@@ -2650,7 +2655,7 @@ int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to 
  }
  error("caseof_numwhens: this should never happen\n");
 }
-int determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes and error if neither is found
+int determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes an error if neither is found
  int i; i=p; while( prog->tokens[i].type == t_leftb ){ i+=1; } // skip past any left brackets
  if( prog->tokens[i].type == t_id ) process_id(prog, &prog->tokens[i]); // process it if it's an id
  if( isstringvalue(prog->tokens[i].type) ) return 1; // return 1 if it's a stringvalue
@@ -3114,6 +3119,23 @@ interpreter(int p, program *prog){
   }
   caseofS_out:
   break;
+ case t_quit:
+  {
+   p+=1;
+   #ifdef enable_graphics_extension
+   if(newbase_is_running){
+    Wait(1);
+    MyCleanup();
+   }
+   #endif
+   double ret_val = 0;
+   if( isvalue( prog->tokens[p].type ) ){
+    //printf("this is happening\n"); tb(); // test
+    ret_val = getvalue(&p,prog);
+   }
+   exit( (int) ret_val );
+   break;
+  }
  #ifdef enable_graphics_extension 
  // ============================================================================================
  // ======= GRAPHICS EXTENSION =================================================================
