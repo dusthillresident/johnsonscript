@@ -1,0 +1,112 @@
+REM 
+/*
+
+ -------------
+ -- POLYGON --
+ -------------
+
+ A program originally written by John A Coll in BBC BASIC for the BBC Micro, 16 Nov 81
+ adapted for Johnsonscript Sun Feb 14 2021 by P.M
+
+*/
+
+
+variable bbcx bbcy bbcp bbcoriginx bbcoriginy ;
+set bbcx alloc 3
+set bbcy alloc 3
+
+variable colarray;
+set colarray alloc 4;
+set Acolarray(0) 0
+set Acolarray(1) << 255 * 8 2
+set Acolarray(2) << 65535 * 8 1
+set Acolarray(3) -1;
+
+
+
+startgraphics 1280 1024
+
+variable x y;
+set x alloc 10;
+set y alloc 10;
+
+variable c xorigin yorigin radius sides side angle _line;
+
+set c 1
+while <= c 2500
+ set xorigin + 1 rnd 1200
+ set yorigin + 1 rnd 750;
+
+ origin xorigin yorigin;
+ set radius + 1 rnd 300 50
+ set sides + 3 rnd 8;
+
+ move radius 0;
+ move 10 10;
+  
+ gcol rnd << 256 * 8 3
+ set side 1
+ while <= side sides
+  
+  set angle  / ( * ( - side 1 ) 2 _pi ) sides
+  set Ax(side) * radius cos angle
+  set Ay(side) * radius sin angle;
+  move 0 0;
+  plot85 Ax(side) Ay(side)
+  
+  set side + side 1
+ endwhile 
+ 
+ move 0 0;
+ plot85 radius 0
+
+ gcol Acolarray( + 1 rnd 3 )
+ 
+ set side 1
+ while <= side sides
+  set _line side
+  while <= _line sides
+
+   move Ax(side) Ay(side);
+   draw Ax(_line) Ay(_line);
+
+   set _line + _line 1
+  endwhile
+  set side + side 1
+ endwhile
+
+ wait 500
+
+ set c + c 1
+endwhile
+
+while 1
+ wait 16.6
+endwhile
+
+REM -------------------------
+
+function move x y;
+ set bbcp % (+ bbcp 1) 3
+ set Abbcx(bbcp) + x bbcoriginx
+ set Abbcy(bbcp) + y bbcoriginy
+endfunction
+
+function draw x y;
+ move x y;
+ line Abbcx( %(+ bbcp 0)3) Abbcy( %(+ bbcp 0)3)
+      Abbcx( %(+ bbcp 2)3) Abbcy( %(+ bbcp 2)3);
+endfunction
+
+function origin x y;
+ set bbcoriginx x
+ set bbcoriginy y
+endfunction
+
+
+function plot85 x y;
+ move x y
+ triangle Abbcx( %(+ bbcp 0)3) Abbcy( %(+ bbcp 0)3)
+         Abbcx( %(+ bbcp 1)3) Abbcy( %(+ bbcp 1)3)
+         Abbcx( %(+ bbcp 2)3) Abbcy( %(+ bbcp 2)3);
+endfunction
