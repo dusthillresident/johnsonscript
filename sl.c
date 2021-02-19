@@ -797,7 +797,7 @@ void _gettoken_skippastcomments(int *pos, unsigned char *text){
   }//endwhile
  }//endif
  // line comment
- if( wordmatch( pos,"REM", text) ){	
+ if( wordmatch( pos,"REM", text) || wordmatch( pos,"#", text) ){	
   while( text[*pos] && text[*pos]!=10 ){
    *pos += 1;
   }//endwhile
