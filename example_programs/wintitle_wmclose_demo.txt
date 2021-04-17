@@ -1,0 +1,19 @@
+startgraphics 640 480;
+stringvar mystring;
+set mystring "This is a string"
+option "wintitle" left$ mystring 4
+print mystring;
+option "wmclose" 1;
+while ! & mouseb 4
+ if expose
+  cls
+  gcol -1
+  drawtext 25 25 0 "This window will not close until you right click in it"
+ endif
+ if wmclose
+  gcol rnd 256 rnd 256 rnd 256
+  circle rnd winw rnd winh rnd 200
+ endif
+ wait 16.6
+endwhile
+quit
