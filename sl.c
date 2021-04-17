@@ -618,6 +618,11 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_seedrnd	3	// seed RNG
 #define opt_unclaim	4	// unclaim a string (so it can be re-used by 'S')
 
+#ifdef enable_graphics_extension
+#define opt_wmclose	100	// specify action to take when the window close button is pressed
+#define opt_wintitle	101	// set the window title string
+#endif
+
 void option( program *prog, int *p ){
  *p += 1; // advance p out of the way of the 'option' command itself
  int id_stringconst_pos = *p;
@@ -635,6 +640,10 @@ void option( program *prog, int *p ){
   if( !strncmp( "import", id_string.string, id_string.len )){opt_number = opt_import; goto option__identify_option_string_out;}	//	import		Import functions from another file
   if( !strncmp( "seedrnd", id_string.string, id_string.len)){opt_number= opt_seedrnd; goto option__identify_option_string_out;}	//	seedrnd		Seed RNG
   if( !strncmp( "unclaim", id_string.string, id_string.len)){opt_number= opt_unclaim; goto option__identify_option_string_out;} //	unclaim [string ref num]	Unclaim a string
+#ifdef enable_graphics_extension
+  if( !strncmp( "wintitle", id_string.string, id_string.len ) ){ opt_number=opt_wintitle;	goto option__identify_option_string_out;}	//	
+  if( !strncmp( "wmclose", id_string.string, id_string.len ) ){ opt_number=opt_wmclose;	goto option__identify_option_string_out;}	//	
+#endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
   if( opt_number != -1 && prog->tokens[id_stringconst_pos].type == t_stringconst ){
@@ -716,6 +725,21 @@ void option( program *prog, int *p ){
   }
   prog->stringvars[stringvar_num]->unclaimed=1;
   break;
+#ifdef enable_graphics_extension
+ case opt_wmclose:
+ {
+  wmcloseaction = getvalue(p,prog);
+  break;
+ }
+ case opt_wintitle:
+ {
+  stringval sv = getstringvalue( prog, p );
+  char c = sv.string[sv.len]; sv.string[sv.len]=0;
+  SetWindowTitle(sv.string);
+  sv.string[sv.len]=c;
+  break;
+ }
+#endif
  }
  default: error("option: unrecognised option\n");
  }
