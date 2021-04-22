@@ -1,0 +1,995 @@
+
+option "vsize" 2148;
+option "ssize" 2048;
+
+guiinit;
+
+constant max_pieces * 8 32;
+variable pieces isinuse num_pieces board ww hh wwm1 hhm1 bspaces board_end;
+set pieces alloc max_pieces;
+set isinuse alloc int / max_pieces 8;
+variable alreadytried;
+set alreadytried alloc max_pieces;
+
+variable
+     _ip_minx  
+     _ip_miny ;
+
+set board blankpiece      20 20;
+constant b2 + board 2;
+configure_board 5 12;
+
+__addpiece @"+";
+__addpiece @"z";
+__addpiece @"gun";
+__addpiece @"L";
+__addpiece @"_s";
+__addpiece @"T";
+__addpiece @"t";
+__addpiece @"1";
+__addpiece @"C";
+__addpiece @"Q";
+__addpiece @"S";
+__addpiece @"|";
+symmetry_check;
+
+startgraphics 362 356; option "wintitle" "Pentomino puzzle solver"; refreshmode 1
+variable www hhh opx opy animate paused cancel solutions maxspaces pauseforsol; set pauseforsol 1;
+set opx -1 set opy -1;
+set maxspaces * 5 12;
+set www getw board
+set hhh geth board
+
+
+
+while 1
+ _options_screen;
+ cls;
+ gcol -1
+ drawtext 25 25 1 "Please wait" refresh
+ cls
+ _controlbox
+ newsolve 1
+ set gui_reqrd 1
+ if ! cancel
+  .solmessage
+   gui_proc 1
+   if gui_redraw
+    gcol -1
+    drawtext gui_pad gui_pad 0 cat$ str$ solutions " solutions found"
+   endif
+  if ! button gui_pad (+gui_pad 16 gui_pad) @"thanks"; goto ".solmessage" endif
+ endif
+ set cancel 0
+ set solutions 0
+ set paused 0
+ set gui_reqrd 1
+endwhile
+
+
+
+# ---------------------------------------------------------------------------------------------------------------
+
+
+
+function configure_board w h local i;
+ set Dboard w
+ set Aboard(1) h
+ set ww getw board; set wwm1 - ww 1;
+ set hh geth board; set hhm1 - hh 1; 
+ set board_end + b2 * ww hh;
+ set i b2
+ while < i board_end 
+  set Di 0
+  set i + i 1
+ endwhile
+ set bspaces countspaces board;
+endfunction
+
+function getw piece;
+return A piece 0;
+function geth piece;
+return A piece 1;
+
+function countspaces piece local i l c;
+ set l * Apiece(0) Apiece(1)
+ set piece + piece 2
+ set c 0
+ set i 0
+ while < i l
+  set c + c ! A piece i
+  set i + i 1
+ endwhile
+return c;
+
+set p + b2 x * ww y 
+function ffill x y p local r ;
+ if Dp endfunction endif
+ set r 1
+ set Dp -2
+ # left
+ if > x 0 set r + r ffill (- x 1) y - p 1 endif
+ # right
+ if < x wwm1 set r + r ffill (+ x 1) y + p 1 endif
+ # up
+ if > y 0 set r + r ffill x (- y 1 ) - p ww endif
+ # down 
+ if < y hhm1 return + r ffill x (+ y 1 ) + p ww endif
+return r
+
+function _isstupid_clr local p;
+ set p b2
+ while < p board_end
+  if = Dp -2
+   set Dp 0
+  endif
+  set p + p 1
+ endwhile
+endfunction 
+
+function _ispossible_ffill x y p;
+ if != -2 Dp endfunction endif
+ set Dp 0
+ if < x _ip_minx set _ip_minx x endif
+ #if > x _ip_maxx set _ip_maxx x endif
+ if < y _ip_miny set _ip_miny y endif
+ #if > y _ip_maxy set _ip_maxy y endif
+ # left
+ if > x 0 _ispossible_ffill (- x 1) y - p 1 endif
+ # right
+ if < x wwm1 _ispossible_ffill (+ x 1) y + p 1 endif
+ # up
+ if > y 0 _ispossible_ffill x (- y 1 ) - p ww endif
+ # down 
+ if < y hhm1 _ispossible_ffill x (+ y 1 ) + p ww endif
+endfunction
+
+function ispossible local x y p i chk v ; 
+ set chk 0
+ set y 0
+ set p b2
+ while < y hh
+  set x 0
+  while < x ww
+   if !Dp
+    set v ffill x y p
+    if % v 5;
+     _isstupid_clr
+     endfunction
+    endif
+    if = v 5
+     set _ip_minx x
+     set _ip_miny y
+     _ispossible_ffill x y p
+     set i 0
+     while < i num_pieces
+      if canput A pieces i _ip_minx _ip_miny i
+       set v << 1 >> i 3
+       if & v chk;
+        #testbeep
+        _isstupid_clr
+        endfunction
+       endif
+       set chk | chk v;
+       put A pieces i _ip_minx _ip_miny -2
+       goto ".ispossible_next"
+      endif #canput
+      set i + i 1
+     endwhile # pieces
+     _isstupid_clr
+     endfunction
+    endif # v is 5
+   endif # !Dp
+   .ispossible_next
+   set p + p 1
+   set x + x 1
+  endwhile
+  set y + y 1
+ endwhile
+ _isstupid_clr
+return 1
+
+function firstempty_yl_xl p local x y pp;
+ set y 0
+ while < y hh
+  set x 0
+  while < x ww
+   set pp + b2 x * y ww
+   if ! D pp
+    set Dp pp
+    set Ap 1 + y 1
+    set Ap 2 + x 1
+    endfunction
+   endif
+   set x + x 1
+  endwhile
+  set y + y 1
+ endwhile
+endfunction
+
+function min a b;
+if > a b return b endif
+return a
+function max a b;
+if < a b return b endif
+return a
+
+function newsolve piecenum local i x y fe yl xl yL xL ; if cancel endfunction endif
+ firstempty_yl_xl @fe
+ set yL - yl 6 if < yL 0 set yL 0 endif
+ set xL - xl 6 if < xL 0 set xL 0 endif
+ set i 0
+ while < i num_pieces
+  if ! Aisinuse >> i 3
+   if ! A alreadytried i
+    # find availble place for this piece
+    set y yL
+    while < y yl
+     set x xL
+     while < x xl
+
+      if canput Apieces i x y i
+       put Apieces i x y piecenum
+       set Aisinuse >> i 3 1
+       if ! D fe
+        goto ".skip"
+       endif
+       if ispossible
+
+        set bspaces - bspaces 5
+        if ! bspaces
+         if pauseforsol
+          set paused 1
+         endif
+         set solutions + solutions 1
+         set gui_reqrd 1
+        endif
+        _controlbox 
+        if ! cancel newsolve + piecenum 1 endif
+
+        put Apieces i x y 0
+        set Aisinuse >> i 3 0
+        set bspaces + bspaces 5
+    
+        if cancel endfunction endif
+ 
+        goto ".newsolve_next"
+
+       endif
+
+       .skip
+       put Apieces i x y 0
+       set Aisinuse >> i 3 0
+
+      endif #canput
+
+      set x + x 1
+     endwhile
+     set y + y 1
+    endwhile
+   
+   endif # alreadytried
+  endif # isinuse
+  
+  .newsolve_next
+  
+  set i + i 1
+ endwhile
+endfunction
+
+
+function freespaces local p out;
+ set out 0
+ set p b2
+ while < p board_end
+  set out + out ! Dp
+  set p + p 1
+ endwhile
+return out
+
+function canput src px py n local x y w h p ;
+ if Aisinuse >> n 3
+  endfunction
+ endif
+ set w D src
+ if > (+ px w) ww
+  endfunction
+ endif
+ set h A src 1
+ if > (+ py h) hh
+  endfunction
+ endif
+ set p + src 2
+ set y 0
+ while < y h
+  set x 0
+  while < x w
+   if D p
+    if D + b2 (+ px x) * ww + py y
+     endfunction
+    endif
+   endif
+   set p + p 1
+   set x + x 1
+  endwhile 
+  set y + y 1
+ endwhile
+return 1
+
+function pindex piece x y;
+return + piece 2 x * y Dpiece;
+
+function put src px py _setto local x y w h p ;
+ set w D src
+ set h A src 1
+ set y 0
+ set p + src 2
+ while < y h
+  set x 0
+  while < x w
+   if D p
+    set D (+ b2 px x * ww + py y) _setto
+   endif
+   set p + p 1
+   set x + x 1
+  endwhile 
+  set y + y 1
+ endwhile
+endfunction
+
+function addpiece piece;
+ set Apieces(num_pieces) piece
+ set num_pieces + num_pieces 1
+endfunction
+
+function _addpiece piece local i;
+ addpiece piece
+ set i 0 
+ while < i 3
+  addpiece createrotated Apieces(- num_pieces 1)
+  set i + i 1
+ endwhile
+ addpiece createflipped piece
+ set i 0 
+ while < i 3
+  addpiece createrotated Apieces(- num_pieces 1)
+  set i + i 1
+ endwhile
+endfunction
+
+function swap a b local c;
+ set c Da
+ set Da Db
+ set Db c
+endfunction
+
+function createrotated piece local out x y w h;
+ set w Apiece(0)
+ set h Apiece(1)
+ swap @w @h
+ set out  alloc + 2 * w h
+ set Aout(0) w
+ set Aout(1) h
+ set y 0
+ while < y h
+  set x 0
+  while < x w
+   set Dpindex out x y  Dpindex piece y (- getw out x 1 )
+   set x + x 1
+  endwhile 
+  set y + y 1
+ endwhile
+return out;
+
+function createflipped piece local out x y w h;
+ set w Apiece(0)
+ set h Apiece(1)
+ set out  alloc + 2 * w h
+ set Aout(0) w
+ set Aout(1) h
+ set y 0
+ while < y h
+  set x 0
+  while < x w
+   set Dpindex out x y  Dpindex piece (- w x 1 ) y 
+   set x + x 1
+  endwhile 
+  set y + y 1
+ endwhile
+return out;
+
+
+function createpiece w h ... local out x y p;
+ set out  alloc + 2 * w h
+ set Aout(0) w
+ set Aout(1) h
+ set p 2
+ set y 0
+ if ! = ( - _num_params 2 ) * w h
+  print "FUCK";
+  quit
+ endif
+ while < y h
+  set x 0
+  while < x w
+   set Aout(+ 2 x * y w ) Pp
+   set p + p 1
+   set x + x 1
+  endwhile 
+  set y + y 1
+ endwhile
+return out
+
+function blankpiece w h local out;
+ set out alloc + 2 * w h;
+ set Aout(0) w
+ set Aout(1) h
+return out
+
+function _printpiece piece local x y w h cc;
+ set w Apiece(0)
+ set h Apiece(1)
+ print;
+ print "Width: " w chr$10 "Height: " h;
+ set y 0
+ while < y h
+  set x 0
+  while < x w
+   #bput _stdout Ap ( !! Apiece( + 2 x * y w ) )
+   set cc Apiece( + 2 x * y w ) 
+   if cc
+    set cc + 64 cc
+   else
+    set cc asc$"."
+   endif
+   bput _stdout cc
+   set x + x 1
+  endwhile
+  print;
+  set y + y 1
+ endwhile
+endfunction
+
+function __addpiece s;
+ caseof $s;
+ when "+";
+  _addpiece createpiece 3 3
+  0 1 0
+  1 1 1
+  0 1 0
+  ;
+ when "_s";
+  _addpiece createpiece 4 2
+  0 0 1 1
+  1 1 1 0 ;
+ when "t";
+  _addpiece createpiece 2 4
+  1 0
+  1 1
+  1 0
+  1 0 ;
+ when "l" "1";
+  _addpiece createpiece 2 4
+  1 1
+  0 1
+  0 1
+  0 1 ;
+ when "T";
+  _addpiece createpiece 3 3
+  1 0 0
+  1 1 1
+  1 0 0 ;
+ when "s," "z";
+  _addpiece createpiece 3 3
+  1 1 0
+  0 1 1
+  0 0 1
+ ;
+ when "Q";
+  _addpiece createpiece 2 3
+  0 1
+  1 1
+  1 1 ;
+ when "C";
+  _addpiece createpiece 2 3
+  1 1
+  1 0
+  1 1 ;
+ when "S";
+  _addpiece createpiece 3 3
+  1 1 0
+  0 1 0
+  0 1 1
+  ;
+ when "L";
+  _addpiece createpiece 3 3
+  1 0 0
+  1 0 0
+  1 1 1
+  ;
+ when "|";
+  _addpiece createpiece 1 5
+  1
+  1
+  1
+  1
+  1
+  ;
+ when "gun";
+  _addpiece createpiece 3 3
+  0 1 0
+  1 1 0
+  0 1 1
+  ;
+ /*
+ when "";
+  _addpiece createpiece w h
+  ;
+ */
+ otherwise
+  print "__addpiece: unknown piece '" $s "'";
+  quit;
+ endcase
+endfunction
+
+# ----------------------------------------------
+# ----------------------------------------------
+# ----------------------------------------------
+
+function _dp_col c v;
+ if < c 0
+  gcol 64 64 64 endfunction
+ endif
+ set c 7
+ gcol (* v & c 1) (* v !! & c 2) (* v !! & c 4)
+endfunction
+
+function _dp_surrounds piece px py xo yo;
+ if < (+ px xo) 0
+  endfunction
+ endif
+ if >= (+ px xo) Dpiece
+  endfunction
+ endif
+ if < (+ py yo) 0
+  endfunction
+ endif
+ if >= (+ py yo) Apiece 1
+  endfunction
+ endif
+return = D pindex piece (+ px xo) (+ py yo) D pindex piece px py;
+
+function _12cols c;
+ caseof c 
+ when 1; return val$"0xff2030"
+ when 2; return val$"0xff8030"
+ when 3; return val$"0xffff00"
+ when 4; return val$"0x00ff00"
+ when 5; return val$"0x00ffff"
+ when 6; return val$"0x2060ef"
+ when 7; return val$"0xff00ff"
+ when 8; return val$"0x8080ff"
+ when 9; return val$"0x80ff80"
+ when 10; return val$"0xdeef90"
+ when 11; return val$"0xff8080"
+ when 12; return val$"0xffffff"
+ endcase
+return -1
+
+function _mulcol c m;
+ set c * (& c 255) m
+ if > c 255 return 255 endif
+ if < c 0 endfunction endif
+return c
+function mulcol c m;
+return  |
+_mulcol c m
+<< _mulcol (>> c 8) m 8
+<< _mulcol (>> c 16) m 16;
+
+function _dp_square x y sc col borders local t_left t_right t_top t_bottom x1 x2 y1 y2 c1 c2 c3 c4;
+if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
+/*
+  2
+ 1 4
+  8
+*/
+ _dp_col col 255
+# set sc - sc 1
+
+ # 255  ff 16777215
+ # 192	c0 12632256 
+ # 128  80 8421504
+ # 92   5c 6052956
+
+# set col + col * 2 ! & col 7
+ set col _12cols col
+
+ set c1 mulcol col 1
+ set c2 mulcol col 0.78
+ set c3 mulcol col 0.525
+ set c4 mulcol col 0.4
+
+ set t_left & borders 1
+ set t_right & borders 4
+ set t_top & borders 2
+ set t_bottom & borders 8
+
+ set x1 + x int * sc 0.5
+ set x2 + x sc
+ set y1 + y int * sc 0.5
+ set y2 + y sc
+
+ # top left, left
+ if t_left
+  gcol c2 
+ else
+  gcol c1
+ endif
+ triangle x1 y1 x y x y1;
+ # top left, up
+ if t_top
+  gcol c1
+ else
+  gcol c2 
+ endif
+ triangle x1 y1 x y x1 y;
+
+ # top right, right
+ if t_right
+  gcol c3
+ else
+  gcol c1
+ endif
+ triangle x1 y1 x2 y1 x2 y
+ # top right, up
+ if t_top
+  gcol c1
+ else
+  gcol c3
+ endif
+ triangle x1 y1 x1 y  x2 y;
+
+ #bottom left, left
+ if t_left
+  gcol c2 
+ else 
+  gcol c4
+ endif
+ triangle x y1 x1 y1 x y2
+ #bottom left, down
+ if t_bottom
+  gcol c4
+ else
+  gcol c2 
+ endif
+ triangle x1 y1 x y2 x1 y2
+
+ #bottom right, right
+ if t_right
+  gcol c3
+ else
+  gcol c4
+ endif
+ triangle x1 y1 x2 y1 x2 y2
+ #bottom right, down 
+ if t_bottom
+  gcol c4
+ else
+  gcol c3
+ endif
+ triangle x1 y1 x1 y2 x2 y2
+endfunction
+
+function drawpiece piece sx sy sc label border local x y w h c chr; set label 0
+ set w Dpiece
+ set h Apiece 1
+ set x 0
+ while < x w
+  set y 0
+  while < y h
+   set chr D pindex piece x y
+   if chr
+    _dp_square (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
+     |
+     << ( !_dp_surrounds piece x y 0 1 ) 3 # underneath
+     << ( !_dp_surrounds piece x y  1  0 ) 2  # right
+     << ( !_dp_surrounds piece x y  0  -1 ) 1 # above
+          ! _dp_surrounds piece x y  -1  0   #
+    if label
+     gcol -1
+     drawtext (+ sx >> sc 1 * sc x) (+ sy >> sc 1 * sc y) 3 chr$ + 64 D pindex piece x y
+    endif
+   else
+    gcol 0 
+    rectanglef (+ sx * sc x) (+ sy * sc y) sc
+   endif
+   set y + y 1
+  endwhile
+  set x + x 1
+ endwhile
+ #while mouseb wait 16.6 endwhile
+ if border gcol -1 rectangle sx sy (* sc w ) * sc h endif
+endfunction
+
+function drawavailable x y sc local i;
+ set i 0
+ gcol 0 
+ rectanglef x y (* sc 6 >> num_pieces 3) * sc 5;
+ while < i num_pieces
+  if !Aisinuse >> i 3
+   drawpiece Apieces i (+ x * >> i 3 sc 6 ) y sc 0 0
+  endif 
+  set i + i 8
+ endwhile
+endfunction 
+# -----------------------------------------
+
+function symmetry_check local i j k;
+ set i 0
+ while < i num_pieces
+  set j 7
+  while > j 0
+   set k - j 1
+   while >= k 0
+    if pieceisthesame Apieces(+ i j) Apieces(+ i k) 
+     set Aalreadytried(+ i j) 1
+    endif
+    set k - k 1
+   endwhile
+   set j - j 1
+  endwhile
+  set i + i 8
+ endwhile
+endfunction
+
+function pieceisthesame a b local l;
+ if ! = Da Db endfunction endif
+ if ! = Aa 1 Ab 1 endfunction endif
+ set l + a 2 * Da Aa 1
+ while < a l
+  if ! = Da Db endfunction endif
+  set a + a 1
+  set b + b 1
+ endwhile
+return 1
+
+# ---------------------------------------------------------------------------------------
+
+function guiinit;
+ constant gui_pad 8;
+ constant gui_padd2 / gui_pad 2;
+ constant gui_btnh + gui_pad 16;
+ variable gui_fg gui_bg gui_mb gui_omb gui_redraw gui_reqrd gui_csx gui_csy;
+ set gui_bg val$"0x204060"
+ set gui_fg val$"0x90a0ff"
+ set gui_redraw 1
+endfunction
+
+
+
+function boxchk x y w h px py;
+return && >  px x
+          <  px (+ x w)
+          >  py y
+          <  py (+ y h);
+
+function button x y st local w h;
+ if gui_reqrd endfunction endif
+ set w + gui_pad * 8 len$$st
+ set h + gui_pad 16
+ if gui_redraw
+  gcol gui_bg
+  rectanglef x y w h
+  gcol gui_fg 
+  rectangle x y w h
+  drawtext (+x gui_padd2) (+y gui_padd2) 1 $st
+ endif
+ if ! && ( & gui_omb 1 ) !( & gui_mb 1 )
+  endfunction
+ endif
+return && boxchk x y w h mousex mousey boxchk x y w h gui_csx gui_csy
+ 
+function gui_btnw strlen; return + gui_pad * 8 strlen;
+#function gui_btnh; return + gui_pad 16;
+
+function gui_proc allow_wait;
+ if gui_redraw
+  refresh
+  set gui_redraw 0
+ endif
+ if | gui_reqrd expose 
+  cls
+  set gui_redraw 1
+  set gui_reqrd 0
+ endif
+ set gui_omb gui_mb
+ set gui_mb mouseb
+ if && gui_mb ! gui_omb
+  set gui_csx mousex
+  set gui_csy mousey
+ endif
+ if allow_wait
+  if && ! gui_redraw ! gui_reqrd
+   wait 16.6
+  endif
+ endif
+endfunction
+
+function gui_intbox x y v local s l; 
+ if gui_reqrd endfunction endif
+ set s S str$ Dv
+ set l len$$s
+ if = l 1
+  set l 2
+  set $s cat$ "0" $s
+ endif
+ if button x y @"<"
+  set Dv - Dv 1
+  set gui_reqrd 1 goto ".gui_intbox_exit"
+ endif
+ if button ( + x 8 gui_pad gui_pad * l 8 ) y @">"
+  set Dv + Dv 1
+  set gui_reqrd 1 goto ".gui_intbox_exit"
+ endif
+ if ! = l len$$s
+  set gui_reqrd 1 goto ".gui_intbox_exit"
+ endif
+ button (+ x gui_pad 8) y s
+ .gui_intbox_exit
+ option "unclaim" s
+return gui_reqrd
+
+function gui_ibw v local l; set l len$str$v return + gui_btnw (+ l = l 1) * 2 gui_btnw 1
+
+function leaktest local crap;
+ set crap S;
+ print crap;
+ option "unclaim" crap;
+endfunction
+
+# ------------------------------
+
+function _wh_limit v;
+ if > v 20 return 20 endif
+ if < v 2 return 2 endif
+return v
+
+function _squarer x y sc local px py p;
+ if ! gui_mb
+  endfunction
+ endif
+ if ! gui_omb
+  set opx -1 set opy -1
+ endif
+ if boxchk x y (* sc ww) (* sc hh) mousex mousey
+  set px int / (- mousex x) sc
+  set py int / (- mousey y) sc
+  if && = opx px = opy py
+   endfunction
+  endif
+  set opx px set opy py
+  set p pindex board px py
+  set Dp neg !!! Dp
+  set gui_reqrd 1
+  return 1
+ endif
+endfunction
+
+function gui_tickbox x y v st;
+ if gui_reqrd endfunction endif
+ if gui_redraw
+  gcol gui_bg
+  rectanglef x y 8 
+  gcol gui_fg
+  rectangle x y 8 
+  if Dv
+   rectanglef (+x 2) (+y 2) 5
+  endif
+  drawtext (+x 8 gui_padd2) (+y 1) 0 $st
+ endif
+ if && ! gui_omb gui_mb
+  if boxchk x y (+ 8 * 8 len$$st) 8 mousex mousey
+   set Dv ! Dv
+   set gui_reqrd 1
+   return 1
+  endif
+ endif
+endfunction
+
+function __piece_switch x y n local w h;
+ set w 25
+ set h 40
+ if gui_reqrd endfunction endif
+ if gui_redraw
+  if !Aisinuse(n)
+   gcol gui_bg
+  else 
+   gcol 0
+  endif
+  rectanglef x y w h
+  if !Aisinuse(n)
+   gcol gui_fg
+  else 
+   gcol 127 127 127
+  endif
+  rectangle x y w h;
+  drawpiece Apieces(* n 8) (+x gui_pad) (+y gui_pad )  4 0 0
+ endif
+ if && ! gui_omb gui_mb
+  if boxchk x y w h mousex mousey
+   set Aisinuse(n) ! Aisinuse(n)
+   if Aisinuse(n) set maxspaces - maxspaces 5 else set maxspaces + maxspaces 5 endif
+   set gui_reqrd 1
+   return 1
+  endif
+ endif
+endfunction
+
+function _options_screen local i;
+ while 1
+  gui_proc 1
+
+  if button gui_pad gui_pad @"Solve"
+   set gui_reqrd 1
+   endfunction
+  endif
+  gui_intbox (+ gui_pad (gui_btnw 5) gui_pad) gui_pad @www;
+  gui_intbox (+ gui_pad (gui_btnw 5) gui_pad (gui_ibw www) gui_pad ) gui_pad @hhh;
+  if gui_redraw
+   drawtext (+ gui_pad (gui_btnw 5) gui_pad (gui_ibw www) gui_pad (gui_ibw hhh) gui_pad ) (+ gui_pad gui_padd2) 1
+    cat$ "Extra spaces: " str$ - bspaces maxspaces
+  endif
+  set www _wh_limit www
+  set hhh _wh_limit hhh
+  if gui_reqrd
+   configure_board www hhh
+  else
+   if _squarer gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 gui_pad ) 20 
+    set bspaces countspaces board
+   endif
+  endif
+  gui_tickbox gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad ) @animate @"animate"
+  gui_tickbox 100 (+ gui_pad gui_btnh gui_pad 40 gui_pad ) @pauseforsol @"autopause"
+  if && gui_redraw ! gui_reqrd;
+   drawpiece board gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 gui_pad ) 20 1 1
+  endif
+
+  set i 0
+  while < i >> num_pieces 3;
+   __piece_switch (+ gui_pad * i + 25 gui_padd2) (+ gui_pad gui_btnh gui_pad) i
+   set i + i 1
+  endwhile
+
+ endwhile
+endfunction
+
+function _controlbox local s;
+ .controlbox_start
+ gui_proc paused
+ if paused
+  set s @"Continue"
+ else
+  set s @"Pause   "
+ endif
+ if button gui_pad gui_pad s;
+  set paused ! paused 
+  set gui_reqrd 1
+ endif
+ if button 100 gui_pad @"Cancel"
+  set cancel 1
+ endif
+ gui_tickbox 175 (+ gui_pad 8) @animate @"animate" 
+ gui_tickbox 260 (+ gui_pad 8) @pauseforsol @"autopause"
+ if || gui_redraw animate;
+  graphics_display
+  #refresh
+ endif
+ if && !cancel || paused gui_reqrd goto ".controlbox_start" endif
+endfunction 
+
+function graphics_display;
+ drawpiece board gui_pad (+ gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1 1
+ refresh
+endfunction
+ 
