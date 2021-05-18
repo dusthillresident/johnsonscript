@@ -3128,6 +3128,7 @@ interpreter(int p, program *prog){
    struct caseof *co = t.data.pointer;
    p+=1;
    stringval v = getstringvalue( prog, &p );
+   prog->getstringvalue_level += 1;
    int i;
    for(i=0; i < co->num_whens; i++){
     p=co->whens[i];
@@ -3142,6 +3143,7 @@ interpreter(int p, program *prog){
    p=co->otherwise;
   }
   caseofS_out:
+  prog->getstringvalue_level -= 1;
   break;
  case t_quit:
   {
