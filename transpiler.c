@@ -1487,6 +1487,14 @@ void translate_command(program *prog, int *p){
     #else
     ErrorOut("FUCK OFF!\n");
     #endif
+   }else if( TheseStringsMatch(opstr, "wmclose") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("wmcloseaction = ");
+    translate_value(prog,p);
+    PrintMain(";\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
    }else{
     trans_print_sourcetext_location( prog, *p);
     PrintErr("translate_command: option: unrecognised option\n");
