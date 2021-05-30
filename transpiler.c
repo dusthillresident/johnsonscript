@@ -418,8 +418,7 @@ void translate_value(program *prog, int *p){
  #endif
  switch( prog->tokens[ *p ].type ){
  case t_endstatement:
-  fprintf(stderr,"translate_value: expected to read a value, but found endstatement\n");
-  exit(0);
+  ErrorOut("translate_value: expected to read a value, but found endstatement\n");
   break; 
  #ifdef enable_graphics_extension 
   case t_winw: case t_winh: case t_mousex: case t_mousey: case t_mousez:
