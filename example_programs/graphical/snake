@@ -1,3 +1,5 @@
+#!/usr/local/bin/gfxbin
+
 load_pic;
 
 constant max_len 111;
@@ -15,6 +17,7 @@ set seg_x  alloc max_len;
 set seg_y  alloc max_len;
 
 startgraphics 480 480;
+option "wintitle" "Snake";
 
 while 1
  while ! expose
@@ -260,11 +263,14 @@ function clearsegs local i;
  endwhile
 endfunction
 
+/*
 function quit;
  print "Ending game (ignore the following error message)";
  REM there is no quit command right now, so quit by causing an error
  tan
 endfunction
+*/
+REM quit has been added now so this can be disabled/removed
 
 function clearkeybuf;
  while keybuffer
