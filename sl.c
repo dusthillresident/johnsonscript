@@ -18,7 +18,7 @@
 
 #ifndef DISABLE_ALIGN_STUFF
  // this is for testing. I discovered that messing with __attribute__((aligned(x))) can make a difference to how fast things run
- #define ALIGN_ATTRIB_CONSTANT 1
+ #define ALIGN_ATTRIB_CONSTANT 16
 #endif
 
 // memory problem debugging stuff
@@ -200,6 +200,8 @@ stringval getstringvalue( program *prog, int *pos );
 int isstringvalue(unsigned char type);
 int isvalue(unsigned char type);
 int determine_valueorstringvalue(program *prog, int p);
+char* tokenstring(token t);
+void print_sourcetext_location( program *prog, int token_p);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -421,6 +423,7 @@ void process_id(program *prog, token *t){
  if(foundid==NULL) foundid = find_id( prog->ids, (char*)t->data.pointer );
  // if nothing was still found, error
  if(foundid==NULL){
+  print_sourcetext_location( prog, (int) (t - prog->tokens) );
   printf("process_id: id was '%s'\n",(char*)t->data.pointer);
   error("process_id: unknown id\n");
  }
@@ -1398,16 +1401,55 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  return out;
 }
 
+int* get_line_end_array(unsigned char *text){
+ int *out = NULL;
+ unsigned char *p = text;
+ int nlines=1;
+ while(*p){
+  if( *p == '\n' ) nlines+=1;
+  p++;
+ }
+ nlines+=1;
+ out = calloc(nlines+1,sizeof(int));
+ out[0]=-1; 
+ out+=1;
+ int linep=0;
+ p = text;
+ while(*p){
+  if( *p == '\n' ){
+   out[linep]=(int)(p-text);
+   linep+=1;
+  }
+  p++;
+ }
+ out[linep]=(int)(p-text);
+ return out; 
+}
+
+typedef struct tokentextpos { int line; int column; } TTP;
 
 int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned char *text){
- int count = 0, pos = 0;
- token t;
+ int *line_end_array=NULL; TTP *TextPosses = NULL; int linep=0;
+ if(progstrings && tokens_return){
+  //tb();
+  line_end_array = get_line_end_array(text);
+  TextPosses = (TTP*)progstrings->string;
+  //printf("%p\n",TextPosses);
+ }
+ int count = 0, pos = 0; token t;
  while(pos<len){
   t = gettoken(progstrings,!tokens_return,&pos,text);
-  //printf("gettoken: got: %d\n",t.type);  usleep(90000);
   if(tokens_return)tokens_return[count]=t;
+  if(TextPosses){ 
+   while( pos >= line_end_array[linep] ){
+    linep += 1;
+   }
+   TextPosses[count] = (TTP){ linep+1 ,pos-(line_end_array[linep-1]+1) };//tb();
+  }
+  //if(TextPosses){ tb(); printf("test this shit: line %d, col %d, '%s'\n",TextPosses[count].line,TextPosses[count].column,tokenstring(t)); }
   count +=1;
  }
+ if(line_end_array) free( (line_end_array-1) );
  return count;
 }
 
@@ -1416,6 +1458,8 @@ token* tokenise(stringslist *progstrings, char *text, int *length_return){
  int count = gettokens(NULL,NULL,len,text);
  // about 'count+1': allocate 1 space for one extra token that goes unused (set to 0) so that there's less likely to be trouble with segmentation faults
  token *out = calloc(count+1,sizeof(token)); 
+ // stringslist_addstring(progstrings,(char*) calloc( count,sizeof(TTP) ) );
+ progstrings->string = (char*) calloc( count,sizeof(TTP) );
  gettokens(progstrings,out,len,text);
  if(length_return)*length_return = count;
  return out;
@@ -1431,6 +1475,16 @@ token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_retur
  token *out = tokenise(progstrings, text,length_return);
  fclose(f); free(text);
  return out;
+}
+
+void print_sourcetext_location( program *prog, int token_p){
+ if( prog->program_strings->string == NULL ) return;
+ TTP *ttp = (TTP*)prog->program_strings->string;
+ if( token_p<0 || token_p>=prog->length ){
+  printf("print_sourcetext_location: token_p out of range\n");
+ }else{
+  printf(":::: At line %d, column %d ::::\n", ttp[token_p].line, ttp[token_p].column );
+ }
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -1908,6 +1962,7 @@ getstringvalue( program *prog, int *pos ){
  // ============================================================================================
  #endif
  default:
+  print_sourcetext_location( prog, *pos - 1);
   printf("getstringvalue: token is %s\n",tokenstring(t));
   error("getstringvalue: didn't find a stringvalue\n");
  }//endswitch
@@ -2580,6 +2635,7 @@ getvalue(int *p, program *prog){
  // ============================================================================================
  #endif
  default:
+  print_sourcetext_location( prog, *p - 1);
   printf("getvalue: t.type == %d '%s'\n", t.type, tokenstring(t) );
   error("getvalue: expected a value\n");
  }//endswitch t.type
@@ -2925,7 +2981,9 @@ interpreter(int p, program *prog){
    copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
    break;
   }
-  default: error("interpreter: set: bad use of 'set' command\n");
+  default:
+   print_sourcetext_location( prog, p-2 );
+   error("interpreter: set: bad use of 'set' command\n");
   }
   break; // Sat 14 Sep 12:35 - is this break necessary?
  }
@@ -2933,7 +2991,10 @@ interpreter(int p, program *prog){
  {
   p+=1;
   while( prog->tokens[p].type != t_endstatement ){
-   if( prog->tokens[p].type != t_id ) error("interpreter: bad 'variable' command\n");
+   if( prog->tokens[p].type != t_id ){ 
+    print_sourcetext_location( prog, p );
+    error("interpreter: bad 'variable' command\n");
+   }
    //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error("interpreter: variable: this identifier is already used\n");
    add_id(prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
    p+=1;
@@ -2943,7 +3004,10 @@ interpreter(int p, program *prog){
  case t_const: // create a constant
  {
   p+=1;
-  if( prog->tokens[p].type != t_id ) error("interpreter: bad 'constant' command\n");
+  if( prog->tokens[p].type != t_id ){
+   print_sourcetext_location( prog, p );
+   error("interpreter: bad 'constant' command\n");
+  }
   char *idstring = (char*)prog->tokens[p].data.pointer;
   //if( find_id(prog->ids, idstring) ) error("interpreter: constant: this identifier is already used\n");
   p+=1;
@@ -2957,8 +3021,12 @@ interpreter(int p, program *prog){
   t_stringvar_start:
   bufsize = DEFAULT_NEW_STRINGVAR_BUFSIZE;
   // get id for new string variable
-  idt = prog->tokens[p]; p+=1;
-  if( idt.type != t_id ) error("interpreter: bad 'stringvar' command\n");
+  idt = prog->tokens[p]; 
+  if( idt.type != t_id ){
+   print_sourcetext_location( prog, p );
+   error("interpreter: bad 'stringvar' command\n");
+  }
+  p+=1;
   // if the optional bufsize parameter is present, then get it
   if( prog->tokens[p].type!=t_id && isvalue( prog->tokens[p].type ) ){
    bufsize = getvalue(&p,prog);
@@ -3352,6 +3420,7 @@ interpreter(int p, program *prog){
   p+=1;
   goto interpreter_start;
  default:
+  print_sourcetext_location( prog, p );
   printf("interpreter: token is %s\n",tokenstring(t));
   error("interpreter: unexpected token\n");
  }
@@ -3361,6 +3430,8 @@ interpreter(int p, program *prog){
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
+
+#ifndef disable_sl_c_main
 
 #define main_printstuff 0
 int main(int argc, char **argv){
@@ -3412,3 +3483,5 @@ int main(int argc, char **argv){
 #endif
  return (int)result;
 }
+
+#endif

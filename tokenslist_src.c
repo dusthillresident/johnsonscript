@@ -193,7 +193,7 @@
 #define t_catS			COCKSPENIS	//	cat$ [string] [string] ...	STR		concatenate strings
 #define t_S			COCKSPENIS	//	$		string variable dereference
 #define t_Sf			COCKSPENIS	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
-#define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x00
+#define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_sget
 #ifdef enable_graphics_extension // graphics extension stringvalues
