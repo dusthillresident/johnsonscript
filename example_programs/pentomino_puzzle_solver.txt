@@ -102,7 +102,6 @@ function countspaces piece local i l c;
  endwhile
 return c;
 
-set p + b2 x * ww y 
 function ffill x y p local r ;
  if Dp endfunction endif
  set r 1
@@ -189,16 +188,16 @@ function ispossible local x y p i chk v ;
  _isstupid_clr
 return 1
 
-function firstempty_yl_xl p local x y pp;
+function firstempty_yl_xl fe yl xl local x y pp;
  set y 0
  while < y hh
   set x 0
   while < x ww
    set pp + b2 x * y ww
    if ! D pp
-    set Dp pp
-    set Ap 1 + y 1
-    set Ap 2 + x 1
+    set Dfe pp
+    set Dyl + y 1
+    set Dxl + x 1
     endfunction
    endif
    set x + x 1
@@ -215,7 +214,7 @@ if < a b return b endif
 return a
 
 function newsolve piecenum local i x y fe yl xl yL xL ; if cancel endfunction endif
- firstempty_yl_xl @fe
+ firstempty_yl_xl @fe @yl @xl
  set yL - yl 6 if < yL 0 set yL 0 endif
  set xL - xl 6 if < xL 0 set xL 0 endif
  set i 0
