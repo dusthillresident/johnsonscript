@@ -4,6 +4,8 @@ if [[ -e ./gfxbin ]]
 then 
  echo "// DO NOT EDIT THIS, instead edit tokenslist_src.c" > tokenslist.c
  cat tokenslist_src.c | ./gfxbin PENIStool.johnson >> tokenslist.c
+else
+ cp tokenslist_bak.c tokenslist.c
 fi
 function CheckExist {
  if [[ -e "$1" ]]
