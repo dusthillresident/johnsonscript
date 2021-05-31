@@ -41,7 +41,6 @@ char *iskeypressed = NULL;
 Atom WmDeleteWindowAtom;
 
 volatile int mouse_x=0,mouse_y=0,mouse_z=0,mouse_b=0;
-volatile int dontdrawrightnow = 1;
 #ifdef NewBase_HaventRemovedThisYet
 volatile int xflush_for_every_draw=0;
 #endif
@@ -54,11 +53,6 @@ volatile int wmcloseaction=0;
 void DefaultFont();
 
 void Wait(int w);
-void WaitUntilAllowedToDrawAgain(){
- while(dontdrawrightnow){
-  Wait(1);
- }
-}
 
 
 #define MyInit(w,h) (NewBase_MyInit(w,h,0))
@@ -173,7 +167,6 @@ void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
   //tb();
   XNextEvent(Mydisplay, &Myevent);
  }while( ! (Myevent.type==MapNotify) );
- dontdrawrightnow = 0;
  newbase_is_running=1;
 }
 
@@ -183,7 +176,6 @@ void SetWindowTitle(char *title){
 }
 
 void MyCleanup(){
- dontdrawrightnow = 1;
 #ifdef NewBase_HaventRemovedThisYet
  xflush_for_every_draw=0;
 #endif
@@ -219,6 +211,7 @@ void Refresh(){
 }
 
 void CustomChar(unsigned char n, unsigned char b0,unsigned char b1,unsigned char b2,unsigned char b3,unsigned char b4,unsigned char b5,unsigned char b6,unsigned char b7){
+ if( BBCFont == NULL ) return;
  BBCFont[n][0]=b0;
  BBCFont[n][1]=b1;
  BBCFont[n][2]=b2;
@@ -229,6 +222,7 @@ void CustomChar(unsigned char n, unsigned char b0,unsigned char b1,unsigned char
  BBCFont[n][7]=b7;
 }
 void DefaultFont(){
+ if( BBCFont == NULL ) return;
  int i;
  for(i=0;i<256;i++){
   CustomChar(i,0xAA,0x55,0xAA,0x55,0xAA,0x55,0xAA,0x55);
@@ -413,7 +407,7 @@ void MySetWindowBackground(int r, int g, int b){
 }
 
 void Rectangle(int x,int y,int w,int h){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  if(w<0){
   x+=w; w=-w;
  }
@@ -427,7 +421,7 @@ void Rectangle(int x,int y,int w,int h){
 }
 
 void RectangleFill(int x,int y,int w,int h){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  if(w<0){
   x+=w; w=-w;
  }
@@ -441,7 +435,7 @@ void RectangleFill(int x,int y,int w,int h){
 }
 
 void Line(int x,int y,int xb,int yb){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  XDrawLine(Mydisplay, Mydrawable, MyGC, x,y, xb,yb);
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
@@ -449,7 +443,7 @@ void Line(int x,int y,int xb,int yb){
 }
 
 void Circle(int x,int y, int r){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  XDrawArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,321*64*2 );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
@@ -457,7 +451,7 @@ void Circle(int x,int y, int r){
 }
 
 void CircleFill(int x,int y, int r){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  XFillArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,321*64*2 );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
@@ -465,19 +459,21 @@ void CircleFill(int x,int y, int r){
 }
 
 void Plot69(int x, int y){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  XDrawPoint(Mydisplay, Mydrawable, MyGC, x,y);
 }
+/*
 void Plot69_(int x, int y){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  XDrawPoint(Mydisplay, Mydrawable, MyGC, x,y);
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
  #endif
 }
+*/
 
 void Triangle(int x0,int y0, int x1,int y1, int x2,int y2){
- if(dontdrawrightnow) return;
+ if(!newbase_is_running) return;
  XPoint tripoints[3];
  tripoints[0].x = x0;
  tripoints[0].y = y0;
@@ -491,20 +487,15 @@ void Triangle(int x0,int y0, int x1,int y1, int x2,int y2){
  #endif
 }
 
-void Cls(){
- //if( 1 ){
-  int c = NewBase_last_fg_col;
-  GcolDirect( NewBase_last_bg_col );
-  RectangleFill( 0,0,WinW,WinH );
-  GcolDirect( c );
- /*
- }else{
-  XClearWindow(Mydisplay,Mywindow);
- }
- */
+void Cls(){ // this only calls functions that check newbase_is_running 
+ int c = NewBase_last_fg_col;
+ GcolDirect( NewBase_last_bg_col );
+ RectangleFill( 0,0,WinW,WinH );
+ GcolDirect( c );
 }
 
 void Print(int x, int y,unsigned char *s){
+ if(!newbase_is_running)return;
  int X,Y;
  while( *s != 0){
   for(X=0;X<8;X++){
@@ -525,6 +516,7 @@ void Print(int x, int y,unsigned char *s){
  return;
 }
 void Print2(int x, int y,unsigned char *s){
+ if(!newbase_is_running)return;
  int X,Y;
  while( *s != 0){
   for(X=0;X<8;X++){
@@ -549,6 +541,7 @@ void Print2(int x, int y,unsigned char *s){
 }
 
 void Print3(int x, int y,unsigned char *s){
+ if(!newbase_is_running)return;
  int X,Y;
  while( *s != 0){
   for(X=0;X<8;X++){
@@ -575,6 +568,7 @@ void Print3(int x, int y,unsigned char *s){
 }
 
 void Print4(int x, int y,unsigned char *s){
+ if(!newbase_is_running)return;
  int X,Y;
  while( *s != 0){
   for(X=0;X<8;X++){
@@ -598,7 +592,7 @@ void Print4(int x, int y,unsigned char *s){
  return;
 }
 
-void drawtext_(int x, int y, int scale, unsigned char *s){
+void drawtext_(int x, int y, int scale, unsigned char *s){ // this only calls functions that check newbase_is_running
  void (*PrintFunc)(int,int,unsigned char*);
  switch(scale&3){
  case 0b00: PrintFunc=Print;  break;
@@ -625,7 +619,7 @@ unsigned char GetCharFromEvent(XEvent *ev){
  return 0;
 }
 
-void PutOntoKeyboardBuffer(int c){
+void PutOntoKeyboardBuffer(int c){ // keyboard buffer is statically allocated 
  if( ( (KeyboardBufferWritePos+1)%KeyBuffSize ) != KeyboardBufferReadPos ){
   KeyboardBuffer[ KeyboardBufferWritePos=(KeyboardBufferWritePos+1)%KeyBuffSize ]=c;
  }/*else{
@@ -658,17 +652,19 @@ void ClearKeyboardBuffer(){
 
 
 void SetClipRect(int x, int y, int w, int h){
+ if(!newbase_is_running)return;
  XRectangle r;
  r.x=x; r.y=y;
  r.width=w; r.height=h;
  XSetClipRectangles(Mydisplay,MyGC,0,0,&r,1,Unsorted);
  
 }
-void ClearClipRect(){
+void ClearClipRect(){ // this only calls functions that check newbase_is_running
  SetClipRect(0,0,WinW,WinH);
 }
 
 void SetPlottingMode(int function){
+ if(!newbase_is_running)return;
  XSetFunction(Mydisplay,MyGC,function);
 }
 // ==========  Quick reference, taken from X11/X.h  =============
@@ -701,7 +697,6 @@ void RefreshOn(){
 
 void RefreshOff(){
  if(!newbase_is_running) return;
- WaitUntilAllowedToDrawAgain();
  if( !newbase_manual_refresh_mode ){
   Wait(1);
   Mydrawable = Mybackbuffer;
@@ -838,18 +833,6 @@ int NewBase_HandleEvents(int EnableBlocking){
 
  }//endwhile
 
- /*
- if( WindowWasResized && newbase_manual_refresh_mode ){
-  dontdrawrightnow = 1;
-  Wait(3);
-  UpdateMypixmap();
-  Wait(2);
-  dontdrawrightnow = 0;
-  Wait(1);
-  Cls();
- }
- */
- 
  //Refresh();
  return DidSomethingHappen;
 }//endproc
