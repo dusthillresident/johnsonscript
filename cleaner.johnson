@@ -1,0 +1,74 @@
+#
+/*
+
+ =========================
+ ==== cleaner.johnson ====
+ =========================
+
+ The purpose of this program is to clean & tidy up the output of the Johnsonscript->C trans-compiler
+
+*/
+
+variable c;
+stringvar lin;
+variable indent; variable pre_indent;
+variable i;
+variable lastout;
+variable found_semicolon;
+
+while !eof _stdin
+
+ .start
+ set c bget _stdin
+ .start2
+
+ caseof c
+ when 10 -1;
+  if ! && ! len$ lin found_semicolon
+   set i 0
+   while < i indent
+    bput _stdout 32
+    set i + i 1
+   endwhile
+   sput _stdout lin chr$10
+  endif
+  set found_semicolon 0
+  set lin ""
+  set indent + indent pre_indent
+  set pre_indent 0
+
+
+ when asc$"{";
+  set pre_indent + pre_indent 1
+  goto ".default"
+
+ when asc$"}";
+  if pre_indent 
+   set pre_indent - pre_indent 1
+  else
+   set indent - indent 1
+  endif
+  goto ".default"
+ when asc$";";
+  set found_semicolon 1
+  if = 0 len$ lin
+   goto ".start"
+  endif
+  goto ".default"
+
+ when 32;
+ if || = lastout 32 ! len$ lin
+  goto ".start"
+ else
+  goto ".default"
+ endif
+
+ otherwise
+  .default
+  set lin cat$ lin chr$ c
+  set lastout c
+ endcase
+ 
+endwhile
+
+quit

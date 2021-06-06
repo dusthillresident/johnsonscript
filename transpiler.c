@@ -763,7 +763,7 @@ void translate_value(program *prog, int *p){
    PrintMain("(double)(");
    PrintMain("(unsigned int)(int)");
    translate_value(prog, p);
-   PrintMain(">>");
+   PrintMain(">> ");
    PrintMain("(unsigned int)(int)");
    translate_value(prog, p);
    PrintMain(")");
@@ -776,7 +776,7 @@ void translate_value(program *prog, int *p){
    PrintMain("(int)");
    translate_value(prog, p);
    PrintMain("%s",s);
-   PrintMain("(int)");
+   PrintMain(" (int)");
    translate_value(prog, p);
    PrintMain(")");
   } break;
@@ -805,7 +805,7 @@ void translate_value(program *prog, int *p){
    PrintMain("(int)");
    translate_value(prog, p);
    PrintMain("%s",s);
-   PrintMain("(int)");
+   PrintMain(" (int)");
    translate_value(prog, p);
    while( isvalue( prog->tokens[ *p ].type ) ){
     PrintMain("%s",s);
@@ -1107,16 +1107,16 @@ void translate__caseof(program *prog, int *p){
    PrintVarp("SVR *J_caseof_%d_val_svr=NULL;\n",casenum);
    PrintVars("J_caseof_%d_val_svr = calloc(1,sizeof(SVR));\n",casenum);
 
-   PrintMain("{\nSetSVR(J_caseof_%d_val_svr,",casenum);
+   PrintMain("{ // caseof block (stringvalue type, non-constant)\nSetSVR(J_caseof_%d_val_svr,",casenum);
    translate_stringvalue(prog, p); 
    PrintMain(");\nSVL J_caseof_%d_val_svl = SVRtoSVL(J_caseof_%d_val_svr);\n",casenum,casenum);
   }else{
-   PrintMain("{\nSVL J_caseof_%d_val_svl = \n",casenum);
+   PrintMain("{ // caseof block (stringvalue type, constant)\nSVL J_caseof_%d_val_svl = \n",casenum);
    translate_stringvalue(prog, p); 
    PrintMain(";\n");
   }
  }else{
-  PrintMain("{\ndouble J_caseof_%d_val = ",casenum);
+  PrintMain("{ // caseof block (value type)\ndouble J_caseof_%d_val = ",casenum);
   translate_value(prog, p);
   PrintMain(";\n");
  }
@@ -1156,7 +1156,7 @@ void translate__caseof(program *prog, int *p){
      }//endwhile 
      *p = holdp;
     }
-    PrintMain("J_caseof_%d_endcase:;\n}\n",casenum);
+    PrintMain("J_caseof_%d_endcase:;\n} // end caseof block\n",casenum);
     return;
    } break;
   case t_when:
@@ -1241,7 +1241,7 @@ void translate_command(program *prog, int *p){
  case t_wait:
   {
    *p += 1;
-   PrintMain(" usleep( 1000 * (");
+   PrintMain("usleep( 1000 * (");
    translate_value(prog,p);
    PrintMain(") );\n");
   } break;
@@ -1557,7 +1557,7 @@ void translate_command(program *prog, int *p){
   } break;
  case t_if:
   {
-   PrintMain("if(\n");
+   PrintMain("if(");
    *p += 1;
    translate_value(prog, p);
    PrintMain("){\n");
@@ -1848,13 +1848,12 @@ void translate_command(program *prog, int *p){
      exit(0);
     }
     prog->current_function = (func_info*)t.data.pointer; trans_fn = prog->current_function->function_number;
-   } // prog->current_function = prog->functions[trans_fn]; trans_fn += 1;
-
+   } 
 
    if(trans_fn == 1){
     PrintMain("printf(\"\\nJOHNSONSCRIPT WARNING: Reached end of main(). This should not normally happen\\n\");\n}\n\n");
    }else{
-    PrintMain("}\n");
+    PrintMain("}\n\n");
    }
    PrintMain("double FN_%s(", (char*)prog->tokens[ *p ].data.pointer );
    *p += 1; // move past fn's ID
@@ -1890,7 +1889,7 @@ void translate_command(program *prog, int *p){
     }
 
     if(prog->current_function->num_params)trans_main_p -= 2;
-    PrintMain("){");
+    PrintMain("){\n");
 
    }else{
     PrintMain(" double Params[] ){\n");
@@ -1986,9 +1985,9 @@ void translate_function_proto(program *prog, int n){
    }//next
    PrintProt("double");
   }//endif
-  PrintProt(");\n\n");
+  PrintProt(");\n");
  }else{ // variable number of params, or the program uses function references so every function must take a 'double[]'
-  PrintProt("double FN_%s( double[] );\n\n",getfuncname( prog, prog->functions[n] ) );
+  PrintProt("double FN_%s( double[] );\n",getfuncname( prog, prog->functions[n] ) );
  }
 }//endproc
 
@@ -2255,6 +2254,7 @@ void translate_program(program *prog){
   translate_function_proto(prog,i);
   i++;
  }
+ PrintProt("\n");
 
  if(trans_program_contains_F){
   i=0;  // build function reference table
@@ -2281,14 +2281,14 @@ void translate_program(program *prog){
  char VarsArrayDeclaration[384];
  sprintf(VarsArrayDeclaration,"double VarsArray[%d]; Johnson_vsize=%d; FirstVarP = VarsArray;\nJohnson_num_funcs = %d;\n",trans_vsize,trans_vsize,trans_fn);
 
- printf("%s%s%s%s%s%s%s%s%s%s%s%s\n",
+ printf("%s%s%s%s%s%s%s%s%s%s%s%s",
   trans_program_uses_maths ? "\n#include <math.h>\n" : "\n",
   "#include <stdio.h>\n#include <stdlib.h>\n#include <unistd.h>\n#define using_johnsonlib\n",
   (trans_program_uses_gfx ? "#define using_johnsonlib_graphics\n":""),
-  "#include \"johnsonlib.c\"\n",
+  "#include \"johnsonlib.c\"\n\n",
   trans_protos,
   trans_varp,
-  "\n",
+  "\n\n",
   "int main(int argc, char **argv){\nJohnsonlib_init(argc,argv);\n",
   VarsArrayDeclaration,
   trans_vars,
