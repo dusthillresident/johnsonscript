@@ -28,6 +28,7 @@ int *trans_function_gposses = NULL;
 int trans_functions_start_p=0;
 int trans_program_uses_maths = 0;
 int trans_program_uses_gfx = 0;
+int trans_reverse_function_params = 0;
 
 #define PrintProt(...) (trans_protos_p  +=  sprintf(trans_protos  +  trans_protos_p,__VA_ARGS__))
 #define PrintMain(...) (trans_main_p    +=  sprintf(trans_main    +  trans_main_p,  __VA_ARGS__))
@@ -965,9 +966,14 @@ void translate_value(program *prog, int *p){
     }
 
     LoadTM(tmhold);
-    for(i=func->num_params-1; i>=0; i--){
+    for( i = (trans_reverse_function_params ? func->num_params-1 : 0);
+         (trans_reverse_function_params ? i>=0 : i<func->num_params );
+         i += (trans_reverse_function_params ? -1 : 1)
+    ){
      PrintMain("%s",value_strings[i]);
-     if(i){ PrintMain(","); }
+     if( trans_reverse_function_params ? i : i < func->num_params-1 ){
+      PrintMain(",");
+     }
      free(value_strings[i]);
     }
    
@@ -1866,10 +1872,18 @@ void translate_command(program *prog, int *p){
     id_info *fn_ids = NULL;
     int i,j;
     for(j=0; j<prog->current_function->num_params; j++){ // get each parameter ID from the function info struct 
-     fn_ids = prog->current_function->ids;
-     for(i=prog->current_function->num_params-1-j; i>=0; i--){ // must reverse the parameter list because C evaluates parameters in reverse order vs johnsonscript
+
+     if( trans_reverse_function_params ){ // if we must reverse the parameter list because C on this arch evaluates parameters in reverse order vs johnsonscript
+      fn_ids = prog->current_function->ids;
+      for(i=prog->current_function->num_params-1-j; i>=0; i--){
+       fn_ids = fn_ids->next;
+      }
+     }else{ // or if we don't have to reverse it after all
+      if(fn_ids == NULL) fn_ids = prog->current_function->ids;
       fn_ids = fn_ids->next;
      }
+
+     //PrintErr(" FUCKING SHIT '%s'\n",fn_ids->name); // REM test
 
      TransTable *ttab = calloc(1,sizeof(TransTable)); // create a translation table for each parameter ID
      *ttab = (TransTable){
@@ -2203,9 +2217,43 @@ void check_for_oldstyle_functions(program *prog){
  }//next
 }//endproc
 
+
+// ===================================
+int param_order_test_val = 0;
+
+int param_order_test_fn(){
+ param_order_test_val = param_order_test_val + 1;
+ return param_order_test_val;
+}
+
+int param_order_test(int a, int b, int c){
+ if( b != 2 ) goto paramordertest_complain;
+ if( a == 1 && c == 3 ){ 
+  return 0;
+ }
+ if( a == 3 && c == 1){
+  return 1;
+ }
+ // complain about something unexpected happening here
+ paramordertest_complain:
+ PrintErr("param_order_test: unexpected result:\n a == %d\n b == %d\n c == %d\n",a,b,c);
+ exit(0);
+}
+
+int does_this_arch_use_reverse_order_evaluation_of_function_params(){
+ return param_order_test(param_order_test_fn(),param_order_test_fn(),param_order_test_fn());
+}
+// ===================================
+
+
 void translate_program(program *prog){
 
  check_for_oldstyle_functions(prog);
+ trans_reverse_function_params = does_this_arch_use_reverse_order_evaluation_of_function_params();
+ //trans_reverse_function_params=1;
+ #if TRANS_CRASHDEBUG 
+ PrintErr("Detected function parameter evaluation order for this arch: %s\n", trans_reverse_function_params ? "Right to left (reversed)" : "Left to right");
+ #endif
 
  int i=0; int p=0;
  
