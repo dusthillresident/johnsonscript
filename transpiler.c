@@ -260,15 +260,22 @@ void translate_stringvalue(program *prog, int *p){
  #endif
  switch( prog->tokens[ *p ].type ){
   case t_sget:
-   {
-    //Johnson_Sget(int filenum, int num_bytes_to_read, int sa_l)
+   if( trans_reverse_function_params ){
     *p += 1;
     PrintMain("Johnson_Sget(");
     translate_value(prog, p);
     PrintMain(",");
     translate_value(prog, p);
     PrintMain(",++SAL)");
-   } break;
+   }else{
+    *p += 1;
+    PrintMain("Johnson_Sget(++SAL,");
+    translate_value(prog, p);
+    PrintMain(",");
+    translate_value(prog, p);
+    PrintMain(")");
+   }
+   break;
   case t_S:
    { 
     *p += 1;
@@ -287,7 +294,7 @@ void translate_stringvalue(program *prog, int *p){
     *p += 1;
    } break;
   case t_catS: 
-   {
+   if( trans_reverse_function_params ){
     *p += 1;
     if( translate_determine_valueorstringvalue_(prog, *p, 0) != 1 ){ // the weird behaviour of cat$, you don't have to give it anything at all
      PrintMain("(SVL){0,\"PENIS\"}"); 
@@ -306,7 +313,28 @@ void translate_stringvalue(program *prog, int *p){
      PrintMain(",++SAL) ");
      count--;
     }
-   } break;
+   }else{
+    *p += 1;
+    if( translate_determine_valueorstringvalue_(prog, *p, 0) != 1 ){
+     PrintMain("(SVL){0,\"PENIS\"}"); 
+     break;
+    }
+    /*
+    PrintMain(" ");
+    */
+
+    int count=0;
+    while( translate_determine_valueorstringvalue_(prog, *p, 0) == 1 ){
+     PrintMain("CatS(++SAL,"); translate_stringvalue(prog, p); PrintMain(",");
+     count += 1;
+    }
+    PrintMain("(SVL){0,\"PENIS\"} ");
+    while(count){
+     PrintMain(") ");
+     count--;
+    }
+   }
+   break;
   case t_id: 
    {
     translate_processid(prog, p);
@@ -370,19 +398,31 @@ void translate_stringvalue(program *prog, int *p){
     PrintMain(")");
    } break;
   case t_chrS:
-   {
+   if( trans_reverse_function_params ){
     PrintMain("ChrS(");
     *p += 1;
     translate_value(prog, p);
     PrintMain(",++SAL)");
-   } break;
+   }else{
+    PrintMain("ChrS(++SAL,");
+    *p += 1;
+    translate_value(prog, p);
+    PrintMain(")");
+   }
+   break;
   case t_strS:
-   {
+   if( trans_reverse_function_params ){
     PrintMain("StrS(");
     *p += 1;
     translate_value(prog, p);
     PrintMain(",++SAL)");
-   } break;
+   }else{ 
+    PrintMain("StrS(++SAL,");
+    *p += 1;
+    translate_value(prog, p);
+    PrintMain(")");
+   }
+   break;
   case t_leftb:
    {
     PrintMain("(");
@@ -599,32 +639,48 @@ void translate_value(program *prog, int *p){
    }
   } break;
  case t_instrS:
-  {
+  if( trans_reverse_function_params ){
    *p += 1;
-    PrintMain("(double)");
-    PrintMain("InstrS(");
-    translate_stringvalue(prog, p);    PrintMain(",");
-    translate_stringvalue(prog, p); 
-    PrintMain(",++SAL)");
-  } break;
+   PrintMain("(double)");
+   PrintMain("InstrS(");
+   translate_stringvalue(prog, p);    PrintMain(",");
+   translate_stringvalue(prog, p); 
+   PrintMain(",++SAL)");
+  }else{
+   *p += 1;
+   PrintMain("(double)");
+   PrintMain("InstrS(++SAL,");
+   translate_stringvalue(prog, p);    PrintMain(",");
+   translate_stringvalue(prog, p); 
+   PrintMain(")");
+  }
+  break;
  case t_cmpS:
-  {
+  if( trans_reverse_function_params ){
    *p += 1;
-    PrintMain("(double)");
-    PrintMain("CmpS(");
-    translate_stringvalue(prog, p);    PrintMain(",");
-    translate_stringvalue(prog, p); 
-    PrintMain(",++SAL)");
-  } break;
+   PrintMain("(double)");
+   PrintMain("CmpS(");
+   translate_stringvalue(prog, p);    PrintMain(",");
+   translate_stringvalue(prog, p); 
+   PrintMain(",++SAL)");
+  }else{
+   *p += 1;
+   PrintMain("(double)");
+   PrintMain("CmpS(++SAL,");
+   translate_stringvalue(prog, p);    PrintMain(",");
+   translate_stringvalue(prog, p); 
+   PrintMain(")");
+  }
+  break;
  case t_lenS:
   {
    *p += 1;
-    PrintMain("(double)");
-    PrintMain("(");
-    PrintMain("(");
-    translate_stringvalue(prog, p);
-    PrintMain(").len");
-    PrintMain(")");
+   PrintMain("(double)");
+   PrintMain("(");
+   PrintMain("(");
+   translate_stringvalue(prog, p);
+   PrintMain(").len");
+   PrintMain(")");
   } break;
  case t_valS:
   {
@@ -1263,7 +1319,11 @@ void translate_command(program *prog, int *p){
      *p += 1;
      char *width  = trans__transval_into_tempbuf( prog, p );
      char *height = trans__transval_into_tempbuf( prog, p );
-     PrintMain("%s(%s,%s);\n",( type==t_startgraphics?"Johnson_StartGraphics":"Johnson_WinSize" ),height,width);
+     if( trans_reverse_function_params ){
+      PrintMain("%s(%s,%s);\n",( type==t_startgraphics?"Johnson_StartGraphics":"Johnson_WinSize" ),height,width);
+     }else{
+      PrintMain("%s(%s,%s);\n%s",( type==t_startgraphics?"start_newbase_thread":"SetWindowSize" ),width,height,type==t_startgraphics?"":"Wait(1);\n");
+     }
      free(width);
      free(height);
     }
@@ -1319,7 +1379,11 @@ void translate_command(program *prog, int *p){
      char *x  = trans__transval_into_tempbuf( prog, p );
      char *y  = trans__transval_into_tempbuf( prog, p );
      char *r  = trans__transval_into_tempbuf( prog, p );
-     PrintMain("Johnson_Circle(%d,%s,%s,%s);\n",fill,r,y,x);
+     if( trans_reverse_function_params ){
+      PrintMain("Johnson_Circle(%d,%s,%s,%s);\n",fill,r,y,x);
+     }else{
+      PrintMain("Circle%s(%s,%s,%s);\n",fill?"Fill":"",x,y,r);
+     }
      free(x); free(y); free(r);
     }
     break;
@@ -1335,10 +1399,18 @@ void translate_command(program *prog, int *p){
       h  = trans__transval_into_tempbuf( prog, p );
      }
      if( h ){ 
-      PrintMain("Johnson_Rectangle(%d,%s,%s,%s,%s);\n",fill,h,w,y,x);
+      if( trans_reverse_function_params ){
+       PrintMain("Johnson_Rectangle(%d,%s,%s,%s,%s);\n",fill,h,w,y,x);
+      }else{
+       PrintMain("Rectangle%s(%s,%s,%s,%s);\n",fill?"Fill":"",x,y,w,h);
+      }
       free(h);
      }else{
-      PrintMain("Johnson_RectangleWH(%d,%s,%s,%s);\n",fill,w,y,x);
+      if( trans_reverse_function_params ){
+       PrintMain("Johnson_RectangleWH(%d,%s,%s,%s);\n",fill,w,y,x);
+      }else{
+       PrintMain("Johnson_RectangleWH(%s,%s,%s,%d);\n",x,y,w,fill);
+      }
      }
      free(x); free(y); free(w);
     }
@@ -1357,9 +1429,15 @@ void translate_command(program *prog, int *p){
      char *x  = trans__transval_into_tempbuf( prog, p );
      char *y  = trans__transval_into_tempbuf( prog, p );
      char *s  = trans__transval_into_tempbuf( prog, p );
-     PrintMain("Johnson_DrawText(");
-     translate_stringvalue(prog,p);
-     PrintMain(",%s,%s,%s,++SAL);\n",s,y,x);
+     if( trans_reverse_function_params ){
+      PrintMain("Johnson_DrawText(");
+      translate_stringvalue(prog,p);
+      PrintMain(",%s,%s,%s,++SAL);\n",s,y,x);
+     }else{
+      PrintMain("Johnson_DrawText(++SAL,%s,%s,%s,",x,y,s);
+      translate_stringvalue(prog,p);
+      PrintMain(");\n");
+     }
      free(x); free(y); free(s);
     }
     break;
@@ -1385,7 +1463,11 @@ void translate_command(program *prog, int *p){
       b  = trans__transval_into_tempbuf( prog, p );
      }
      if(g){
-      PrintMain( "Johnson_%s(%s,%s,%s);\n", ( bgtype?"BGCol":"GCol" ),b,g,r );
+      if( trans_reverse_function_params ){
+       PrintMain( "Johnson_%s(%s,%s,%s);\n", ( bgtype?"BGCol":"GCol" ),b,g,r );
+      }else{ 
+       PrintMain( "%s(%s,%s,%s);\n", ( bgtype?"Gcol":"GcolBG" ),r,g,b );
+      }
       free(g); free(b);
      }else{
       PrintMain( "%s( MyColour2( %s ) );\n", (bgtype?"GcolBGDirect":"GcolDirect"), r );
@@ -2329,10 +2411,11 @@ void translate_program(program *prog){
  char VarsArrayDeclaration[384];
  sprintf(VarsArrayDeclaration,"double VarsArray[%d]; Johnson_vsize=%d; FirstVarP = VarsArray;\nJohnson_num_funcs = %d;\n",trans_vsize,trans_vsize,trans_fn);
 
- printf("%s%s%s%s%s%s%s%s%s%s%s%s",
+ printf("%s%s%s%s%s%s%s%s%s%s%s%s%s",
   trans_program_uses_maths ? "\n#include <math.h>\n" : "\n",
   "#include <stdio.h>\n#include <stdlib.h>\n#include <unistd.h>\n#define using_johnsonlib\n",
   (trans_program_uses_gfx ? "#define using_johnsonlib_graphics\n":""),
+  (trans_reverse_function_params ? "#define JOHNSON_PARAMETERS_REVERSED\n":""),
   "#include \"johnsonlib.c\"\n\n",
   trans_protos,
   trans_varp,

@@ -182,7 +182,12 @@ void PrintSVL( SVL svl ){
  //printf("\n");
 }
 
-SVL CatS( SVL a, SVL b, int sa_l ){
+#ifdef JOHNSON_PARAMETERS_REVERSED
+SVL CatS( SVL a, SVL b, int sa_l )
+#else
+SVL CatS( int sa_l, SVL a, SVL b )
+#endif
+{
  SVR *Acc = NewStrAccLevel( sa_l );
  #if 0
  printf("---- %d ----\n",sa_l);
@@ -237,7 +242,12 @@ int Johnson_isnan( double val ){
  return ((int)val && val==0.0);
 }
 
-SVL StrS( double val, int sa_l ){
+#ifdef JOHNSON_PARAMETERS_REVERSED
+SVL StrS( double val, int sa_l )
+#else
+SVL StrS( int sa_l, double val )
+#endif
+{
  SVR *accumulator = NewStrAccLevel( sa_l );
  // ----------
  int snpf_return;
@@ -256,7 +266,12 @@ SVL StrS( double val, int sa_l ){
  return out;
 }
 
-SVL ChrS( char c, int sa_l ){ 
+#ifdef JOHNSON_PARAMETERS_REVERSED
+SVL ChrS( char c, int sa_l )
+#else
+SVL ChrS( int sa_l, char c )
+#endif
+{
  SVR *Acc = NewStrAccLevel( sa_l );
  // ----------
  SetSVR( Acc, (SVL){ 1, &c } );
@@ -281,7 +296,12 @@ int AscS( SVL s ){
  return (unsigned char) s.buf[0];
 }
 
-int CmpS( SVL sv1, SVL sv2, int sa_l ){
+#ifdef JOHNSON_PARAMETERS_REVERSED
+int CmpS( SVL sv1, SVL sv2, int sa_l )
+#else
+int CmpS( int sa_l, SVL sv1, SVL sv2 )
+#endif
+{
  int result = 0;
  // ----------
   if( sv1.len == sv2.len ){
@@ -300,7 +320,12 @@ int CmpS( SVL sv1, SVL sv2, int sa_l ){
  return result;
 }
 
-int InstrS( SVL sv1, SVL sv2, int sa_l ){
+#ifdef JOHNSON_PARAMETERS_REVERSED
+int InstrS( SVL sv1, SVL sv2, int sa_l )
+#else
+int InstrS( int sa_l, SVL sv1, SVL sv2 )
+#endif
+{
  int result = -1;
  // ----------
  if( sv1.len < sv2.len ) goto InstrS_out;
@@ -486,7 +511,12 @@ void Johnson_Close(int filenum){
 
 // --- johnsonscript file functions returning a stringvalue
 
-SVL Johnson_Sget(int filenum, int num_bytes_to_read, int sa_l){ 
+#ifdef JOHNSON_PARAMETERS_REVERSED
+SVL Johnson_Sget(int filenum, int num_bytes_to_read, int sa_l)
+#else
+SVL Johnson_Sget(int sa_l, int filenum, int num_bytes_to_read )
+#endif
+{ 
  FIL *f = JohnsonFiles_getFileStructPtr(filenum, 1, 0);
  SVR *Acc = NewStrAccLevel( sa_l );
  // ----------
@@ -528,15 +558,18 @@ SVL Johnson_Sget(int filenum, int num_bytes_to_read, int sa_l){
 // because of the weird reverse order of evaluation of function parameters in GNU C, this is necessary... why am I writing this shit, nobody will read it
 
 // ---- johnsonscript graphics commands ----
-
-void Johnson_StartGraphics(int h,int w){
+#ifdef JOHNSON_PARAMETERS_REVERSED
+void Johnson_StartGraphics(int h,int w){ 
  start_newbase_thread(w,h);
 }
+#endif
 
+#ifdef JOHNSON_PARAMETERS_REVERSED
 void Johnson_WinSize(int h, int w){
  SetWindowSize(w,h);
  Wait(1);
 }
+#endif
 
 void Johnson_Pixel(int *pixels, int n_pixels){
  int i;
@@ -556,21 +589,32 @@ void Johnson_Line(int *lines, int n_points){
  }
 }
 
+#ifdef JOHNSON_PARAMETERS_REVERSED
 void Johnson_Circle(int fill,int r, int y, int x){
  if(fill)
   CircleFill(x,y,r);
  else
   Circle(x,y,r);
 }
+#endif
 
+#ifdef JOHNSON_PARAMETERS_REVERSED
+// if parameters not reversed, in the case of rectangle X Y W H just call Rectangle/RectangleFill directly
 void Johnson_Rectangle(int fill, int h, int w, int y, int x){
  if(fill)
   RectangleFill(x,y,w,h);
  else
   Rectangle(x,y,w,h);
 }
+#endif
 
-void Johnson_RectangleWH(int fill, int wh, int y, int x){
+// but in the case of rectangle X Y WH this is necessary
+#ifdef JOHNSON_PARAMETERS_REVERSED
+void Johnson_RectangleWH(int fill, int wh, int y, int x)
+#else
+void Johnson_RectangleWH(int x, int y, int wh, int fill)
+#endif
+{
  if(fill)
   RectangleFill(x,y,wh,wh);
  else
@@ -581,7 +625,12 @@ void Johnson_Triangle( int points[6] ){
  Triangle(points[0],points[1], points[2],points[3], points[4],points[5] );
 }
 
-void Johnson_DrawText( SVL sv, int s, int y, int x, int sa_l ){
+#ifdef JOHNSON_PARAMETERS_REVERSED
+void Johnson_DrawText( SVL sv, int s, int y, int x, int sa_l )
+#else
+void Johnson_DrawText( int sa_l, int x, int y, int s, SVL sv )
+#endif
+{
  char holdthis = sv.buf[sv.len]; sv.buf[sv.len]=0;
  drawtext_(x,y,s, sv.buf);
  sv.buf[sv.len]=holdthis;
@@ -602,13 +651,17 @@ void Johnson_RefreshMode(int m){
  }
 }
 
+#ifdef JOHNSON_PARAMETERS_REVERSED
 void Johnson_GCol(int b,int g,int r){
  Gcol(r,g,b);
 }
+#endif
 
+#ifdef JOHNSON_PARAMETERS_REVERSED
 int Johnson_BGCol(int b,int g,int r){
  GcolBG(r,g,b);
 }
+#endif
 
 // ---- johnsonscript graphics functions ---- 
 
