@@ -1,0 +1,47 @@
+
+print cat$ "kuk" "'" "Aa" "Bb" "Cc" "Dd" "Ee" "Ff" "'";
+print cat$ str$ 111 str$ 222 str$ 333 str$ 444 str$ 555 right$ "cockpenis" 5 chr$ asc$"P" chr$ asc$"E" chr$ asc$"N" chr$ asc$"I" chr$ asc$"S";
+
+print "len$ empty string returns: " len$ "";
+print "asc$ empty string returns: " asc$ "";
+print "len$ 'PENIS' returns: " len$ "PENIS";
+
+print "------ cmp$ test ------";
+print cmp$ "PENIS" "PENIS";
+print cmp$ "PENIS" "penis";
+print cmp$ "penis" "PENIS";
+print cmp$ "PENIS" "PENISaaa";
+print cmp$ "PENISaaa" "PENIS";
+print cmp$ "y56i76k6rey%UH%Uwt3tT£$GT£g3gq" "PSEVTRNJTKI57ihw4g3grser234£%£^45NIS";
+print cmp$ "PSEVTRNJTKI57ihw4g3grser234£%£^45NIS" "y56i76k6rey%UH%Uwt3tT£$GT£g3gq";
+print cmp$ (cat$ "Thi" "sMigh" "tBeB" "roken") (cat$ "T" "his" "MightB" "eBro" "ken");
+print "-----------------------";
+
+penistos @"Jan" @"May" @"Dec" @"NotAMonth";
+
+while < D0 4;
+ print "cocks " @"cocks";
+ set D0 + D0 1
+endwhile
+
+if _argc
+ print "----";
+ variable i;
+ set i 0;
+ while < i _argc
+  penistos i;
+  set i + i 1
+ endwhile
+ print "----";
+endif
+
+
+return 0 
+
+function penistos ... local i;
+ set i 0
+ while < i _num_params
+  print $Pi " is month " (+ 1 / instr$ "JanFebMarAprMayJunJulAugSepOctNovDec" $Pi 3);
+  set i + i 1
+ endwhile
+endfunction
