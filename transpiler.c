@@ -1472,7 +1472,7 @@ void translate_command(program *prog, int *p){
       if( trans_reverse_function_params ){
        PrintMain( "Johnson_%s(%s,%s,%s);\n", ( bgtype?"BGCol":"GCol" ),b,g,r );
       }else{ 
-       PrintMain( "%s(%s,%s,%s);\n", ( bgtype?"Gcol":"GcolBG" ),r,g,b );
+       PrintMain( "%s(%s,%s,%s);\n", ( bgtype?"GcolBG":"Gcol" ),r,g,b );
       }
       free(g); free(b);
      }else{
