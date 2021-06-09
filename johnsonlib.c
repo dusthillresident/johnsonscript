@@ -681,6 +681,14 @@ int Johnson_WMClose(){
 
 // ----------------------------------------------------------------------------------------------
 
+void Johnson_Seedrnd(int v[3]){
+ XRANDrand = v[0];
+ XRANDranb = v[1];
+ XRANDranc = v[2];
+}
+
+// ----------------------------------------------------------------------------------------------
+
 int Johnson_Argc = 0;
 
 void Johnsonlib_init(int argc, char **argv){

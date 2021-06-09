@@ -1589,6 +1589,18 @@ void translate_command(program *prog, int *p){
     #else
     ErrorOut("FUCK OFF!\n");
     #endif
+   }else if( TheseStringsMatch(opstr, "seedrnd") ){
+    PrintMain("Johnson_Seedrnd( (int[3]){");
+    int i;
+    for(i=0; i<3; i++){
+     if( translate_determine_valueorstringvalue_(prog, *p, 0) == 0 ){
+      translate_value(prog,p);
+     }else{
+      PrintMain("0");
+     }
+     if(i<2) PrintMain(",");
+    }
+    PrintMain("} );\n");
    }else{
     trans_print_sourcetext_location( prog, *p);
     PrintErr("translate_command: option: unrecognised option\n");
