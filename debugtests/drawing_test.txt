@@ -1,2 +1,2 @@
-print "I don't know how to delete this file from github";
+print "I don't know how to delete this file from github, the delete button does nothing";
 quit
