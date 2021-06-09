@@ -1,17 +1,12 @@
-
-
-
-
-
 stringvar test;
-
 variable ref;
  
 set ref @ test;
+set $ ref  "test message";
 
-
-set $ ref  "penis";
-
-
+print test;
+print $ ref;
+print $@test;
+print $@$@test;
 
 quit
