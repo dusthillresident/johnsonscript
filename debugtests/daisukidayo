@@ -1,0 +1,17 @@
+
+
+
+
+
+stringvar test;
+
+variable ref;
+ 
+set ref @ test;
+
+
+set $ ref  "penis";
+
+
+
+quit

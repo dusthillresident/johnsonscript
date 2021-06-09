@@ -1,0 +1,56 @@
+print "----";
+
+caseof cat$ "str" "in" "g"
+ when cat$ "notmatch";
+  print "this shouldn't happen";
+ when cat$ ;
+  print "neither should this happen";
+ when "string";
+  print "Good!";
+ otherwise
+  print "this shouldn't happen either";
+ when cat$ "zzzzzz"; 
+  print "this absolutely should not happen";
+endcase
+
+print "----";
+
+caseof 0
+ printf "this should be ignored";
+endcase
+print "Good?";
+
+print "----";
+
+caseof 0
+ otherwise
+  print "this should not happen"; 
+ otherwise
+  print "neither should this";
+ when 2;
+  print "snopp";
+ otherwise
+  print "Good!";
+ when 1;
+  print "yep";
+endcase
+
+print "----";
+
+caseof 1
+ when 1;
+  caseof 2
+   when 2;
+    print "Good!";
+   when 3;
+    print "c2,3 : shouldn't happen";
+   otherwise
+    print "c2,o : shouldn't happen";
+  endcase
+ otherwise
+  print "c1,o : shouldnt happen";
+endcase
+
+print "----";
+
+quit

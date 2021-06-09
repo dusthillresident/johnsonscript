@@ -1,0 +1,72 @@
+/*
+variable cocks p;
+
+set p @ cocks;
+set cocks 123;
+print "cocks: " cocks;
+print "Dp: " Dp;
+*/
+
+
+variable ttt;
+
+set ttt thistest 11 22 33 44 55.5 used 0.1 0.2;
+
+
+if 0
+ print "PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS ""PENIS " 1 2 3 4; 
+ set D0 D0; set D0 D0; set D0 D0;
+endif
+
+
+
+return 0;
+
+
+function thistest aa bb cc dd ... local laa lbb lcc;
+ print aa bb cc dd;
+ print "num_params: " _num_params;
+ set laa 0;
+ while < laa _num_params 
+  print "P(laa): " P laa;
+  set laa + laa 1
+ endwhile
+ print "Let's try this: P4 is " P4;
+ set P4 176
+ print "But now it is " P4;
+ print "Also D@P4 is " D@P4;
+ set D@P4 6.666666666666666;
+ print "But it's now " D@P4;
+ set laa 0
+ while < laa _num_params
+  print " test now  : " D @ A @ P 0 laa;
+  set D @ A @ P 0 laa 66.66
+  print " test again: " D @ A @ P 0 laa;
+  set laa + laa 1
+ endwhile
+return 1;
+
+function normalone aaa bbb ccc ddd;
+ print _num_params;
+return + aaa bbb ccc ddd;
+
+function noparms;
+return 2;
+
+
+function unused;
+ print "this function is not used";
+ set D0 D0
+return -1;
+
+
+function used a b;
+return + 2 noparms a b;
+return noparms;
+return oneparm 1;
+return twoparms 1 2;
+
+function oneparm a;
+return 0;
+function twoparms a b;
+
