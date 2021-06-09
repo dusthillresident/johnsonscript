@@ -1230,9 +1230,15 @@ void translate__caseof(program *prog, int *p){
     while( translate_determine_valueorstringvalue_(prog, *p,0) == CaseofType ){
      c += 1;  
      if(CaseofType){
-      PrintMain("!CmpS( J_caseof_%d_val_svl,",casenum);
-      translate_stringvalue(prog,p);
-      PrintMain(",++SAL)");
+      if(trans_reverse_function_params){
+       PrintMain("!CmpS( J_caseof_%d_val_svl,",casenum);
+       translate_stringvalue(prog,p);
+       PrintMain(",++SAL)");
+      }else{
+       PrintMain("!CmpS( ++SAL, J_caseof_%d_val_svl,",casenum);
+       translate_stringvalue(prog,p);
+       PrintMain(")");
+      }
       if( CurTok.type != t_endstatement ){
        PrintMain("|| ");
       }//endif
