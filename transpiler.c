@@ -1559,7 +1559,7 @@ void translate_command(program *prog, int *p){
     PrintMain("]->claimed = 0;\n");
    }else if( TheseStringsMatch(opstr, "vsize") ){
     if( expression_is_simple( prog, *p ) ){
-     trans_vsize = (int)getvalue(p,prog);
+     trans_vsize = 1+(int)getvalue(p,prog);
     }else{
      trans_print_sourcetext_location( prog, *p);
      PrintErr("translate_command: option: 'vsize': only a static/simple expression can be accepted\n");
