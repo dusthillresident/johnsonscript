@@ -101,7 +101,7 @@ void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
 
  //XDrawLine(Mydisplay, Mywindow, MyGC, 0,0, winwidth,winheight);
 
- XStoreName(Mydisplay,Mywindow, "Interpreter graphics");
+ XStoreName(Mydisplay,Mywindow, "Johnsonscript graphics");
 
  WinW=winwidth;
  WinH=winheight;
