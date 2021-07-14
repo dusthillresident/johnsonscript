@@ -11,6 +11,6 @@ It's designed for linux with X windows but it can work on windows with cygwin/x.
 
 Download the source archive,\
 extract it,\
-run compile.sh,
-then try this command:
+run compile.sh,\
+then try this command:\
 ./gfxbin example_programs/graphical/craigdavid
