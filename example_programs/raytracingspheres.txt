@@ -1,0 +1,123 @@
+REM  Raytracing spheres demo
+
+/*
+ Raytracing spheres demo, written by Kweepa and Coprolite9000
+ The original program was written in BBC BASIC and posted on twitter to the BBC Micro Bot
+ https://twitter.com/bbcmicrobot/status/1464553737255596036
+*/
+
+startgraphics << 322 1 << 256 1;
+
+variable dither_array;
+set dither_array alloc 16;
+set Adither_array(0) 0;
+set Adither_array(1) 24;
+set Adither_array(2) 6;
+set Adither_array(3) 30;
+set Adither_array(4) 36;
+set Adither_array(5) 12;
+set Adither_array(6) 42;
+set Adither_array(7) 18;
+set Adither_array(8) 9;
+set Adither_array(9) 33;
+set Adither_array(10)  3;
+set Adither_array(11) 27;
+set Adither_array(12) 45;
+set Adither_array(13) 21;
+set Adither_array(14) 39;
+set Adither_array(15) 15;
+
+variable n m x y z u v w i g e f p d t _n _m h;
+
+.start
+
+set w + 1 - winw % winw 4
+set h ( * 256 / winw 320 )
+winsize w h;
+if > (abs - winh h) 10
+ gcol -1
+ drawtext 0 ( - winh 17 ) 3 "Attempting window size adjustment";
+ wait 250
+ goto ".start"
+endif
+
+set _n 0
+while <= _n winh
+ set _m 0
+ while <= _m winw
+   
+  if expose goto ".start" endif
+  set n * _n / 320 winw
+  set m * _m / 256 winh
+ 
+  set x  0
+  set y  -0.1
+  set z  3
+  set u  / (- m 159.5) 160
+  set v  / (- n 127.5) 160
+  set w  / 1 sqr + 1 (* u u) * v v 
+  set u  * u w
+  set v  * v w
+  set i  sgn u
+
+  .50
+
+  set e  - x i
+  set f  - y i
+  set p  - (+ (* v f) (* u e)) * w z
+  set d  + 1 - (* p p) (* e e) (* f f) (* z z)
+
+  if > d 0 
+   set t  - neg p sqr d
+   if > t 0
+    set x  + x * t u
+    set y  + y * t v
+    set z  - z * t w
+    set e  - x i
+    set f  - y i
+    set g  z
+    set p  * 2 - ( + (* u e) (* v f ) ) (* w g)
+    set u  - u * p e
+    set v  - v * p f
+    set w  + w * p g
+    set i  neg i
+    goto ".50"
+   endif
+  endif
+  if < v 0
+   set p  / (+ y 2) v 
+   set v  + 0.2 * neg v (  + 0.3 / (  & (+ floor( - x * u p ) floor( - z * w p )) 1  ) 2  )
+  endif
+  /*
+  set L0 - 255 * 255 sqr v
+  gcol L0 L0 L0
+  */
+  bbc_gcol - 3 (int/(+ (* 48 sqr v ) (/(D + dither_array ( % _m 4 ) ( * 4 % _n 4 ))3))16) 
+ 
+
+  pixel _m - winh _n
+
+  set _m + _m 1
+ endwhile
+ set _n + _n 1
+endwhile
+
+while ! expose
+ wait 16.6
+endwhile
+
+goto ".start"
+
+function bbc_gcol c;
+ set c & c 3
+ caseof c
+ when 0;
+  gcol 0
+ when 1;
+  gcol 255 0 0 
+ when 2;
+  gcol 255 255 0
+ when 3;
+  gcol -1
+ endcase
+endfunction
