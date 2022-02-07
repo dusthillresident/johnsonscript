@@ -442,9 +442,11 @@ void Line(int x,int y,int xb,int yb){
  #endif
 }
 
+#define CircleArcMaxAngle 23040
+
 void Circle(int x,int y, int r){
  if(!newbase_is_running) return;
- XDrawArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,321*64*2 );
+ XDrawArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
  #endif
@@ -452,7 +454,7 @@ void Circle(int x,int y, int r){
 
 void CircleFill(int x,int y, int r){
  if(!newbase_is_running) return;
- XFillArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,321*64*2 );
+ XFillArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
  #endif
