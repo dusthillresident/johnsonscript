@@ -1848,10 +1848,11 @@ getstringvalue( program *prog, int *pos ){
   stringval sv = getstringvalue( prog,pos );
   int midpos = getvalue(pos, prog);
   int len = getvalue(pos, prog);
-  if( sv.len<=0 || midpos < 0 || midpos >= sv.len ){
+  if( sv.len <=0 || midpos < 0 || midpos >= sv.len ){
    sv.len=0;
    return sv;
   }
+  if( len < 0 ) len = sv.len;
   if( midpos + len >= sv.len ){
    len -= ((midpos+len) - sv.len);
   }

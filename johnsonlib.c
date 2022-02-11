@@ -217,6 +217,7 @@ SVL MidS( SVL sv, int midpos, int len){
   sv.len=0;
   return sv;
  }
+ if( len < 0 ) len = sv.len;
  if( midpos + len >= sv.len ){
   len -= ((midpos+len) - sv.len);
  }
