@@ -1,5 +1,5 @@
 # JohnsonScript
-Simple programming language with graphics features implemented via Xlib.
+JohnsonScript is a simple programming language with graphics features implemented via Xlib.
 Available as an interpreter written in C, and as a trans-compiler that generates C code.
 
 To build/compile, you need to be sure the package 'libxext-dev' is installed. \
