@@ -2191,7 +2191,10 @@ getvalue(int *p, program *prog){
  case t_leftb:
  {
   double out = getvalue(p, prog);
-  if( prog->tokens[*p].type != t_rightb ) error("expected closing bracket\n");
+  if( prog->tokens[*p].type != t_rightb ){
+   print_sourcetext_location( prog, *p - 1);
+   error("expected closing bracket\n");
+  }
   *p += 1;
   return out;
  }
@@ -2200,6 +2203,7 @@ getvalue(int *p, program *prog){
  {
   int index = getvalue(p, prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
+  print_sourcetext_location( prog, *p - 1);
   error("getvalue: bad variable access\n");
   break;
  }
@@ -2211,6 +2215,7 @@ getvalue(int *p, program *prog){
  {
   int index = (int)getvalue(p,prog) + (int)getvalue(p,prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
+  print_sourcetext_location( prog, *p - 1);
   error("getvalue: bad array access\n");
   break;
  }
@@ -2218,6 +2223,7 @@ getvalue(int *p, program *prog){
  { 
   int index = t.data.i + (int)getvalue(p,prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
+  print_sourcetext_location( prog, *p - 1);
   error("getvalue: bad array access\n");
   break; 
  }
