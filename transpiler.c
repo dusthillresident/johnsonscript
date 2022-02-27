@@ -8,9 +8,14 @@
 #define TRANS_CRASHDEBUG 0
 
 void translate_value(program *prog, int *p);
+void translate_stringvalue(program *prog, int *p);
 void translate_command(program *prog, int *p);
+char* trans__transval_into_tempbuf( program *prog, int *p );
+char* trans__transstringval_into_tempbuf( program *prog, int *p );
 
 // ----
+
+char *trans_file_input_path = NULL;
 
 char *trans_protos = NULL; int trans_protos_p=0;
 char *trans_main = NULL; int trans_main_p=0;
@@ -107,6 +112,15 @@ char* trans__transval_into_tempbuf( program *prog, int *p ){
  TransBuf tmhold = SaveTM();
  SetTM(out,0);
  translate_value(prog, p);
+ LoadTM(tmhold);
+ return out;
+}
+
+char* trans__transstringval_into_tempbuf( program *prog, int *p ){
+ char *out = calloc(1*1024*32,sizeof(char)); 
+ TransBuf tmhold = SaveTM();
+ SetTM(out,0);
+ translate_stringvalue(prog, p);
  LoadTM(tmhold);
  return out;
 }
@@ -335,6 +349,18 @@ void translate_stringvalue(program *prog, int *p){
     }
    }
    break;
+  case t_stringS:
+   {
+    *p += 1;
+    char *n = trans__transval_into_tempbuf( prog,p );
+    char *s = trans__transstringval_into_tempbuf( prog,p );
+    if( trans_reverse_function_params ){
+     PrintMain( "StringS( %s, %s , %s )", s, n, "++SAL" );
+    }else{
+     PrintMain( "StringS( %s, %s , %s )", "++SAL", n, s );
+    }
+    free(n); free(s);
+   } break;
   case t_id: 
    {
     translate_processid(prog, p);
@@ -796,6 +822,18 @@ void translate_value(program *prog, int *p){
    PrintMain(")+(int)(");
    translate_value(prog, p);
    PrintMain(")]");
+  } break;
+ case t_C:
+  {
+   *p += 1;
+   char *s     = trans__transstringval_into_tempbuf( prog, p );
+   char *index =       trans__transval_into_tempbuf( prog, p );
+   if( trans_reverse_function_params ){
+    PrintMain( "*Johnson_C_CharacterAccess( %s, %s )", index, s );
+   }else{
+    PrintMain( "*Johnson_C_CharacterAccess( %s, %s )", s, index );
+   }
+   free(s); free(index);
   } break;
  case t_number:
   {
@@ -1728,6 +1766,14 @@ void translate_command(program *prog, int *p){
      translate_value(prog, p);
      PrintMain(";\n");
     } break;
+   case t_C:
+    {
+     PrintMain(" *(&");
+     translate_value(prog, p);
+     PrintMain(") = (char)(int) ");
+     translate_value(prog, p);
+     PrintMain(";\n");
+    } break;
    case t_D:
     {
      *p += 1;
@@ -2088,6 +2134,76 @@ void translate_command(program *prog, int *p){
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
+int chdir_to_the_dir_in_this_path( char *path ){
+ char editpath[4096] = { 0 };
+ strcpy(editpath,path);
+ int l = strlen(editpath);
+ while( editpath[l] != '/' ){
+  editpath[l] = 0;
+  l--;
+ }//endwhile
+ return chdir(editpath);
+}//endproc
+
+void translate_preprocess_OptionImport(program *prog){
+ int i=0;
+ int *p = &i; // for ErrorOut 
+ int j,startp;
+ char currdir[4096]={0};
+ if( trans_file_input_path ){ // save current working directory
+  getcwd(currdir,4096);
+  if( chdir_to_the_dir_in_this_path( trans_file_input_path ) ) ErrorOut("translate_preprocess_OptionImport: shouldn't happen\n"); // change to the directory the source file is from
+ }//endif
+ while( i < prog->length ){
+  if( prog->tokens[i].type == t_option ){
+   startp=i;
+   i++;
+   if( prog->tokens[i].type == t_stringconst && TheseStringsMatch((char*)prog->tokens[i].data.pointer, "import") ){
+    i++;
+    if( prog->tokens[i].type == t_stringconst){
+     // -----
+     token *tokens; int tokens_length; char *filename;
+     // get filename
+     filename = (char*)prog->tokens[i].data.pointer;
+     // load text file and process it, getting the tokens (program code data) and program_strings
+     tokens = loadtokensfromtext(prog->program_strings, filename, &tokens_length);
+     if( tokens == NULL ){
+      ErrorOut("translate_preprocess_OptionImport: couldn't open file '%s'\n",filename);
+     }
+     // remove everything before the function definitions
+     for(j=0; j<tokens_length; j++){
+      if( tokens[j].type == t_deffn ){ break; }
+      tokens[j].type = t_endstatement;
+     }
+     // resize array and append new code
+     prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length)*sizeof(token));
+     memcpy(prog->tokens + prog->maxlen, tokens, sizeof(token) * tokens_length);
+     prog->length += tokens_length; prog->maxlen+=tokens_length;
+     // process function definitions for imported code
+     process_function_definitions(prog,prog->maxlen - tokens_length);
+     // tidy up and erase the option command so it doensn't get seen by the main translation pass
+     free(tokens);
+     for(j=startp; j<=i; j++){
+      prog->tokens[j].type = t_endstatement;
+     }//next
+     // -----
+    }else{
+     ErrorOut("option \"import\": 'import' requires string constant\n");
+    }
+   }//endif
+  }//endif
+  i++;
+ }
+ if( trans_file_input_path ){ // save current working directory
+  if( chdir(currdir) ){
+   ErrorOut("translate_preprocess_OptionImport: this absolutely shouldn't happen\n");
+  }
+ }//endif
+}//endproc
+
+// ----------------------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------------------
+
 void translate_function_proto(program *prog, int n){
  func_info *func = prog->functions[n];
  if( (func->params_type == p_exact) && ! trans_program_contains_F ){ // exact number of params (and program doesn't use function references) 
@@ -2348,6 +2464,8 @@ int does_this_arch_use_reverse_order_evaluation_of_function_params(){
 
 void translate_program(program *prog){
 
+ translate_preprocess_OptionImport(prog);
+
  check_for_oldstyle_functions(prog);
  trans_reverse_function_params = does_this_arch_use_reverse_order_evaluation_of_function_params();
  //trans_reverse_function_params=1;
@@ -2458,6 +2576,7 @@ int main(int argc, char **argv){
 
  if(argc>1){
   prg = init_program( argv[1], Exists(argv[1]) ); 
+  if( Exists(argv[1]) ) trans_file_input_path = argv[1];
  }else{
   printf("%s [program text or path to a file containing program text]\nThis will write the translated C program to stdout.\n",argv[0]);
   return 0;

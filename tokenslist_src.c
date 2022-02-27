@@ -35,6 +35,7 @@
 #define t_P		COCKSPENIS	//	P		function parameter variables (access values on the stack above the local variables)
 #define t_F		COCKSPENIS	//	F		function call
 #define t_SS		COCKSPENIS	//	S		create new unnamed stringvar (or find first unclaimed one)
+#define t_C		COCKSPENIS	//	C		character access (work with strings as byte arrays) takes two parameters, a stringvalue and a value
 
 #define t_Df		COCKSPENIS	//			fast variable access (basically D but with a direct pointer to the variable in token.data.pointer)
 #define t_Af		COCKSPENIS	//			fast array access (basically A but with the array start index in token.data.i)
@@ -182,7 +183,7 @@
 // ===================================
 
 // ===== string functions & stuff that's a 'string value' ======
-					//	EXAMPLE				RETURNS		DESCRIPTION
+					//		EXAMPLE				RETURNS		DESCRIPTION
 #define t_stringconst		COCKSPENIS	//	"string"					string constant
 #define t_stringconstf		COCKSPENIS	//							string constant (fast), eliminates the need to call strlen()
 #define t_rightS		COCKSPENIS	//	right$ [string] [n]		STR		get the last n characters of string
@@ -191,6 +192,7 @@
 #define t_chrS			COCKSPENIS	//	chr$ [num]			STR		return a string with the character [num]
 #define t_strS			COCKSPENIS	//	str$ [num]			STR		return string containing representation of [num]
 #define t_catS			COCKSPENIS	//	cat$ [string] [string] ...	STR		concatenate strings
+#define t_stringS		COCKSPENIS	//	string$ [number] [string]	STR		Function returning multiple copies of a string.
 #define t_S			COCKSPENIS	//	$		string variable dereference
 #define t_Sf			COCKSPENIS	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
 #define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A

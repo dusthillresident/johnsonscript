@@ -97,6 +97,20 @@ struct StringValue {
 }
 SVL;
 
+unsigned char*
+#ifdef JOHNSON_PARAMETERS_REVERSED
+Johnson_C_CharacterAccess( int index, SVL svl )
+#else
+Johnson_C_CharacterAccess( SVL svl, int index )
+#endif
+{
+ if( index<0 || index>=svl.len ){
+  printf("Johnsonscript error: C (characteraccess): index out of range\n");
+  exit(0);
+ }
+ return svl.buf + index;
+}
+
 SVR **StringAcc;
 int max_stringacc = 32;
 
@@ -209,6 +223,38 @@ SVL CatS( int sa_l, SVL a, SVL b )
 SVL ToSVL( char *string ){
  return (SVL){ strlen(string), string};
 }
+
+#ifdef JOHNSON_PARAMETERS_REVERSED
+SVL StringS( SVL svl, int n, int sa_l )
+#else
+SVL StringS( int sa_l, int n, SVL svl  )
+#endif
+{
+ SVR *accumulator = NewStrAccLevel( sa_l );
+ SVL out = (SVL){0,NULL};
+ // ----------
+ if( svl.len ){
+  int bufsize_required = svl.len * n;
+  if( bufsize_required > accumulator->bufsize ) ExpandSVR( accumulator, bufsize_required );
+  if( svl.len == 1 ){ // if it's one character we can just do a nice memset()
+   memset(accumulator->buf, svl.buf[0], n);
+  }else{ // or otherwise
+   int i;
+   char *p = accumulator->buf;
+   for(i=0; i<n; i++){
+    memcpy( p, svl.buf, svl.len );
+    p+=svl.len;
+   }//endif
+  }//endif
+  accumulator->len = bufsize_required;
+  out = SVRtoSVL( accumulator );
+ }//endif 
+ // ----------
+ if( sa_l == 0 ){
+  SAL=-1;
+ }//endif
+ return out;
+}//endproc
 
 // --------------------------------
 

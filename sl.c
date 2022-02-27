@@ -705,6 +705,8 @@ void option( program *prog, int *p ){
   prog->length += tokens_length; prog->maxlen+=tokens_length;
   // process function definitions for imported code
   process_function_definitions(prog,prog->maxlen - tokens_length);
+  // cleanup
+  free(tokens);
   break;
  }
  case opt_seedrnd: // seed random number generator
@@ -957,26 +959,29 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"=", text) ){	//	=
   out =  maketoken( t_equal ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"D", text) ){	//	D
+ if( wordmatch( pos,"D", text) ){	//	D ('data', 'dereference' - indirect access)
   out =  maketoken( t_D ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"A", text) ){	//	A
+ if( wordmatch( pos,"A", text) ){	//	A ('array' - indexed indirect access)
   out =  maketoken( t_A ); goto gettoken_normalout;
  }
+ if( wordmatch( pos,"C", text) ){	//	C ('character' - byte array access with strings)
+  out =  maketoken( t_C ); goto gettoken_normalout;
+ }
 
- if( wordmatch( pos,"L", text) ){	//	A
+ if( wordmatch( pos,"L", text) ){	//	L ('local' - indexed local variable access)
   out =  maketoken( t_L ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"P", text) ){	//	A
+ if( wordmatch( pos,"P", text) ){	//	P ('param' - indexed function parameter access)
   out =  maketoken( t_P ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"F", text) ){	//	A
+ if( wordmatch( pos,"F", text) ){	//	F (function dereference)
   out =  maketoken( t_F ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"$", text) ){	//	$
+ if( wordmatch( pos,"$", text) ){	//	$ (stringvariable dereference)
   out =  maketoken( t_S ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"S", text) ){	//	$
+ if( wordmatch( pos,"S", text) ){	//	S (create temporary stringvariable)
   out =  maketoken( t_SS ); goto gettoken_normalout;
  }
 
@@ -1106,6 +1111,9 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"cat$", text) ){	//	cat$
   out = maketoken( t_catS ); goto gettoken_normalout;
  }
+ if( wordmatch( pos,"string$", text) ){	//	string$
+  out = maketoken( t_stringS ); goto gettoken_normalout;
+ }
  if( wordmatch( pos,"asc$", text) ){	//	asc$
   out = maketoken( t_ascS ); goto gettoken_normalout;
  }
@@ -1118,7 +1126,7 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"cmp$", text) ){	//	cmp$ (strcmp)
   out = maketoken( t_cmpS ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"instr$", text) ){	//	cmp$ (strcmp)
+ if( wordmatch( pos,"instr$", text) ){	//	instr$
   out = maketoken( t_instrS ); goto gettoken_normalout;
  }
 
@@ -1519,10 +1527,12 @@ char* tokenstring(token t){
  case t_equal:		return "=";
  case t_D:		return "D";
  case t_A:		return "A";
+ case t_C:		return "C";
  case t_L:		return "L";
  case t_P:		return "P";
  case t_F:		return "F";
  case t_SS:		return "S";
+ case t_Sf:		return "t_Sf";
  case t_deffn:		return "function";
  case t_local:		return "local";
  case t_ellipsis:	return "...";
@@ -1562,6 +1572,7 @@ char* tokenstring(token t){
  case t_chrS:		return "chr$";
  case t_strS:		return "str$";
  case t_catS:		return "cat$";
+ case t_stringS:	return "string$";
  case t_ascS:		return "asc$";
  case t_valS:		return "val$";
  case t_lenS:		return "len$";
@@ -1879,6 +1890,30 @@ getstringvalue( program *prog, int *pos ){
   prog->getstringvalue_level -= 1;
   return out;
  }
+ case t_stringS:
+ {
+  int n = (int)getvalue(pos,prog);
+  stringval svl = getstringvalue( prog,pos );
+  if( ! svl.len ){
+   return (stringval){NULL,0};
+  }
+  int bufsize_required = svl.len * n;
+  if( bufsize_required > accumulator->bufsize ) stringvar_adjustsizeifnecessary(accumulator, bufsize_required, 1);
+  if( svl.len == 1 ){ // if it's one character we can just do a nice memset()
+   memset(accumulator->string, svl.string[0], n);
+  }else{ // or otherwise
+   int i;
+   char *p = accumulator->string;
+   for(i=0; i<n; i++){
+    memcpy(p, svl.string, svl.len);
+    p += svl.len;
+   }//next
+  }//endif
+  stringval out;
+  out.len = bufsize_required;
+  out.string = accumulator->string;
+  return out;
+ }
  case t_strS:
  {
   double val = getvalue(pos,prog);
@@ -1997,6 +2032,17 @@ void error(char *s){
 int isvalue(unsigned char type){
  return ( type && (type <= VALUES_END) ) ;
 }
+
+char* C_CharacterAccess(int *p, program *prog){
+ stringval svl; int index;
+ svl = getstringvalue(prog,p);
+ index = getvalue(p,prog);
+ if(index<0 || index > svl.len ){
+  print_sourcetext_location( prog, *p - 1);
+  error("C (characteraccess): index out of range\n");
+ }//endif
+ return svl.string + index;
+}//endproc
 
 // ========================================================
 // =========  GETVALUE  ===================================
@@ -2226,6 +2272,11 @@ getvalue(int *p, program *prog){
   print_sourcetext_location( prog, *p - 1);
   error("getvalue: bad array access\n");
   break; 
+ }
+ case t_C:
+ {
+  return (double)(unsigned char)*C_CharacterAccess(p, prog);
+  break;
  }
  case t_P:
  {
@@ -2814,6 +2865,10 @@ void _interpreter_processcaseof(program *prog, int p){ int i;
  return;
 }
 
+// ========================================================
+// =========  INTERPRETER  ================================
+// ========================================================
+
 double
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
@@ -2932,6 +2987,9 @@ interpreter(int p, program *prog){
   p = _interpreter_ifsearch(p+1, prog);
   break;
  }
+ // ========================================================
+ // =========  SET  ========================================
+ // ========================================================
  case t_set: t_set_start:
  {
   t=prog->tokens[p+1]; p+=2;
@@ -2954,6 +3012,12 @@ interpreter(int p, program *prog){
    index = (int)getvalue(&p,prog) + (int)getvalue(&p,prog);
    if(index<0 || index>=prog->vsize) error("interpreter: set: bad array access\n");
    prog->vars[index] = getvalue(&p, prog);
+   break;
+  case t_C:
+   {
+   char *characterpointer = C_CharacterAccess( &p, prog );
+   *characterpointer = (char) getvalue(&p,prog);
+   }
    break;
   case t_P:
    index = prog->sp + prog->current_function->num_locals + (int)getvalue(&p,prog);
