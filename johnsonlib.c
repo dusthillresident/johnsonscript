@@ -5,6 +5,13 @@
 #include <string.h>
 #include "mylib.c"
 
+void Johnsonlib_MemoryAllocFailCheck(void *ptr, char *id){
+ if( ! ptr ){
+  printf("Johnsonlib error: memory allocation failed (%s)\n",id);
+  exit(0);
+ }
+}
+
 double *FirstVarP = NULL;
 int Johnson_alloc_p=0;
 int Johnson_vsize=2048;
@@ -66,29 +73,29 @@ struct StringVariable {
 SVR;
 
 void ExpandSVR( SVR *svr, int newsize ){
+ if( newsize < 0 ){
+  printf("ExpandSVR: bad request\n");
+  exit(0);
+ }
  if( svr == NULL){
   fprintf(stderr,"Johnsonlib: ExpandSVR: svr == NULL\n");
-  // might as well just keep going and let it segfault from here
+  exit(0);
+ }
+ if( svr->bufsize >= newsize ){ 
+  return;
  }
  newsize = newsize+(512-(newsize % 512));
  if( svr->buf == NULL ){
   svr->buf = calloc(1, newsize);
+  Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer");
   svr->bufsize = newsize;
  }else{
   if( svr->bufsize < newsize ){
    svr->buf = realloc(svr->buf, newsize);
-  }
- }
- /*
- if(svr->len >= newsize){
-  #if 0
-  svr->len = newsize-1;
-  #else
-  printf("ExpandSVR: This shouldn't happen\n"); exit(0);
-  #endif
- }
- */
-}
+   Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer reallocation");
+  }//endif bufsize < newsize
+ }//endif buf == NULL
+}//endproc
 
 typedef
 struct StringValue {
@@ -118,7 +125,9 @@ SVR* NewStrAccLevel( int n ){
  if( n == max_stringacc ){
   max_stringacc += 1;
   StringAcc = realloc(StringAcc, max_stringacc * sizeof(void*) );
+  Johnsonlib_MemoryAllocFailCheck( StringAcc, "StringAcc array resize");
   StringAcc[n] = calloc(1,sizeof(SVR));
+  Johnsonlib_MemoryAllocFailCheck( StringAcc[n], "StringAcc SVR" );
  }
  ExpandSVR( StringAcc[n], 256);
  return StringAcc[n];
@@ -150,8 +159,10 @@ int NewStringvar(){
  max_stringvars += 1;
 //printf("%p\n",StringVars);
  StringVars = realloc(StringVars, max_stringvars * sizeof(void*) ); 
+ Johnsonlib_MemoryAllocFailCheck( StringVars, "StringVars array resize");
 //printf("%p\n",StringVars);
  StringVars[i]=calloc(1,sizeof(SVR));
+ Johnsonlib_MemoryAllocFailCheck( StringVars[i], "new stringvar SVR");
  ExpandSVR( StringVars[i], 256 ); 
  StringVars[i]->claimed = 1; 
  StringVars[i]->string_variable_number = i;
@@ -235,6 +246,10 @@ SVL StringS( int sa_l, int n, SVL svl  )
  // ----------
  if( svl.len ){
   int bufsize_required = svl.len * n;
+  if( bufsize_required < 0 ){ 
+   printf("Johnsonlib StringS: string too long\n");
+   exit(0);
+  }
   if( bufsize_required > accumulator->bufsize ) ExpandSVR( accumulator, bufsize_required );
   if( svl.len == 1 ){ // if it's one character we can just do a nice memset()
    memset(accumulator->buf, svl.buf[0], n);
@@ -418,7 +433,9 @@ int Johnson_free_fileslot(){
  }
  i = max_files; max_files += 1;
  Johnson_files = realloc(Johnson_files, max_files * sizeof(void*) ); 
+ Johnsonlib_MemoryAllocFailCheck( Johnson_files, "file info array resize");
  Johnson_files[i] = calloc(1,sizeof(FIL));
+ Johnsonlib_MemoryAllocFailCheck( Johnson_files[i], "new file into struct");
  return i;
 }
 
@@ -742,12 +759,14 @@ void Johnsonlib_init(int argc, char **argv){
  int i;
  // --- string accumulator ---
  StringAcc = calloc(max_stringacc,sizeof(void*));
+ Johnsonlib_MemoryAllocFailCheck( StringAcc, "StringAcc init");
  for(i=0;i<max_stringacc;i++){
   StringAcc[i]=calloc(1,sizeof(SVR));
   ExpandSVR( StringAcc[i], 256 );
  }
  // --- string variables ---
  StringVars = calloc(max_stringvars,sizeof(void*));
+ Johnsonlib_MemoryAllocFailCheck( StringVars, "StringVars init");
  for(i=0;i<max_stringvars;i++){
   StringVars[i]=calloc(1,sizeof(SVR));
   ExpandSVR( StringVars[i], 256 );
@@ -755,6 +774,7 @@ void Johnsonlib_init(int argc, char **argv){
  }
  // --- files ---
  Johnson_files = calloc(max_files,sizeof(void*));
+ Johnsonlib_MemoryAllocFailCheck( Johnson_files, "Johnson_files init");
  for(i=0;i<max_files;i++){
   Johnson_files[i] = calloc(1,sizeof(FIL));
  }
@@ -763,6 +783,7 @@ void Johnsonlib_init(int argc, char **argv){
  Johnson_files[2]->open=1; Johnson_files[2]->write_access=1; Johnson_files[2]->fp = stderr;
  // --- function table ---
  Johnson_function_table = calloc(256,sizeof(void*));
+ Johnsonlib_MemoryAllocFailCheck( Johnson_function_table, "Johnson function table");
  // arguments
  for(i=1; i<argc; i++){
   SetSVR( NewStringvar_svrp(), ToSVL( argv[i] ) );
