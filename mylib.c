@@ -104,12 +104,20 @@ int Rnd(int in){
 #ifndef TimeConflictBullshit
 #include <time.h>
 void SeedRng(){
- XRANDrand=(unsigned long int) time(NULL);
- Rnd(2); Rnd(2);
- XRANDranb=(unsigned long int) ~time(NULL);
- Rnd(2); Rnd(2);
- XRANDranc=(unsigned long int) time(NULL)<<3;
- Rnd(2); Rnd(2);
+ unsigned long int t = time(NULL);
+ XRANDranb=0xE629FDC4;
+ XRANDranc=0x18A7FC21;
+ XRANDrand = (unsigned long int) t;
+ Rnd(2); Rnd(2); if( t & 1 ) Rnd(2);
+ XRANDranb ^= (unsigned long int) t;
+ Rnd(2); Rnd(2); //if( t & 1 ) Rnd(2);
+ XRANDranc ^= (unsigned long int) t<<3;
+ for(t=0; t<2; t++){
+  Rnd(2); Rnd(2); Rnd(2); Rnd(2);
+  Rnd(2); Rnd(2); Rnd(2); Rnd(2); 
+  Rnd(2); Rnd(2); Rnd(2); Rnd(2);
+  Rnd(2); Rnd(2); Rnd(2); Rnd(2);
+ }
 }
 #endif
 

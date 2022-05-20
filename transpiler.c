@@ -1220,14 +1220,16 @@ void translate__caseof(program *prog, int *p){
   translate_value(prog, p);
   PrintMain(";\n");
  }
- while( CurTok.type != t_when && CurTok.type != t_otherwise && CurTok.type != t_endcase ){ 
-  if( CurTok.type == t_deffn || CurTok.type == t_var || CurTok.type == t_stringvar || CurTok.type == t_const ){
-   trans_print_sourcetext_location( prog, *p);
-   PrintErr("translate__caseof: error: Broken caseof structure: garbage in space after caseof value\n");
-   exit(0); 
+ int thislevel=0;
+ while( *p < prog->length && (thislevel || (CurTok.type != t_when && CurTok.type != t_otherwise && CurTok.type != t_endcase)) ){
+  if( CurTok.type == t_caseof  ) thislevel += 1; 
+  if( CurTok.type == t_endcase ) thislevel -= 1;
+  if( CurTok.type == t_deffn || CurTok.type == t_var || CurTok.type == t_stringvar || CurTok.type == t_const || CurTok.type == t_label ){
+   ErrorOut("translate__caseof: error: Broken caseof structure: unsupportable garbage in void area after caseof value\n");
   }
   *p += 1;
  }
+ if( *p >= prog->length ) ErrorOut("translate__caseof: error: went to end of program skipping void area after caseof value\n");
 
  int otherwise=-1;
  int whencount=0;
@@ -2433,6 +2435,28 @@ void check_for_oldstyle_functions(program *prog){
  }//next
 }//endproc
 
+void BlockValidityCheck(program *prog, unsigned char opener, unsigned char closer){
+ int i;
+ int *p = &i; // this is for ErrorOut
+ int level=0;
+ for(i=0; i<prog->length; i++){
+  if( prog->tokens[ i ].type == opener ) level += 1;
+  if( prog->tokens[ i ].type == closer ) level -= 1;
+  if( opener==t_if && !level && prog->tokens[ i ].type == t_else ){
+   ErrorOut("'else' outside an 'if' block\n");
+  }
+ }//next
+ if( level ){
+  while( level ){
+   if( prog->tokens[ i ].type == opener ) level -= 1;
+   if( prog->tokens[ i ].type == closer ) level += 1;
+   i--;
+   if(i<0) ErrorOut("BlockValidityCheck: this should never happen\n");
+  }//endwhile
+  token t; t.type = opener;
+  ErrorOut("Unterminated '%s' block\n", tokenstring( t ) );
+ }//endif
+}//endproc
 
 // ===================================
 int param_order_test_val = 0;
@@ -2467,6 +2491,9 @@ void translate_program(program *prog){
  translate_preprocess_OptionImport(prog);
 
  check_for_oldstyle_functions(prog);
+ BlockValidityCheck(prog, t_if, t_endif);
+ BlockValidityCheck(prog, t_while, t_endwhile);
+ BlockValidityCheck(prog, t_caseof, t_endcase);
  trans_reverse_function_params = does_this_arch_use_reverse_order_evaluation_of_function_params();
  //trans_reverse_function_params=1;
  #if TRANS_CRASHDEBUG 
@@ -2576,7 +2603,7 @@ int main(int argc, char **argv){
 
  if(argc>1){
   prg = init_program( argv[1], Exists(argv[1]) ); 
-  if( Exists(argv[1]) ) trans_file_input_path = argv[1];
+  if( Exists(argv[1]) && strstr(argv[1],"/") ) trans_file_input_path = argv[1];
  }else{
   printf("%s [program text or path to a file containing program text]\nThis will write the translated C program to stdout.\n",argv[0]);
   return 0;
