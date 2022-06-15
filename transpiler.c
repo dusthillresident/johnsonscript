@@ -2128,6 +2128,13 @@ void translate_command(program *prog, int *p){
    *p += 1;
   } break;
 */
+  #if allow_debug_commands
+  case t_tb:
+  {
+   PrintMain("tb();\n");
+   *p += 1;
+  } break;
+  #endif
   default:
    ErrorOut("translate_command: FAILURE: Not supported or error, '%s'\n",tokenstring(prog->tokens[ *p ]));
  }
