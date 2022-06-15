@@ -1,0 +1,75 @@
+startgraphics 640 480
+refreshmode1
+
+while 1
+ gcol rnd pow 256 3;
+ trifill rnd winw rnd winh rnd winw rnd winh rnd winw rnd winh 
+ refresh
+ wait * 5 16.6 
+endwhile
+
+function trifill x1 y1 x2 y2 x3 y3 local x y xx1 yy1 xx2 yy2;
+ set xx1 min x3 min x1 x2;
+ set xx2 max x3 max x1 x2;
+ set yy1 min y3 min y1 y2;
+ set yy2 max y3 max y1 y2;
+ set x xx1
+ while < x xx2
+  set y yy1
+  while < y yy2
+    if tripoint x1 y1 x2 y2 x3 y3 x y
+     pixel x y
+    endif
+   set y + y 2
+  endwhile
+  set x + x 2
+ endwhile
+endfunction
+
+function tripoint x1 y1 x2 y2 x3 y3 px py;
+ if < px min x1 min x2 x3
+  endfunction
+ endif
+ if < py min y1 min y2 y3
+  endfunction
+ endif
+ if > px max x1 max x2 x3
+  endfunction
+ endif
+ if > py max y1 max y2 y3
+  endfunction
+ endif 
+
+ if ! lpoint x1 y1 x2 y2 x3 y3
+  swap @x2 @x3
+  swap @y2 @y3 
+ endif
+        
+ if lpoint x1 y1 x2 y2 px py
+  if lpoint x2 y2 x3 y3 px py
+   if lpoint x3 y3 x1 y1 px py
+    return 1
+   endif
+  endif
+ endif
+endfunction
+
+function lpoint x1 y1 x2 y2 px py;
+return ^ < x2 x1 > py + y1 * (/ ( - y2 y1 ) - x2 x1) - px x1 ;
+
+function min a b;
+ if < a b
+  return a 
+ endif
+return b
+function max a b;
+ if > a b
+  return a 
+ endif
+return b
+
+function swap a b local c;
+ set c Da
+ set Da Db
+ set Db c
+endfunction; 

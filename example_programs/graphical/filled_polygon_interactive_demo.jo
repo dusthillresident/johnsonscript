@@ -1,0 +1,312 @@
+constant step 3;
+
+
+
+option "vsize" 5000;
+variable ox oy ob oz testarray;
+set testarray alloc 1000;
+startgraphics 640 480
+filled_polygon_interactive_demo
+quit
+
+
+
+function lpoint x1 y1 x2 y2 px py;
+ if = x1 x2 set x1 + x1 0.00000001 endif # really stupid hack. I don't understand why it doesn't work without this
+return ^ < x2 x1 > py + y1 * (/ ( - y2 y1 ) - x2 x1) - px x1 ;
+
+
+
+function swap a b local c;
+ set c Da
+ set Da Db
+ set Db c
+endfunction; 
+
+
+
+function min a b;
+ if < a b
+  return a 
+ endif
+return b
+
+
+
+function max a b;
+ if > a b
+  return a 
+ endif
+return b
+
+
+
+function tripoint x1 y1 x2 y2 x3 y3 px py;
+ if < px min x1 min x2 x3
+  endfunction
+ endif
+ if < py min y1 min y2 y3
+  endfunction
+ endif
+ if > px max x1 max x2 x3
+  endfunction
+ endif
+ if > py max y1 max y2 y3
+  endfunction
+ endif 
+
+ if ! lpoint x1 y1 x2 y2 x3 y3
+  swap @x2 @x3
+  swap @y2 @y3 
+ endif
+        
+ if lpoint x1 y1 x2 y2 px py
+  if lpoint x2 y2 x3 y3 px py
+   if lpoint x3 y3 x1 y1 px py
+    return 1
+   endif
+  endif
+ endif
+endfunction
+
+
+
+function fillpolyn n p local x y i r nn xl1 xl2 yl1 yl2;
+ set nn - n % n 6
+
+ set xl1 +1 winw
+ set yl1 +1 winh
+ set xl2 -1
+ set yl2 -1
+ set i 0
+ while < i n
+  if < Ap i xl1
+   set xl1 Ap i 
+  endif
+  if > Ap i xl2
+   set xl2 Ap i
+  endif
+  set i + i 1
+  if < Ap i yl1
+   set yl1 Ap i 
+  endif
+  if > Ap i yl2
+   set yl2 Ap i
+  endif
+  set i + i 1
+ endwhile
+
+ set x xl1
+ while < x xl2
+  set y yl1
+  while < y yl2
+   set i 0
+   set r 0
+   while < i nn 
+    set r ^ r tripoint	Ap 0             Ap 1 
+			Ap( %(+i 2) n )  Ap( %(+i 3) n )
+			Ap( %(+i 4) n )  Ap( %(+i 5) n )
+                        x                y
+    set i + i 2
+   endwhile #i
+   if r
+    #pixel x y
+    rectanglef x y step
+   endif
+   set y + y step
+  endwhile #y
+  set x + x step
+ endwhile #x
+
+ gcol -1 set i 0 while < i n  line  Ap(    i      )  Ap( %(+i 1) n )	Ap( %(+i 2) n )  Ap( %(+i 3) n )  set i + i 2 endwhile
+
+endfunction
+
+
+
+function bordertext x y s str bg fg local i;
+ gcol bg
+ set i -1
+ while < i 2
+  drawtext (+ x i) y s $str
+  drawtext x (+ y i) s $str
+  set i + i 2
+ endwhile
+ gcol fg
+ drawtext x y s $str
+endfunction
+
+
+
+function notepoint x y local s;
+ gcol 255 0 0
+ pixel x y
+ circle x y 10
+ set s S cat$ "x: " str$x ;
+ bordertext x (+ y 10)  0 s 8323072 16711680
+ set $s cat$ "y: " str$y ;
+ bordertext x (+ y 19 ) 0 s 8323072 16711680
+ option "unclaim" s
+endfunction
+
+
+
+function mousemoved local x y b z result; 
+ set x mousex
+ set y mousey
+ set b mouseb
+ set z mousez
+ set result || != x ox != y oy != b ob != z oz
+ set ox x
+ set oy y
+ set ob b
+ set oz z
+return result
+
+
+
+function testfp_redraw s local i;
+ set i Ds
+ cls 
+ gcol 64 64 255;
+ fillpolyn i testarray
+ while i
+  notepoint Atestarray(-i 2) Atestarray(- i 1)
+  set i - i 2
+ endwhile
+endfunction
+
+
+
+function drawcentredtext ... local i y;
+ set y - >> winh 1 << _num_params 3
+ set i 0
+ while < i _num_params
+  drawtext (- >> winw 1 << len$$Pi 2) y 1 $Pi
+  set y + y 16
+  set i + i 1
+ endwhile
+endfunction
+
+
+
+function filled_polygon_interactive_demo local i j dx dy;
+ refreshmode 1
+
+ while ! & mouseb 1
+  cls
+  if expose
+   drawcentredtext  @"======================================="
+                    @"=== Filled Polygon interactive demo ==="
+                    @"======================================="
+                    @" "
+                    @"Left click to add points, or"
+                    @"left click & drag on points to move them."
+                    @"Middle click on points to erase them."
+                    @"Right click & drag to move the entire shape."
+                    @" "
+                    @"Left click to begin";
+   refresh
+  endif
+  wait 16.6
+ endwhile
+ while mouseb
+  wait 1
+ endwhile
+
+ set i 0
+ set Atestarray(i) 301
+ set Atestarray(+i 1) 108
+ set i + i 2
+ set Atestarray(i) 182
+ set Atestarray(+i 1) 227
+ set i + i 2
+ set Atestarray(i) 301
+ set Atestarray(+i 1) 346
+ set i + i 2
+ set Atestarray(i) 420
+ set Atestarray(+i 1) 227
+ set i + i 2;
+ testfp_redraw @i
+ refresh
+
+ while 1
+  caseof mouseb;
+   when 1; # add or move point
+    # if we click near a point, move that point
+    set j 0
+    while < j i
+     if < (+ ( abs - mousex Atestarray( j ) ) ( abs - mousey Atestarray( + j 1 ) ) ) 12
+      .moving_a_point
+      while mouseb
+       set Atestarray(j) mousex
+       set Atestarray(+j 1) mousey
+       testfp_redraw @i
+       refresh
+       wait 16.6
+      endwhile
+      goto ".out"
+     endif
+     set j + j 2
+    endwhile
+    # but otherwise we make a new point
+    set Atestarray(i) mousex
+    set Atestarray(+i 1) mousey
+    set i + i 2;
+    goto ".moving_a_point"
+   when 2; # erase point
+    set j 0
+    while < j i
+     if < (+ ( abs - mousex Atestarray( j ) ) ( abs - mousey Atestarray( + j 1 ) ) ) 12;
+      while < j i
+       set Atestarray(j) Atestarray(+ j 2)
+       set Atestarray(+j 1) Atestarray(+ j 3)
+       set j + j 2
+      endwhile
+      set i - i 2; 
+      testfp_redraw @i; refresh
+      goto ".out"
+     endif
+     set j + j 2
+    endwhile
+   when 4; # move all points
+    while & mouseb 4;
+     set ox mousex
+     set oy mousey
+     if || dx dy
+      set j 0;
+      while < j i
+       set Atestarray(j) + Atestarray(j) dx
+       set j + j 1
+       set Atestarray(j) + Atestarray(j) dy
+       set j + j 1
+      endwhile # j
+      testfp_redraw @i
+      refresh
+     else
+      wait 16.6
+     endif 
+     set dx - mousex ox
+     set dy - mousey oy
+    endwhile # right mouse button held
+   when 0;
+   otherwise
+   print mouseb;
+  endcase
+ 
+  .out
+
+  while mouseb
+   wait 1
+  endwhile
+
+  while ! mousemoved
+   if expose
+    testfp_redraw @i
+    refresh
+   endif 
+   wait 1
+  endwhile
+
+ endwhile
+endfunction
