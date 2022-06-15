@@ -270,6 +270,8 @@ function filled_polygon_interactive_demo local i j dx dy;
      set j + j 2
     endwhile
    when 4; # move all points
+    set dx 0
+    set dy 0
     while & mouseb 4;
      set ox mousex
      set oy mousey
