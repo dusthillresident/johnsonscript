@@ -95,7 +95,11 @@ function fillpolyn n p local x y i r nn xl1 xl2 yl1 yl2;
   endif
   set i + i 1
  endwhile
-
+ if < xl1 0 set xl1 0 endif
+ if > xl2 winw set xl2 winw endif
+ if < yl1 0 set yl1 0 endif
+ if > yl2 winh set yl2 winh endif
+ 
  set x xl1
  while < x xl2
   set y yl1
@@ -190,20 +194,21 @@ endfunction
 
 
 
-function filled_polygon_interactive_demo local i j dx dy;
+function filled_polygon_interactive_demo local i j x y dx dy dz da d a omz;
  refreshmode 1
 
  while ! & mouseb 1
   cls
   if expose
    drawcentredtext  @"======================================="
-                    @"=== Filled Polygon interactive demo ==="
+                    @"=== Filled Polygon Interactive Demo ==="
                     @"======================================="
                     @" "
                     @"Left click to add points, or"
                     @"left click & drag on points to move them."
                     @"Middle click on points to erase them."
-                    @"Right click & drag to move the entire shape."
+                    @"Right click & drag to move the shape."
+                    @"Use the mousewheel to rotate the shape."
                     @" "
                     @"Left click to begin";
    refresh
@@ -230,6 +235,8 @@ function filled_polygon_interactive_demo local i j dx dy;
  testfp_redraw @i
  refresh
 
+ set omz mousez
+ 
  while 1
   caseof mouseb;
    when 1; # add or move point
@@ -293,8 +300,27 @@ function filled_polygon_interactive_demo local i j dx dy;
     endwhile # right mouse button held
    when 0;
    otherwise
-   print mouseb;
+   print "mouse button:" mouseb;
   endcase
+
+  # rotate the shape with the mousewheel
+  if ! = omz mousez
+   set dz - omz mousez
+   set da * dz / (* _pi 2) * 0.125 360
+   set x mousex
+   set y mousey
+   set j 0
+   while < j i
+    set d sqr + pow ( - x Atestarray j ) 2 pow ( - y Atestarray + j 1) 2
+    set a atan2 (- (Atestarray + j 1) y ) (- (Atestarray j) x )
+    set Atestarray(j)     int + x * d cos (+ a da )
+    set Atestarray(+ j 1) int + y * d sin (+ a da )
+    set j + j 2
+   endwhile
+   testfp_redraw @i
+   refresh
+  endif
+  set omz mousez
  
   .out
 
