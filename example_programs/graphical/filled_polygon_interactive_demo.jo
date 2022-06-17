@@ -186,7 +186,7 @@ function drawcentredtext ... local i y;
  set y - >> winh 1 << _num_params 3
  set i 0
  while < i _num_params
-  drawtext (- >> winw 1 << len$$Pi 2) y 1 $Pi
+  drawtext (- >> winw 1 << len$$P(i) 2) y 1 $P(i)
   set y + y 16
   set i + i 1
  endwhile
