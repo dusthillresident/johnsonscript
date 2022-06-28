@@ -1,5 +1,6 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/Xatom.h>
 #include <stdio.h>
 #include <stdlib.h> 
 #include <string.h>
@@ -9,6 +10,12 @@
 //#include "mylib.c"
 
 #include <X11/extensions/Xdbe.h>
+
+
+#ifndef GUI_DEBUG
+ #define GUI_DEBUG 0
+#endif
+#define CopyPasteDebug 0
 
 
 //#define NewBase_HaventRemovedThisYet
@@ -58,6 +65,617 @@ void Wait(int w);
 #define MyInit(w,h) (NewBase_MyInit(w,h,0))
 #define MyInit_Threading(w,h) (NewBase_MyInit(w,h,1))
 
+
+// ===========================================================================================================
+// ===========================================================================================================
+// ================ HORRIBLE GARBAGE FOR MANAGING CLIPBOARD ==================================================
+// ===========================================================================================================
+// ===========================================================================================================
+
+
+volatile char *PasteBuffer = NULL; volatile size_t PasteBufferContentsSize = 0; // this buffer holds the contents of the clipboard we receive from others
+//volatile Atom PasteBufferContentsAtom;
+volatile int CopyPasteOngoing = 0; // 1 == paste requested, 2 == incoming incr transfer, 3 == outgoing incr transfer
+#define CPO__PASTE_CONVERSION_REQUESTED 1
+#define CPO__INCOMING_INCR 2
+#define CPO__OUTGOING_INCR 3
+volatile int CopyPasteRequested = 0; // 0 == no request right now, 1 == paste requested, 2 == copy requested
+#define CPR__PASTE_REQUESTED 1
+#define CPR__COPY_REQUESTED 2
+volatile int PasteSucceeded = 0;
+volatile Atom PasteRequestTypeAtom;
+char *CopyBuffer = NULL; size_t CopyBufferContentsSize = 0; Atom CopyBufferContentsAtom; // this buffer holds the contents of the clipboard when we are the owner of the CLIPBOARD selection
+volatile char *NewCopyBuffer; volatile size_t NewCopyBufferContentsSize = 0; volatile Atom NewCopyBufferContentsAtom; // in order to Copy, we load stuff into this buffer, then ask the NewBase thread to put it onto the clipboard by setting CopyPasteRequested to CPR__COPY_REQUESTED
+Window CopyIncrRequestorWindow;
+Atom   CopyIncrPropertyAtom;
+unsigned int    CopyIncrOffset = 0;
+int CopyIncrChunkSize = 0;
+//Time CopyPasteLastEventTime;
+#define COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT 400
+int CopyPasteIncrTimeoutCounter = 0;
+Atom CopyIncrTargetAtom;
+Atom MyPasteAtom;
+Atom MyClipboardAtom;
+Atom MyTargetsAtom;
+Atom MyIncrAtom;
+Atom MyStringAtom;
+Atom MyUtf8Atom;
+Atom MyBmpAtom;
+
+// internal function
+int NB_ItemsizeConversion(int actual_format){
+ int item_size;
+ switch(actual_format){
+  case 8:  item_size = sizeof(char); break;
+  case 16: item_size = sizeof(short); break;
+  case 32: item_size = sizeof(long); break;
+  default:
+  #if CopyPasteDebug
+   printf("CopyPasteDebug: NB_ItemsizeConversion: bad actual_format\n"); tb(); exit(0);
+  #endif
+   return 0;
+ }
+ return item_size;
+}
+
+// internal function
+void NB_CopyPasteRequestHandler(){
+ #if CopyPasteDebug
+ printf("CopyPasteDebug: entering NB_CopyPasteRequestHandler()\n");
+ #endif
+ switch( CopyPasteRequested ){
+  case CPR__PASTE_REQUESTED: {
+   #if CopyPasteDebug
+   printf("CopyPasteDebug: Handling Paste request\n");
+   #endif
+   Window owner = XGetSelectionOwner(Mydisplay, MyClipboardAtom);
+   if( owner == Mywindow ){ // we own the clipboard, that means we already have the clipboard contents in CopyBuffer
+    if( PasteRequestTypeAtom == CopyBufferContentsAtom ){
+     if(PasteBuffer){ // when there's a paste request, we can be sure the other thread is not accessing PasteBuffer, because it is waiting for the paste to complete
+      free((void*)PasteBuffer);
+     }
+     #if CopyPasteDebug
+     if( ! CopyBuffer ){
+      tb();
+      printf("CopyPasteDebug: paste requested and we own the clipboard but CopyBuffer is NULL, this should never happen\n");
+      exit(0);
+     }
+     #endif
+     PasteBuffer = malloc(CopyBufferContentsSize);
+     if(! PasteBuffer){
+      printf("malloc failed during Paste\n");
+      exit(0);
+     }
+     memcpy((void*)PasteBuffer,(void*)CopyBuffer,CopyBufferContentsSize);
+     PasteBufferContentsSize = CopyBufferContentsSize;
+     //---
+     PasteSucceeded = 1;
+     CopyPasteOngoing   = 0;
+     CopyPasteRequested = 0;
+    }else{
+     PasteSucceeded = 0;
+     CopyPasteOngoing   = 0;
+     CopyPasteRequested = 0;
+    }
+    return;
+   }//endif we already own the clipboard
+   if( owner == None ){ // if nobody owns the clipboard
+    PasteSucceeded = 0;
+    CopyPasteOngoing   = 0;
+    CopyPasteRequested = 0;
+    return;
+   }//endif nobody owns the clipboard, that is, clipboard is empty & nothing to paste
+   // if we got this far, it means the clipboard has something on it. let's request conversion of the clipboard to the sort of data we want
+   CopyPasteOngoing = CPO__PASTE_CONVERSION_REQUESTED;
+   XConvertSelection( Mydisplay,
+                      MyClipboardAtom,
+                      PasteRequestTypeAtom,
+                      MyPasteAtom,
+                      Mywindow,
+                      CurrentTime );
+   // waiting for SelectionNotify
+   return;
+  } break;//end of paste request
+  case CPR__COPY_REQUESTED: {
+   #if CopyPasteDebug
+   printf("CopyPasteDebug: Handling Copy request\n");
+   #endif
+   CopyBuffer = (char*)NewCopyBuffer;
+   CopyBufferContentsSize = NewCopyBufferContentsSize;
+   CopyBufferContentsAtom = NewCopyBufferContentsAtom;
+   NewCopyBuffer = NULL; NewCopyBufferContentsSize=0;
+   XSetSelectionOwner(Mydisplay, MyClipboardAtom, Mywindow, CurrentTime); 
+   CopyPasteRequested = 0;
+  } break;
+ }//endcase
+}//endproc
+
+// internal function
+void NB_SelectionNotifyHandler( XSelectionEvent *sev ){
+ switch( CopyPasteOngoing ){
+  default: {
+   #if CopyPasteDebug 
+   printf("CopyPasteDebug: NB_SelectionNotifyHandler: unhandled!\n");
+   #endif
+  } break;
+  case CPO__PASTE_CONVERSION_REQUESTED: { // waiting for incoming data, after having requested conversion of the CLIPBOARD selection
+   if( sev->property == None ){
+    // conversion could not be performed. maybe the clipboard doesn't contain text, or there's some other problem, like the clipboard owner doesn't support the target we requested
+    PasteSucceeded = 0;
+    CopyPasteOngoing   = 0;
+    CopyPasteRequested = 0;
+    return;
+   }else{
+    Atom da, type;
+    int actual_format_return;
+    unsigned long nitems_return, bytes_after_return, datasize;
+    unsigned char *prop_ret = NULL;
+    /* PENISEXPERT: Dummy call to get type and size. */
+    XGetWindowProperty( Mydisplay, 
+                        Mywindow,
+                        MyPasteAtom,
+                        0, // long_offset
+                        0, // long_length
+                        False, // delete
+                        AnyPropertyType, // req_type
+                        &type, // actual_type_return
+                        &actual_format_return,
+                        &nitems_return,
+                        &bytes_after_return, //bytes_after_return
+                        &prop_ret ); // prop_return
+    XFree(prop_ret);
+    if( type != MyIncrAtom ){
+     #if CopyPasteDebug 
+     printf("CopyPasteDebug: Doing normal paste (not incr),");
+     printf(" property size: %lu\n", bytes_after_return);
+     #endif
+     /* PENISEXPERT: Read the data in one go. */
+     XGetWindowProperty(Mydisplay,
+                        Mywindow,
+                        MyPasteAtom,
+                        0,			//long_offset
+                        bytes_after_return,	//long_length
+                        False,			//delete
+                        AnyPropertyType,	//req_type
+                        &da,			//actual_type_return
+                        &actual_format_return,	//actual_format_return
+                        &nitems_return,		//nitems_return
+                        &bytes_after_return,	//bytes_after_return
+                        &prop_ret);
+     free( (void*)PasteBuffer ); // I checked that it's safe to pass NULL to free. "If ptr is NULL, no operation is performed."
+     datasize = nitems_return * NB_ItemsizeConversion( actual_format_return ) ;
+     PasteBufferContentsSize = datasize;
+     PasteBuffer = calloc( 1, 1 + datasize );
+     
+     memcpy( (void*)PasteBuffer, prop_ret, datasize );
+     //printf("%s", prop_ret); //fflush(stdout);
+     XFree(prop_ret);
+
+     /* PENISEXPERT Signal the selection owner that we have successfully read the
+      *             data. */
+     XDeleteProperty(Mydisplay, Mywindow, MyPasteAtom);
+
+     PasteSucceeded = 1;
+     CopyPasteOngoing   = 0;
+     CopyPasteRequested = 0;
+     return;
+    }else{
+     #if CopyPasteDebug 
+     printf("CopyPasteDebug: Starting incr paste\n");
+     #endif
+     // ----
+     free( (void*)PasteBuffer ); 
+     PasteBuffer = NULL;
+     PasteBufferContentsSize=0;
+     //CopyPasteLastEventTime = sev->time;
+     CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT;
+     CopyPasteOngoing = CPO__INCOMING_INCR;
+     XDeleteProperty(Mydisplay, Mywindow, MyPasteAtom); //delete the event to start the incr process
+     return;
+    }
+
+   }
+  } break; // end of 'waiting for incoming data' block
+  case CPO__INCOMING_INCR: { // incr process. as far as I can tell, we shouldn't receive a SelectionNotify while this is ongoing and even if we do, just don't do anything with it
+   #if CopyPasteDebug 
+   printf("SelectionNotify during incr paste. This isn't supposed to happen\n");
+   #endif
+  } break;
+ }//endcase
+}//endproc
+
+// internal function
+void NB_PropertyNotifyHandler(){
+ #if CopyPasteDebug 
+ printf("NB_PropertyNotifyHandler\n");
+ #endif
+ switch( CopyPasteOngoing ){
+  case CPO__INCOMING_INCR: {
+   if( Myevent.xproperty.atom == MyPasteAtom && Myevent.xproperty.state == PropertyNewValue ){
+    #if CopyPasteDebug 
+    printf("CopyPasteDebug: NB_PropertyNotifyHandler: continuing incr Paste\n");
+    #endif
+    // update time for timeout check
+    //CopyPasteLastEventTime = Myevent.xproperty.time; // I don't think I can find a way to make this work. I'll leave it here for now
+    CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT; // instead I have to do this shit 
+    // xgetproperty, check the size and format of the property.
+    Atom actual_type_return;
+    int actual_format_return;
+    unsigned long nitems_return, bytes_after_return;
+    unsigned char *prop_return;
+    int item_size=0, datasize;
+    XGetWindowProperty( Mydisplay,
+                        Mywindow,
+                        MyPasteAtom,
+                        0,
+			0,
+			False,
+			AnyPropertyType,
+			&actual_type_return,
+                        &actual_format_return,
+                        &nitems_return,
+                        &bytes_after_return,
+                        &prop_return );
+    XFree(prop_return); //this seems to necessarily happen after this first initial XGetWindowProperty
+    // if property data size is 0, that means we have completed the incr transfer jesus christ yeah.
+    #if CopyPasteDebug 
+    printf("CopyPasteDebug: bytes_after_return == %lu\n",bytes_after_return); 
+    #endif
+    if( bytes_after_return == 0 ){
+     #if CopyPasteDebug 
+     printf("CopyPasteDebug: Completed incr paste transfer\n");
+     #endif
+     XDeleteProperty( Mydisplay, Mywindow, MyPasteAtom );
+     PasteSucceeded = 1;
+     CopyPasteOngoing   = 0;
+     CopyPasteRequested = 0;
+     return;
+    }
+    // if we get here, the property contains text. we obtained the size in bytes_after_return before.
+    // now we get the chunk of data.
+    XGetWindowProperty( Mydisplay,
+                        Mywindow,
+                        MyPasteAtom,
+                        0,
+			(long) bytes_after_return,
+			False,
+			AnyPropertyType,
+			&actual_type_return,
+                        &actual_format_return,
+                        &nitems_return,
+                        &bytes_after_return,
+                        &prop_return );
+    // then do this: allocate memory (or extra memory) for the data, and load it in
+    item_size = NB_ItemsizeConversion(actual_format_return);
+    datasize = nitems_return * item_size;
+    
+    if( !PasteBuffer ){
+     PasteBuffer = malloc( datasize );
+     if( ! PasteBuffer ){
+      printf("malloc failed during Paste\n");
+      exit(0);
+     }
+     //PasteBufferContentsSize = datasize;
+    }else{
+     PasteBuffer = realloc( (void*)PasteBuffer, PasteBufferContentsSize + datasize );
+     if(! PasteBuffer ){
+      printf("realloc failed during Paste\n");
+      exit(0);
+     }
+    }
+    memcpy( (void*)&PasteBuffer[PasteBufferContentsSize], prop_return, datasize );
+    PasteBufferContentsSize += datasize;
+
+    XFree( prop_return );
+    XDeleteProperty( Mydisplay, Mywindow, MyPasteAtom );
+    XFlush( Mydisplay );
+
+    #if CopyPasteDebug 
+    printf("CopyPasteDebug: received incr chunk\n");
+    #endif
+
+    return;
+    
+   }else{
+    #if CopyPasteDebug 
+    printf("CopyPasteDebug: ignoring irrelevent PropertyNotify during incoming incr transfer\n");
+    #endif
+   }//endif
+  } break; // end of block: dealing with an incoming incr transfer
+  case CPO__OUTGOING_INCR: {
+
+   #if CopyPasteDebug 
+   printf("CopyPasteDebug: NB_PropertyNotifyHandler: continuing incr Copy\n");
+   #endif
+
+   if( Myevent.xproperty.state != PropertyDelete ){
+    #if CopyPasteDebug 
+    printf("CopyPasteDebug: ignoring irrelevent PropertyNotify during outgoing incr transfer\n");
+    #endif
+    return;
+   }
+   // update time for timeout check
+   //CopyPasteLastEventTime = Myevent.xproperty.time; // I can't make this work but I will leave it here in case I find a way later
+   CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT; // sadly I have to do this shit
+   // alright lets go.
+   int thischunksize = CopyIncrChunkSize;
+   if( (CopyIncrOffset + CopyIncrChunkSize) >= CopyBufferContentsSize ){
+    thischunksize = (CopyBufferContentsSize % CopyIncrChunkSize);
+   }else{
+    thischunksize = CopyIncrChunkSize;
+   }
+   #if CopyPasteDebug 
+   printf("CopyPasteDebug: thischunksize is %d\n", thischunksize);
+   #endif
+   if( CopyIncrOffset < CopyBufferContentsSize ){
+    #if CopyPasteDebug
+    printf("sending chunk\n");
+    #endif
+    XChangeProperty( Mydisplay,
+                     CopyIncrRequestorWindow,
+                     CopyIncrPropertyAtom,
+                     CopyIncrTargetAtom,
+                     8, PropModeReplace, &((unsigned char*)CopyBuffer)[CopyIncrOffset],
+                     (int) thischunksize );
+    CopyIncrOffset += thischunksize;
+   }else{
+    #if CopyPasteDebug 
+    printf("finished outgoing incr transfer\n");
+    #endif
+    XChangeProperty(Mydisplay, CopyIncrRequestorWindow, CopyIncrPropertyAtom, CopyIncrTargetAtom, 8, PropModeReplace, 0, 0);
+    //XSelectInput(Mydisplay, CopyIncrRequestorWindow, 0); // probably not necessary
+    CopyPasteOngoing = 0;
+   }
+   XFlush(Mydisplay);
+  } break; // end of block: doing an outgoing incr transfer
+ }//endcase
+}//endproc
+
+
+// internal function
+// returns 1 if successfully obtained data from clipboard, otherwise returns 0
+int _NB_PasteData(Atom request_type){
+ if(!newbase_is_running){
+  return 0;
+ }
+ while( CopyPasteRequested ){
+  Wait(1);
+ }
+ PasteRequestTypeAtom = request_type;
+ CopyPasteRequested = CPR__PASTE_REQUESTED;
+ #if CopyPasteDebug 
+ int c=0;
+ #endif
+ while( CopyPasteRequested ){
+  #if CopyPasteDebug 
+  c++;
+  #endif
+  Wait(1);
+ }
+ #if CopyPasteDebug 
+ printf("CopyPasteDebug: NB_PasteData wait count: %d\n",c);
+ #endif
+ return PasteSucceeded;
+}
+
+// intended to be used externally
+int NB_PasteBmp(){
+ return _NB_PasteData(MyBmpAtom);
+}
+
+// intended to be used externally
+int NB_PasteText(){
+ return _NB_PasteData(MyUtf8Atom) || _NB_PasteData(MyStringAtom);
+}
+
+
+// ==============================================================================
+// === 'Copy', putting stuff ON the clipboard (sending data to other clients) ===
+// ==============================================================================
+
+
+// internal function
+void NB_Copy_DenyRequest(XSelectionRequestEvent *sev){
+ XSelectionEvent ssev;
+ /* PENISEXPERT: All of these should match the values of the request. */
+ ssev.type = SelectionNotify;
+ ssev.requestor = sev->requestor;
+ ssev.selection = sev->selection;
+ ssev.target = sev->target;
+ ssev.property = None;  /* PENISEXPERT: signifies "nope" */
+ ssev.time = sev->time;
+ XSendEvent(Mydisplay, sev->requestor, True, NoEventMask, (XEvent *)&ssev);
+}
+
+// internal function
+void NB_SelectionRequestHandler(){
+ if( CopyPasteOngoing ){
+  // only bother to deal with one at a time
+  tb();
+  NB_Copy_DenyRequest( &Myevent.xselectionrequest );
+  return;
+ }
+ if( XGetSelectionOwner(Mydisplay, MyClipboardAtom) != Mywindow ){
+  // we don't own the selection, I don't know why we are getting a SelectionRequest
+  #if CopyPasteDebug 
+  printf("CopyPasteDebug: got SelectionRequest but we don't own the selection\n");
+  #endif
+  NB_Copy_DenyRequest( &Myevent.xselectionrequest );
+  return;
+ }
+ if( ! CopyBuffer ){
+  // oh no!!!!! how did this happen?
+  #if CopyPasteDebug 
+  printf("CopyPasteDebug: SelectionRequest and we own the clipboard but the copy buffer is empty, should never happen, exiting\n");
+  #endif
+  exit(0);
+ }
+
+ // ----
+ // ----
+
+ Window requestor_window  = Myevent.xselectionrequest.requestor;
+ Atom requestors_property = Myevent.xselectionrequest.property;
+ Atom requested_target    = Myevent.xselectionrequest.target;
+ unsigned int chunk_size = 0;
+
+ if( requested_target == MyTargetsAtom ){
+
+  #if CopyPasteDebug 
+  printf("CopyPasteDebug: SelectionRequestHandler: doing TARGETS\n");
+  #endif
+
+  XSelectionRequestEvent *sev = (XSelectionRequestEvent*)&Myevent.xselectionrequest;
+  Atom type_atoms[] = { MyTargetsAtom, CopyBufferContentsAtom };
+  XChangeProperty( Mydisplay,
+                   requestor_window,
+                   requestors_property,
+                   XA_ATOM,
+                   32, PropModeReplace, (unsigned char*) type_atoms,
+                   (int) (sizeof(type_atoms) / sizeof(Atom)) );
+  XEvent response;
+  response.xselection.type = SelectionNotify;
+  response.xselection.property = requestors_property;
+  response.xselection.display = sev->display;
+  response.xselection.requestor = requestor_window;
+  response.xselection.selection = sev->selection;
+  response.xselection.target = sev->target;
+  response.xselection.time = sev->time;
+  XSendEvent(Mydisplay, requestor_window, 0, 0, &response);
+  XFlush(Mydisplay);
+  
+ }else if( requested_target == CopyBufferContentsAtom || ( requested_target == MyUtf8Atom && CopyBufferContentsAtom == MyStringAtom ) ){
+
+  #if CopyPasteDebug 
+  printf("CopyPasteDebug: SelectionRequestHandler: doing paste\n");
+  if( requested_target == MyUtf8Atom ){
+   printf("CopyPasteDebug: 'UTF8_STRING' requested, pretending we have that instead of just 'STRING' and serving the request\n");
+  }
+  #endif
+
+  CopyIncrTargetAtom = requested_target;
+
+  unsigned int chunk_size = XExtendedMaxRequestSize(Mydisplay) / 4;
+  if( ! chunk_size ){
+   chunk_size = XMaxRequestSize(Mydisplay) / 4;
+  }
+  if( CopyBufferContentsSize > chunk_size ){
+
+   #if CopyPasteDebug 
+   printf("CopyPasteDebug: CopyBufferContentsSize large enough, starting incr copy (outgoing incr)\n");
+   #endif
+
+   CopyPasteOngoing = CPO__OUTGOING_INCR;
+
+   CopyIncrRequestorWindow = requestor_window;
+   CopyIncrPropertyAtom = requestors_property;
+
+   // We need to know when this requesting window changes its properties
+   XChangeProperty(Mydisplay, requestor_window, requestors_property, MyIncrAtom, 32, PropModeReplace, 0, 0);
+   XSelectInput(Mydisplay, requestor_window, PropertyChangeMask);
+
+   XSelectionRequestEvent *sev = (XSelectionRequestEvent*)&Myevent.xselectionrequest;
+   XEvent response;
+   response.xselection.type = SelectionNotify;
+   response.xselection.property = requestors_property;
+   response.xselection.display = sev->display;
+   response.xselection.requestor = requestor_window;
+   response.xselection.selection = sev->selection;
+   response.xselection.target = sev->target;
+   response.xselection.time = sev->time;
+   XSendEvent(Mydisplay, requestor_window, 0, 0, &response);
+   XFlush(Mydisplay);
+
+   CopyIncrOffset = 0;    
+   CopyIncrChunkSize = chunk_size;
+   //CopyPasteLastEventTime = sev->time;
+   CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT;
+
+   return; 
+ 
+  }else{
+   #if CopyPasteDebug 
+   printf("CopyPasteDebug: CopyBufferContentsSize small enough, sending data all at once\n");
+   #endif
+   XSelectionEvent ssev;
+   XChangeProperty(Mydisplay, requestor_window, requestors_property, requested_target, 8, PropModeReplace,
+                    (unsigned char *)CopyBuffer, CopyBufferContentsSize);
+   ssev.type = SelectionNotify;
+   ssev.requestor = Myevent.xselectionrequest.requestor;
+   ssev.selection = Myevent.xselectionrequest.selection;
+   ssev.target = Myevent.xselectionrequest.target;
+   ssev.property = Myevent.xselectionrequest.property;
+   ssev.time = Myevent.xselectionrequest.time;
+
+   XSendEvent(Mydisplay, Myevent.xselectionrequest.requestor, True, NoEventMask, (XEvent *)&ssev);
+   XFlush(Mydisplay);
+  }
+
+ }else{
+  #if CopyPasteDebug 
+  printf("CopyPasteDebug: ");
+  char *an = XGetAtomName(Mydisplay, Myevent.xselectionrequest.target);
+  printf("denying request of type '%s'\n", an);
+  if (an) XFree(an);
+  #endif
+  NB_Copy_DenyRequest( &Myevent.xselectionrequest );
+ }
+
+ return;
+
+}//endproc
+
+//internal function
+void _NB_CopyData(void *d, size_t n, Atom datatype){
+ if( ! newbase_is_running ){
+  return;
+ }
+ if( ! n ){
+  return;
+ }
+ if( d == NULL ){
+  printf("CopyPasteDebug: _NB_CopyData: given NULL pointer\n");
+  return;
+ }
+ while(CopyPasteRequested){
+  Wait(1);
+ }
+ // ----
+ if(NewCopyBuffer){
+  free( (void*) NewCopyBuffer );
+ }
+ NewCopyBuffer = malloc(n);
+ if( ! NewCopyBuffer ){
+  printf("malloc failed during Copy\n");
+  exit(0);
+ }
+ memcpy((void*)NewCopyBuffer, d, n);
+ NewCopyBufferContentsSize=n;
+ NewCopyBufferContentsAtom = datatype;
+
+ CopyPasteRequested = CPR__COPY_REQUESTED;
+ return;
+}
+
+// intended to be used externally
+void NB_CopyTextN(char *s, size_t n){
+ _NB_CopyData((void*)s,n,MyStringAtom);
+}
+// intended to be used externally
+void NB_CopyText(char *s){
+ size_t size;
+ size = strlen(s);
+ NB_CopyTextN(s,size); 
+}
+
+
+// ===========================================================================================================
+// ===========================================================================================================
+// ================ END OF HORRIBLE GARBAGE FOR MANAGING CLIPBOARD ===========================================
+// ===========================================================================================================
+// ===========================================================================================================
+
+
 void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
  if(newbase_is_running) return;
  if(enablethreading){
@@ -82,10 +700,17 @@ void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
  WmDeleteWindowAtom = atom;
  //printf("FUFFFU %d\n",atom);
  XSetWMProtocols(Mydisplay, Mywindow, &atom, 1);
- atom = XInternAtom( Mydisplay, "PRIMARY", 0 );
+ // prepare atom stuff for copy pasting
+ MyPasteAtom = XInternAtom(Mydisplay, "PENISMAGIC", False);
+ MyClipboardAtom = XInternAtom(Mydisplay, "CLIPBOARD", False);
+ MyIncrAtom = XInternAtom(Mydisplay, "INCR", False);
+ MyTargetsAtom = XInternAtom(Mydisplay, "TARGETS", False);
+ MyStringAtom = XInternAtom(Mydisplay, "STRING", False);
+ MyUtf8Atom = XInternAtom(Mydisplay, "UTF8_STRING", False);
+ MyBmpAtom = XInternAtom(Mydisplay, "image/bmp", False);
  // Select the kind of events we're interested in 
  int xselinputreturnvalue;
- xselinputreturnvalue = XSelectInput(Mydisplay, Mywindow, ExposureMask | KeyPressMask |KeyReleaseMask| ButtonPressMask | ButtonReleaseMask | StructureNotifyMask | PointerMotionMask );
+ xselinputreturnvalue = XSelectInput(Mydisplay, Mywindow, ExposureMask | KeyPressMask |KeyReleaseMask| ButtonPressMask | ButtonReleaseMask | StructureNotifyMask | PointerMotionMask | PropertyChangeMask );
  //printf("XSelectInput returns: %d\n",xselinputreturnvalue);
  // Map (show) the window
  XMapWindow(Mydisplay, Mywindow);
@@ -509,7 +1134,7 @@ void Print(int x, int y,unsigned char *s){
   XFlush(Mydisplay);
   Wait(6);
 #endif
-  x+=8;
+  x+=8; if( x > WinW ) return;
   s++;
  }
  #ifdef NewBase_HaventRemovedThisYet
@@ -533,7 +1158,7 @@ void Print2(int x, int y,unsigned char *s){
   XFlush(Mydisplay);
   Wait(6);
 #endif
-  x+=8;
+  x+=8; if( x > WinW ) return;
   s++;
  }
  #ifdef NewBase_HaventRemovedThisYet
@@ -560,7 +1185,7 @@ void Print3(int x, int y,unsigned char *s){
   XFlush(Mydisplay);
   Wait(6);
 #endif
-  x+=8*2;
+  x+=8*2; if( x > WinW ) return;
   s++;
  }
  #ifdef NewBase_HaventRemovedThisYet
@@ -585,7 +1210,7 @@ void Print4(int x, int y,unsigned char *s){
   XFlush(Mydisplay);
   Wait(6);
 #endif
-  x+=8*2;
+  x+=8*2; if( x > WinW ) return;
   s++;
  }
  #ifdef NewBase_HaventRemovedThisYet
@@ -714,9 +1339,8 @@ void RefreshOff(){
 // ==============================================================================================================================
 // ==============================================================================================================================
 
-#ifndef GUI_DEBUG
- #define GUI_DEBUG 0
-#endif
+
+
 
 int NewBase_HandleEvents(int EnableBlocking){
  if(!newbase_is_running)return 0;
@@ -724,6 +1348,7 @@ int NewBase_HandleEvents(int EnableBlocking){
  unsigned char ch;
  int DidSomethingHappen=0;
  int WindowWasResized=0;
+ if( !CopyPasteOngoing && CopyPasteRequested ) NB_CopyPasteRequestHandler();
  //Refresh();
  while(XEventsQueued(Mydisplay,QueuedAlready) || EnableBlocking){
   EnableBlocking=0;
@@ -825,15 +1450,61 @@ int NewBase_HandleEvents(int EnableBlocking){
    #if (GUI_DEBUG&0b1)
    printf("SelectionNotify\n");
    #endif
+   {
+    XSelectionEvent *sev = (XSelectionEvent*)&Myevent.xselection;
+    NB_SelectionNotifyHandler( sev );
+   }
+   break;
+  case SelectionRequest:
+   #if (GUI_DEBUG&0b1)
+   printf("SelectionRequest\n");
+   #endif
+   {
+    NB_SelectionRequestHandler();
+   }
+   break;
+  case PropertyNotify:
+   #if (GUI_DEBUG&0b1)
+   printf("PropertyNotify\n");
+   #endif
+   if( CopyPasteOngoing  ){
+    NB_PropertyNotifyHandler();
+   }
    break;
   default:
    #if (GUI_DEBUG&0b1)
-   printf("unhandled: %d\n",Myevent.type);
+   printf("NewBase event handler: unhandled: %d\n",Myevent.type);
    #endif
    break;
   }//endcase
 
  }//endwhile
+
+ if( CopyPasteOngoing > 1 ){
+  CopyPasteIncrTimeoutCounter--;
+  #if CopyPasteDebug
+  printf("CopyPasteIncrTimeoutCounter : %d\n",CopyPasteIncrTimeoutCounter);
+  #endif
+  if( ! CopyPasteIncrTimeoutCounter ){
+   #if CopyPasteDebug
+   printf("CopyPasteDebug: copy/paste INCR timeout occurred\n");
+   #endif
+   switch( CopyPasteOngoing ){
+    case CPO__INCOMING_INCR: {
+     if( PasteBuffer ){
+      free( (void*)PasteBuffer );
+      PasteBufferContentsSize = 0;
+      PasteSucceeded = 0;
+      CopyPasteRequested = 0;
+      CopyPasteOngoing = 0;
+     }
+    } break;
+    case CPO__OUTGOING_INCR: {
+     CopyPasteOngoing = 0;
+    } break;
+   }//endcase
+  }//endif timer ran out
+ }//endif an incr copy/paste is happening
 
  //Refresh();
  return DidSomethingHappen;
@@ -856,7 +1527,10 @@ void SetWindowSize(int w, int h){
 void* newbase_eventhandlerloopfunction(void *arg){
  while(newbase_is_running){
   NewBase_HandleEvents(0);
-  Wait(1);
+  if( ! CopyPasteRequested )
+   Wait(1);
+  else
+   usleep(2);
   //usleep(16667);
   XFlush(Mydisplay);
  }
@@ -881,20 +1555,16 @@ void start_newbase_thread(int w, int h){
 
 int main(int argc, char **argv){
 
- MyInit(640,480);
+ start_newbase_thread(640,480);
 
  //Wait(1);
  //GcolBGDirect(0); // FUCK! setting a background colour makes it so that the window is automatically cleared whenever it's resized, results in bad flickering
 
- RefreshOff();
- int i,j;
- for(i=0; i<100000; i++){
+ while(1){
   Gcol(Rnd(256),Rnd(256),Rnd(256));
-  CircleFill(Rnd(WinW),Rnd(WinH),Rnd(WinH));
+  Circle(Rnd(WinW),Rnd(WinH),Rnd(WinH));
+  Wait(1);
  }
- Refresh();
- MyCleanup();
- return 0;
 
  return 0;
 }

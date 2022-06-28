@@ -624,9 +624,12 @@ void process_function_definitions(program *prog,int startpos){
 #ifdef enable_graphics_extension
 #define opt_wmclose	100	// specify action to take when the window close button is pressed
 #define opt_wintitle	101	// set the window title string
+#define opt_copytext	102	// put text on the clipboard
+#define opt_pastetext	103	// read text from the clipboard
 #endif
 
 void option( program *prog, int *p ){
+ int starting_p = *p;
  *p += 1; // advance p out of the way of the 'option' command itself
  int id_stringconst_pos = *p;
  
@@ -644,8 +647,10 @@ void option( program *prog, int *p ){
   if( !strncmp( "seedrnd", id_string.string, id_string.len)){opt_number= opt_seedrnd; goto option__identify_option_string_out;}	//	seedrnd		Seed RNG
   if( !strncmp( "unclaim", id_string.string, id_string.len)){opt_number= opt_unclaim; goto option__identify_option_string_out;} //	unclaim [string ref num]	Unclaim a string
 #ifdef enable_graphics_extension
-  if( !strncmp( "wintitle", id_string.string, id_string.len ) ){ opt_number=opt_wintitle;	goto option__identify_option_string_out;}	//	
+  if( !strncmp( "wintitle", id_string.string, id_string.len ) ){ opt_number=opt_wintitle;	goto option__identify_option_string_out;}	// 
   if( !strncmp( "wmclose", id_string.string, id_string.len ) ){ opt_number=opt_wmclose;	goto option__identify_option_string_out;}	//	
+  if( !strncmp( "copytext", id_string.string, id_string.len ) ){ opt_number=opt_copytext;	goto option__identify_option_string_out;}	// copytext [stringvalue]
+  if( !strncmp( "pastetext", id_string.string, id_string.len ) ){ opt_number=opt_pastetext;	goto option__identify_option_string_out;}	// pastetext [string variable reference number]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
@@ -714,8 +719,9 @@ void option( program *prog, int *p ){
   int vp=0;
   int v[3] = { 0, 0, 0 };
   do{
-   v[vp] = getvalue(p,prog); vp++;
-  }while( isvalue( prog->tokens[*p].type ) );
+   v[vp] = getvalue(p,prog);
+   vp++;
+  }while( isvalue( prog->tokens[*p].type ) && vp < 3  );
   XRANDrand = v[0];
   XRANDranb = v[1];
   XRANDranc = v[2];
@@ -744,9 +750,35 @@ void option( program *prog, int *p ){
   sv.string[sv.len]=c;
   break;
  }
+ case opt_copytext: {
+  stringval sv = getstringvalue( prog, p );
+  if( ! sv.len ) return;
+  NB_CopyTextN( sv.string, sv.len );
+ } break;
+ case opt_pastetext: {
+  int stringvar_num = (int)getvalue(p,prog);
+  if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+   printf("stringvar_num: %d\n",stringvar_num);
+   error("pastetext: bad stringvariable access\n");
+  }
+  // now we have the stringvar as prog->stringvars[stringvar_num]
+  if( NB_PasteText() ){
+   if( prog->stringvars[stringvar_num]->bufsize < PasteBufferContentsSize ){ // reallocate string buffer if necessary
+    prog->stringvars[stringvar_num]->string = realloc( prog->stringvars[stringvar_num]->string, PasteBufferContentsSize );
+    if( prog->stringvars[stringvar_num]->string == NULL ){
+     error("option: memory allocation failuring during Paste\n");
+    }//endif
+    prog->stringvars[stringvar_num]->bufsize = PasteBufferContentsSize;
+   }
+   memcpy(prog->stringvars[stringvar_num]->string, (void*)PasteBuffer, PasteBufferContentsSize); //copy data
+   prog->stringvars[stringvar_num]->len = PasteBufferContentsSize; // set data length
+  }else{
+   prog->stringvars[stringvar_num]->len = 0; // paste failed, return empty string
+  }
+ } break;
 #endif
  }
- default: error("option: unrecognised option\n");
+ default: print_sourcetext_location( prog, starting_p ); error("option: unrecognised option\n");
  }
 
 }
@@ -3513,7 +3545,8 @@ int main(int argc, char **argv){
  if(argc>1){
   prg = init_program( argv[1], Exists(argv[1]) ); 
  }else{
-  printf("%s [program text or path to a file containing program text]\n",argv[0]);
+  printf("Johnsonscript interpreter, built on %s, %s\nhttps://github.com/dusthillresident/JohnsonScript/\n", __DATE__, __TIME__);
+  printf("Usage:\n%s [program text or path to a file containing program text]\n",argv[0]);
   return 0;
  }
 

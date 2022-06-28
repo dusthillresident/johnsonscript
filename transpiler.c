@@ -1641,6 +1641,22 @@ void translate_command(program *prog, int *p){
      if(i<2) PrintMain(",");
     }
     PrintMain("} );\n");
+   }else if( TheseStringsMatch(opstr, "copytext") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ SVL s = ");
+    translate_stringvalue(prog,p);
+    PrintMain("; NB_CopyTextN( s.buf, s.len ); } \n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "pastetext") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ int n = (int)");
+    translate_value(prog,p);
+    PrintMain("; if( NB_PasteText() ){ if( StringVars[n]->bufsize < PasteBufferContentsSize ) StringVars[n]->buf = realloc(StringVars[n]->buf, PasteBufferContentsSize); memcpy(StringVars[n]->buf,(void*)PasteBuffer, PasteBufferContentsSize); StringVars[n]->len = PasteBufferContentsSize; } else StringVars[n]->len = 0; }\n ");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
    }else{
     trans_print_sourcetext_location( prog, *p);
     PrintErr("translate_command: option: unrecognised option\n");
