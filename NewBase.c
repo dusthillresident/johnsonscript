@@ -92,7 +92,8 @@ unsigned int    CopyIncrOffset = 0;
 int CopyIncrChunkSize = 0;
 //Time CopyPasteLastEventTime;
 #define COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT 400
-int CopyPasteIncrTimeoutCounter = 0;
+#define COPY_PASTE_CONVERSIONREQUEST_TIMEOUT_LOOPCOUNT 400
+int CopyPasteTimeoutCounter = 0;
 Atom CopyIncrTargetAtom;
 Atom MyPasteAtom;
 Atom MyClipboardAtom;
@@ -167,6 +168,7 @@ void NB_CopyPasteRequestHandler(){
    }//endif nobody owns the clipboard, that is, clipboard is empty & nothing to paste
    // if we got this far, it means the clipboard has something on it. let's request conversion of the clipboard to the sort of data we want
    CopyPasteOngoing = CPO__PASTE_CONVERSION_REQUESTED;
+   CopyPasteTimeoutCounter = COPY_PASTE_CONVERSIONREQUEST_TIMEOUT_LOOPCOUNT;
    XConvertSelection( Mydisplay,
                       MyClipboardAtom,
                       PasteRequestTypeAtom,
@@ -180,6 +182,7 @@ void NB_CopyPasteRequestHandler(){
    #if CopyPasteDebug
    printf("CopyPasteDebug: Handling Copy request\n");
    #endif
+   free( (void*) CopyBuffer );
    CopyBuffer = (char*)NewCopyBuffer;
    CopyBufferContentsSize = NewCopyBufferContentsSize;
    CopyBufferContentsAtom = NewCopyBufferContentsAtom;
@@ -268,7 +271,7 @@ void NB_SelectionNotifyHandler( XSelectionEvent *sev ){
      PasteBuffer = NULL;
      PasteBufferContentsSize=0;
      //CopyPasteLastEventTime = sev->time;
-     CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT;
+     CopyPasteTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT;
      CopyPasteOngoing = CPO__INCOMING_INCR;
      XDeleteProperty(Mydisplay, Mywindow, MyPasteAtom); //delete the event to start the incr process
      return;
@@ -297,7 +300,7 @@ void NB_PropertyNotifyHandler(){
     #endif
     // update time for timeout check
     //CopyPasteLastEventTime = Myevent.xproperty.time; // I don't think I can find a way to make this work. I'll leave it here for now
-    CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT; // instead I have to do this shit 
+    CopyPasteTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT; // instead I have to do this shit 
     // xgetproperty, check the size and format of the property.
     Atom actual_type_return;
     int actual_format_return;
@@ -396,7 +399,7 @@ void NB_PropertyNotifyHandler(){
    }
    // update time for timeout check
    //CopyPasteLastEventTime = Myevent.xproperty.time; // I can't make this work but I will leave it here in case I find a way later
-   CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT; // sadly I have to do this shit
+   CopyPasteTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT; // sadly I have to do this shit
    // alright lets go.
    int thischunksize = CopyIncrChunkSize;
    if( (CopyIncrOffset + CopyIncrChunkSize) >= CopyBufferContentsSize ){
@@ -589,7 +592,7 @@ void NB_SelectionRequestHandler(){
    CopyIncrOffset = 0;    
    CopyIncrChunkSize = chunk_size;
    //CopyPasteLastEventTime = sev->time;
-   CopyPasteIncrTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT;
+   CopyPasteTimeoutCounter = COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT;
 
    return; 
  
@@ -1480,12 +1483,12 @@ int NewBase_HandleEvents(int EnableBlocking){
 
  }//endwhile
 
- if( CopyPasteOngoing > 1 ){
-  CopyPasteIncrTimeoutCounter--;
+ if( CopyPasteOngoing ){
+  CopyPasteTimeoutCounter--;
   #if CopyPasteDebug
-  printf("CopyPasteIncrTimeoutCounter : %d\n",CopyPasteIncrTimeoutCounter);
+  printf("CopyPasteTimeoutCounter : %d\n",CopyPasteTimeoutCounter);
   #endif
-  if( ! CopyPasteIncrTimeoutCounter ){
+  if( ! CopyPasteTimeoutCounter ){
    #if CopyPasteDebug
    printf("CopyPasteDebug: copy/paste INCR timeout occurred\n");
    #endif
