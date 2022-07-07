@@ -1233,6 +1233,88 @@ void drawtext_(int x, int y, int scale, unsigned char *s){ // this only calls fu
  PrintFunc(x,y,s);
 }
 
+// ============================================================
+// ======== Drawing microsoft .bmp files to the screen ========
+// ============================================================
+
+typedef
+union {
+ struct {
+  char identify[2]; //2
+  unsigned int size; //4
+  short reserved1; //2
+  short reserved2; //2
+  unsigned int offset; //4
+  // the BITMAPINFOHEADER starts here
+  unsigned int header_size; //4
+  int width; //4
+  int height;//4
+  short colour_planes; // 2 
+  short bits_per_pixel; //2
+  int compression_method; //4
+  unsigned int image_size; //4
+  int horizontal_resolution; // 4
+  int vertical_resolution;   // 4
+  unsigned int number_of_colours_in_palette; //4
+  int generally_ignored; //4
+ } __attribute__((packed)) /* we must use this attribute to prevent GCC from padding the structure, so its layout in memory matches the bitmap file format */ 
+   structure ;
+ char rawdata[ 2 + 4 + 2 + 2 + 4 + 40 ];
+} //end union
+Bmp;
+
+void NB_DrawBmp(int x, int y, Bmp *bmp){
+ if(!newbase_is_running){
+  return;
+ }
+ if( ! bmp ){
+  printf("NB_DrawBmp: given null pointer\n");
+  return;
+ }
+ if( (bmp->structure.identify[0] != 'B' || bmp->structure.identify[1] != 'M')
+       ||
+      bmp->structure.width < 0
+       ||
+      bmp->structure.height < 0
+       ||
+      bmp->structure.colour_planes != 1
+       ||
+      bmp->structure.compression_method != 0
+       ||
+      bmp->structure.bits_per_pixel != 24
+       ||
+      bmp->structure.image_size != ( bmp->structure.width*bmp->structure.height*3 + bmp->structure.width%4*bmp->structure.height )
+   )
+ {
+  printf("NB_DrawBmp: invalid bitmap\n");
+  return;
+ }
+ char *image_data = malloc( bmp->structure.width * bmp->structure.height * 4 );
+ int i,j,k,p;
+ p=0;
+ for(i=0; i<bmp->structure.height; i++){ // perform the necessary conversion of BMP image data, from BMP's bottom-to-top RGB+padding pixel array format, to RGBA top-to-bottom
+  p = 4 * bmp->structure.width * (bmp->structure.height-i-1);
+  for(j=0; j<bmp->structure.width; j++){
+   for(k=0; k<3; k++){
+    image_data[p++] = *((((char*)bmp->rawdata) + bmp->structure.offset) + bmp->structure.width*i*3 + 3*j + k + ( (bmp->structure.width%4*i) ) );
+   }
+   image_data[p++]=0;
+  }
+ }
+ // create and initialise XImage structure with the converted image data, draw it onto the screen, and then free the memory allocated for the XImage
+ XImage *image;
+ image = XCreateImage(Mydisplay, DefaultVisual(Mydisplay,0), DefaultDepth(Mydisplay,0), ZPixmap, 0, image_data, bmp->structure.width, bmp->structure.height, 32, 0);
+ image->byte_order = LSBFirst;
+ image->bitmap_bit_order = LSBFirst;
+ XInitImage(image);
+ XPutImage(Mydisplay,Mywindow,MyGC,image, 0,0,x,y, bmp->structure.width,bmp->structure.height);
+ XDestroyImage(image); // XDestroyImage frees not only the XImage structure itself, but also the data pointer we put in the XImage struct, so image_data has already been free()'d
+}
+
+// ===================================================================
+// ======== End of drawing microsoft .bmp files to the screen ========
+// ===================================================================
+
 // ===========================================================
 
 unsigned char GetCharFromEvent(XEvent *ev){
