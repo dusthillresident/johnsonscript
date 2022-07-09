@@ -670,7 +670,10 @@ void NB_CopyText(char *s){
  size = strlen(s);
  NB_CopyTextN(s,size); 
 }
-
+// intended to be used externally
+void NB_CopyBmpN(char *s, size_t n){
+ _NB_CopyData((void*)s,n,MyBmpAtom);
+}
 
 // ===========================================================================================================
 // ===========================================================================================================

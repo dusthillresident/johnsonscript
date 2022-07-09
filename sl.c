@@ -630,6 +630,8 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_clearcliprect 105	// reset the graphics clipping rectangle
 #define opt_drawbmp	106	// treat the contents of a stringvalue as a microsoft 24bit .bmp image
 #define opt_drawbmpadv  107	// drawbmp 'advanced' - with the full set of parameters
+#define opt_copybmp     108     // put bmp on clipboard
+#define opt_pastebmp    109     // read bmp from clipboard
 #endif
 
 void option( program *prog, int *p ){
@@ -659,6 +661,8 @@ void option( program *prog, int *p ){
   if( !strncmp( "clearcliprect", id_string.string, id_string.len ) ){ opt_number=opt_clearcliprect;	goto option__identify_option_string_out;} // clearcliprect
   if( !strncmp( "drawbmp", id_string.string, id_string.len ) ){ opt_number=opt_drawbmp;	goto option__identify_option_string_out;}	// drawbmp [stringvalue] [x] [y]
   if( !strncmp( "drawbmpadv", id_string.string, id_string.len ) ){ opt_number=opt_drawbmpadv;	goto option__identify_option_string_out;}	// drawbmp [stringvalue] [x] [y] [sx] [sy] [w] [h]
+  if( !strncmp( "copybmp", id_string.string, id_string.len ) ){ opt_number=opt_copybmp;	goto option__identify_option_string_out;}	// copybmp [stringvalue]
+  if( !strncmp( "pastebmp", id_string.string, id_string.len ) ){ opt_number=opt_pastebmp;goto option__identify_option_string_out;}	// pastebmp [string var reference number]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
@@ -758,19 +762,22 @@ void option( program *prog, int *p ){
   sv.string[sv.len]=c;
   break;
  }
- case opt_copytext: {
+ case opt_copytext: case opt_copybmp: {
   stringval sv = getstringvalue( prog, p );
   if( ! sv.len ) return;
-  NB_CopyTextN( sv.string, sv.len );
+  if( opt_number == opt_copytext )
+   NB_CopyTextN( sv.string, sv.len );
+  else if( sv.len > 54 )
+   NB_CopyBmpN( sv.string, sv.len );
  } break;
- case opt_pastetext: {
+ case opt_pastetext: case opt_pastebmp: {
   int stringvar_num = (int)getvalue(p,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
    printf("stringvar_num: %d\n",stringvar_num);
    error("pastetext: bad stringvariable access\n");
   }
   // now we have the stringvar as prog->stringvars[stringvar_num]
-  if( NB_PasteText() ){
+  if( ( opt_number == opt_pastetext ) ? NB_PasteText() : NB_PasteBmp() ){
    if( prog->stringvars[stringvar_num]->bufsize < PasteBufferContentsSize ){ // reallocate string buffer if necessary
     prog->stringvars[stringvar_num]->string = realloc( prog->stringvars[stringvar_num]->string, PasteBufferContentsSize );
     if( prog->stringvars[stringvar_num]->string == NULL ){
