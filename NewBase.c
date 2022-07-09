@@ -1263,7 +1263,7 @@ union {
 } //end union
 Bmp;
 
-void NB_DrawBmp(int x, int y, Bmp *bmp){
+void NB_DrawBmp(int x, int y, int sx, int sy, int w, int h, Bmp *bmp){
  if(!newbase_is_running){
   return;
  }
@@ -1283,12 +1283,14 @@ void NB_DrawBmp(int x, int y, Bmp *bmp){
        ||
       bmp->structure.bits_per_pixel != 24
        ||
-      bmp->structure.image_size != ( bmp->structure.width*bmp->structure.height*3 + bmp->structure.width%4*bmp->structure.height )
+      bmp->structure.image_size != (bmp->structure.width*bmp->structure.height*3 + bmp->structure.width%4*bmp->structure.height)
    )
  {
   printf("NB_DrawBmp: invalid bitmap\n");
   return;
  }
+ if( w < 0 ) w = bmp->structure.width;
+ if( h < 0 ) h = bmp->structure.height;
  char *image_data = malloc( bmp->structure.width * bmp->structure.height * 4 );
  int i,j,k,p;
  p=0;
@@ -1307,7 +1309,7 @@ void NB_DrawBmp(int x, int y, Bmp *bmp){
  image->byte_order = LSBFirst;
  image->bitmap_bit_order = LSBFirst;
  XInitImage(image);
- XPutImage(Mydisplay,Mywindow,MyGC,image, 0,0,x,y, bmp->structure.width,bmp->structure.height);
+ XPutImage(Mydisplay,Mywindow,MyGC,image, sx,sy,x,y, w, h);
  XDestroyImage(image); // XDestroyImage frees not only the XImage structure itself, but also the data pointer we put in the XImage struct, so image_data has already been free()'d
 }
 
@@ -1369,10 +1371,10 @@ void SetClipRect(int x, int y, int w, int h){
  r.x=x; r.y=y;
  r.width=w; r.height=h;
  XSetClipRectangles(Mydisplay,MyGC,0,0,&r,1,Unsorted);
- 
 }
-void ClearClipRect(){ // this only calls functions that check newbase_is_running
- SetClipRect(0,0,WinW,WinH);
+void ClearClipRect(){
+ if(!newbase_is_running)return;
+ XSetClipMask( Mydisplay, MyGC, None );
 }
 
 void SetPlottingMode(int function){

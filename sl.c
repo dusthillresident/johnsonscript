@@ -626,6 +626,10 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_wintitle	101	// set the window title string
 #define opt_copytext	102	// put text on the clipboard
 #define opt_pastetext	103	// read text from the clipboard
+#define opt_setcliprect 104	// set graphics clipping rectangle
+#define opt_clearcliprect 105	// reset the graphics clipping rectangle
+#define opt_drawbmp	106	// treat the contents of a stringvalue as a microsoft 24bit .bmp image
+#define opt_drawbmpadv  107	// drawbmp 'advanced' - with the full set of parameters
 #endif
 
 void option( program *prog, int *p ){
@@ -651,6 +655,10 @@ void option( program *prog, int *p ){
   if( !strncmp( "wmclose", id_string.string, id_string.len ) ){ opt_number=opt_wmclose;	goto option__identify_option_string_out;}	//	
   if( !strncmp( "copytext", id_string.string, id_string.len ) ){ opt_number=opt_copytext;	goto option__identify_option_string_out;}	// copytext [stringvalue]
   if( !strncmp( "pastetext", id_string.string, id_string.len ) ){ opt_number=opt_pastetext;	goto option__identify_option_string_out;}	// pastetext [string variable reference number]
+  if( !strncmp( "setcliprect", id_string.string, id_string.len ) ){ opt_number=opt_setcliprect;	goto option__identify_option_string_out;}	// setcliprect [x1] [y1] [w] [h]
+  if( !strncmp( "clearcliprect", id_string.string, id_string.len ) ){ opt_number=opt_clearcliprect;	goto option__identify_option_string_out;} // clearcliprect
+  if( !strncmp( "drawbmp", id_string.string, id_string.len ) ){ opt_number=opt_drawbmp;	goto option__identify_option_string_out;}	// drawbmp [stringvalue] [x] [y]
+  if( !strncmp( "drawbmpadv", id_string.string, id_string.len ) ){ opt_number=opt_drawbmpadv;	goto option__identify_option_string_out;}	// drawbmp [stringvalue] [x] [y] [sx] [sy] [w] [h]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
@@ -774,6 +782,39 @@ void option( program *prog, int *p ){
    prog->stringvars[stringvar_num]->len = PasteBufferContentsSize; // set data length
   }else{
    prog->stringvars[stringvar_num]->len = 0; // paste failed, return empty string
+  }
+ } break;
+ case opt_setcliprect: {
+  int x,y,w,h;
+  x=(int)getvalue(p,prog);
+  y=(int)getvalue(p,prog);
+  w=(int)getvalue(p,prog);
+  h=(int)getvalue(p,prog);
+  SetClipRect(x,y,w,h);
+ } break;
+ case opt_clearcliprect: {
+  ClearClipRect();
+ } break;
+ case opt_drawbmp: case opt_drawbmpadv: {
+  stringval bmpstring;
+  int x,y, sx=0,sy=0,w=-1,h=-1;
+  bmpstring = getstringvalue( prog, p );
+  x=(int)getvalue(p,prog);
+  y=(int)getvalue(p,prog);
+  if( opt_number == opt_drawbmpadv ){
+   sx = (int)getvalue(p,prog);
+   sy = (int)getvalue(p,prog);
+   w  = (int)getvalue(p,prog);
+   h  = (int)getvalue(p,prog);
+  }
+  if( bmpstring.len > 54 ){ // do some very basic validity checking
+   unsigned int offset     = *(unsigned int*)(bmpstring.string + 2+4+2+2);
+   unsigned int image_size = *(unsigned int*)(bmpstring.string + 2+4+2+2+ 4+4+4+4+2+2+4);
+   if( offset + image_size > (unsigned int)bmpstring.len ){
+    printf("option: drawbmp: invalid bitmap\n");
+    return;
+   }
+   NB_DrawBmp( x, y, sx,sy,w,h, (Bmp*)bmpstring.string );
   }
  } break;
 #endif
@@ -1976,8 +2017,8 @@ getstringvalue( program *prog, int *pos ){
   *pos += 1;
   return out;
  }
- case t_sget:
- {
+ case t_sget: // sget [fp] ([optional parameter n])
+ {            // If n is greater than 0, it represents the number of bytes to be read. Else, it represents a specific string terminating value. (n <= -256) will read until EOF
   file *f = getfile(prog, getvalue(pos,prog), 1,0);
   int num_bytes_to_read = -10;
   if( isvalue( prog->tokens[*pos].type ) ) num_bytes_to_read = getvalue(pos,prog);
