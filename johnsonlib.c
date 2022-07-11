@@ -5,6 +5,33 @@
 #include <string.h>
 #include "mylib.c"
 
+// memory problem debugging stuff
+#if 0
+ void* mymallocfordebug(size_t size    ,int n, char *f){
+  void *out = malloc(size);
+  printf("line %d,	%s:	MALLOC	%p\n",n,f,out);
+  return out;
+ }
+ void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f){
+  void *out = calloc(nmemb,size);
+  printf("line %d,	%s:	CALLOC	%p\n",n,f,out); 
+  return out;
+ }
+ void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f){
+  void *out = realloc(ptr,size);
+  printf("line %d,	%s:	REALLOC	%p (input %p)\n",n,f,out,ptr);
+  return out;
+ }
+ void myfreefordebug(void *ptr,      int n, char *f){
+  printf("line %d,	%s:	FREEING	%p\n",n,f,ptr);
+  free(ptr);
+ }
+ #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__)
+ #define calloc(a,b) mycallocfordebug(a,b,__LINE__,__FILE__)
+ #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__)
+ #define free(p) myfreefordebug(p,__LINE__,__FILE__)
+#endif
+
 void Johnsonlib_MemoryAllocFailCheck(void *ptr, char *id){
  if( ! ptr ){
   printf("Johnsonlib error: memory allocation failed (%s)\n",id);
@@ -84,7 +111,12 @@ void ExpandSVR( SVR *svr, int newsize ){
  if( svr->bufsize >= newsize ){ 
   return;
  }
+ if( svr->len > svr->bufsize ){
+  fprintf(stderr,"Johnsonlib: ExpandSVR: len > bufsize\n");
+  exit(0);
+ }
  newsize = newsize+(512-(newsize % 512));
+ //printf("ExpandSVR: %p : bufsize %d, newsize %d\n",svr->buf,svr->bufsize,newsize);
  if( svr->buf == NULL ){
   svr->buf = calloc(1, newsize);
   Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer");
@@ -92,6 +124,7 @@ void ExpandSVR( SVR *svr, int newsize ){
  }else{
   if( svr->bufsize < newsize ){
    svr->buf = realloc(svr->buf, newsize);
+   svr->bufsize = newsize;
    Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer reallocation");
   }//endif bufsize < newsize
  }//endif buf == NULL
@@ -619,7 +652,7 @@ SVL Johnson_Sget(int sa_l, int filenum, int num_bytes_to_read )
 #define myxlib_notstandalonetest
 #include "NewBase.c"
 
-// because of the weird reverse order of evaluation of function parameters in GNU C, this is necessary... why am I writing this shit, nobody will read it
+// because of the weird reverse order of evaluation of function parameters in GNU C on some architectures, this is necessary... why am I writing this shit, nobody will read it
 
 // ---- johnsonscript graphics commands ----
 #ifdef JOHNSON_PARAMETERS_REVERSED
@@ -739,6 +772,17 @@ int Johnson_WMClose(){
  int wmc = wmclosed;
  wmclosed = 0;
  return wmc;
+}
+
+int Johnson_BmpValidityCheck( SVL bmpstring ){
+ if( bmpstring.len <= 54 ) return 0;
+ unsigned int offset     = *(unsigned int*)(bmpstring.buf + 2+4+2+2);
+ unsigned int image_size = *(unsigned int*)(bmpstring.buf + 2+4+2+2+ 4+4+4+4+2+2+4);
+ if( offset + image_size > (unsigned int)bmpstring.len ){
+  printf("Johnsonscript error: drawbmp: invalid bitmap\n");
+  return 0;
+ }
+ return 1;
 }
 
 #endif

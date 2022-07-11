@@ -1657,6 +1657,75 @@ void translate_command(program *prog, int *p){
     #else
     ErrorOut("FUCK OFF!\n");
     #endif
+   }else if( TheseStringsMatch(opstr, "setcliprect") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ int x,y,w,h; ");
+    PrintMain("x = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("y = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("w = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("h = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("SetClipRect(x,y,w,h); }\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "clearcliprect") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("ClearClipRect();\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "drawbmp") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ SVL bmpstring; int x,y; ");
+    PrintMain("bmpstring = "); translate_stringvalue(prog,p); PrintMain("; ");
+    PrintMain("x = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("y = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("if( Johnson_BmpValidityCheck(bmpstring) ) NB_DrawBmp(x,y,0,0,-1,-1,(Bmp*)bmpstring.buf); }\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "drawbmpadv") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ SVL bmpstring; int x,y,sx,sy,w,h; ");
+    PrintMain("bmpstring = "); translate_stringvalue(prog,p); PrintMain("; ");
+    PrintMain("x  = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("y  = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("sx = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("sy = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("w  = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("h  = "); translate_value(prog,p); PrintMain("; ");
+    PrintMain("if( Johnson_BmpValidityCheck(bmpstring) ) NB_DrawBmp(x,y,sx,sy,w,h,(Bmp*)bmpstring.buf); }\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "copybmp") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ SVL s = ");
+    translate_stringvalue(prog,p);
+    PrintMain("; if( s.len > 54 ) NB_CopyTextN( s.buf, s.len ); } \n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "pastebmp") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ int n = (int)");
+    translate_value(prog,p);
+    PrintMain("; if( NB_PasteBmp() ){ if( StringVars[n]->bufsize < PasteBufferContentsSize ) StringVars[n]->buf = realloc(StringVars[n]->buf, PasteBufferContentsSize); memcpy(StringVars[n]->buf,(void*)PasteBuffer, PasteBufferContentsSize); StringVars[n]->len = PasteBufferContentsSize; } else StringVars[n]->len = 0; }\n ");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "hascliptext") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("FirstVarP[(int)("); translate_value(prog,p); PrintMain(")] = NB_HasClipText();\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
+   }else if( TheseStringsMatch(opstr, "hasclipbmp") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("FirstVarP[(int)("); translate_value(prog,p); PrintMain(")] = NB_HasClipBmp();\n");
+    #else
+    ErrorOut("FUCK OFF!\n");
+    #endif
    }else{
     trans_print_sourcetext_location( prog, *p);
     PrintErr("translate_command: option: unrecognised option\n");
