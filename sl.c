@@ -632,6 +632,8 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_drawbmpadv  107	// drawbmp 'advanced' - with the full set of parameters
 #define opt_copybmp     108     // put bmp on clipboard
 #define opt_pastebmp    109     // read bmp from clipboard
+#define opt_hascliptext 110	// check if the clipboard has text	
+#define opt_hasclipbmp	111	// check if the clipboard has .bmp image
 #endif
 
 void option( program *prog, int *p ){
@@ -642,7 +644,6 @@ void option( program *prog, int *p ){
  if( prog->tokens[*p].type == t_id ) process_id(prog, &prog->tokens[*p]);
 
  int opt_number=-1;
-
 
  if(  determine_valueorstringvalue(prog, *p)  ){ // identify option string
   stringval id_string = getstringvalue( prog, p );
@@ -663,6 +664,8 @@ void option( program *prog, int *p ){
   if( !strncmp( "drawbmpadv", id_string.string, id_string.len ) ){ opt_number=opt_drawbmpadv;	goto option__identify_option_string_out;}	// drawbmp [stringvalue] [x] [y] [sx] [sy] [w] [h]
   if( !strncmp( "copybmp", id_string.string, id_string.len ) ){ opt_number=opt_copybmp;	goto option__identify_option_string_out;}	// copybmp [stringvalue]
   if( !strncmp( "pastebmp", id_string.string, id_string.len ) ){ opt_number=opt_pastebmp;goto option__identify_option_string_out;}	// pastebmp [string var reference number]
+  if( !strncmp( "hascliptext", id_string.string, id_string.len ) ){ opt_number=opt_hascliptext;goto option__identify_option_string_out;}// hascliptext [variable reference number]
+  if( !strncmp( "hasclipbmp", id_string.string, id_string.len ) ){ opt_number=opt_hasclipbmp;goto option__identify_option_string_out;}// hasclipbmp [variable reference number]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
@@ -715,7 +718,10 @@ void option( program *prog, int *p ){
   // load text file and process it, getting the tokens (program code data) and program_strings
   tokens = loadtokensfromtext(prog->program_strings,filename.string,&tokens_length);
   filename.string[filename.len]=holdthis;
-  if( tokens == NULL ) error("import: couldn't open file\n");
+  if( tokens == NULL ){
+   print_sourcetext_location( prog, starting_p );
+   error("import: couldn't open file\n");
+  }
   // resize array and append new code
   prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length)*sizeof(token));
   memcpy(prog->tokens + prog->maxlen, tokens, sizeof(token) * tokens_length);
@@ -743,6 +749,7 @@ void option( program *prog, int *p ){
  {
   int stringvar_num = (int)getvalue(p,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+   print_sourcetext_location( prog, starting_p );
    printf("stringvar_num: %d\n",stringvar_num);
    error("unclaim: bad stringvariable access\n");
   }
@@ -773,6 +780,7 @@ void option( program *prog, int *p ){
  case opt_pastetext: case opt_pastebmp: {
   int stringvar_num = (int)getvalue(p,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+   print_sourcetext_location( prog, starting_p );
    printf("stringvar_num: %d\n",stringvar_num);
    error("pastetext: bad stringvariable access\n");
   }
@@ -781,6 +789,7 @@ void option( program *prog, int *p ){
    if( prog->stringvars[stringvar_num]->bufsize < PasteBufferContentsSize ){ // reallocate string buffer if necessary
     prog->stringvars[stringvar_num]->string = realloc( prog->stringvars[stringvar_num]->string, PasteBufferContentsSize );
     if( prog->stringvars[stringvar_num]->string == NULL ){
+     print_sourcetext_location( prog, starting_p );
      error("option: memory allocation failuring during Paste\n");
     }//endif
     prog->stringvars[stringvar_num]->bufsize = PasteBufferContentsSize;
@@ -823,6 +832,14 @@ void option( program *prog, int *p ){
    }
    NB_DrawBmp( x, y, sx,sy,w,h, (Bmp*)bmpstring.string );
   }
+ } break;
+ case opt_hascliptext: case opt_hasclipbmp: {
+  int variable_number = (int)getvalue(p,prog);
+  if( variable_number < 0 || variable_number >= prog->vsize+prog->ssize ){
+   print_sourcetext_location( prog, starting_p );
+   error("option: hasclip: bad variable access\n");
+  }
+  prog->vars[ variable_number ] = ( opt_number == opt_hascliptext ? NB_HasClipText() : NB_HasClipBmp() );
  } break;
 #endif
  }

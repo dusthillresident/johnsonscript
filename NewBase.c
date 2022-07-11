@@ -7,7 +7,9 @@
 #include <math.h>
 #include <unistd.h>
 #include <pthread.h>
-//#include "mylib.c"
+#ifndef myxlib_notstandalonetest
+ #include "mylib.c"
+#endif
 
 #include <X11/extensions/Xdbe.h>
 
@@ -91,8 +93,8 @@ Atom   CopyIncrPropertyAtom;
 unsigned int    CopyIncrOffset = 0;
 int CopyIncrChunkSize = 0;
 //Time CopyPasteLastEventTime;
-#define COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT 400
-#define COPY_PASTE_CONVERSIONREQUEST_TIMEOUT_LOOPCOUNT 400
+#define COPY_PASTE_INCR_TIMEOUT_LOOPCOUNT 5000
+#define COPY_PASTE_CONVERSIONREQUEST_TIMEOUT_LOOPCOUNT 12000
 int CopyPasteTimeoutCounter = 0;
 Atom CopyIncrTargetAtom;
 Atom MyPasteAtom;
@@ -461,6 +463,28 @@ int _NB_PasteData(Atom request_type){
  return PasteSucceeded;
 }
 
+// experimental
+// internal function
+int _NB_HasClipSpecificType( Atom request_type ){
+ if( ! _NB_PasteData(MyTargetsAtom) ){ // safe if newbase is not running
+  return 0;
+ }
+ int n = PasteBufferContentsSize / sizeof(Atom);
+ int i;
+ for( i=0; i<n; i++){
+  if( request_type == ((Atom*)PasteBuffer)[i] || (request_type == MyStringAtom && ((Atom*)PasteBuffer)[i] == MyUtf8Atom) ) return 1;
+ }
+ return 0;
+}
+// intended to be used externally
+int NB_HasClipText(){
+ return _NB_HasClipSpecificType( MyStringAtom );
+}
+
+int NB_HasClipBmp(){
+ return _NB_HasClipSpecificType( MyBmpAtom );
+}
+
 // intended to be used externally
 int NB_PasteBmp(){
  return _NB_PasteData(MyBmpAtom);
@@ -494,7 +518,9 @@ void NB_Copy_DenyRequest(XSelectionRequestEvent *sev){
 void NB_SelectionRequestHandler(){
  if( CopyPasteOngoing ){
   // only bother to deal with one at a time
-  tb();
+  #if CopyPasteDebug 
+  printf("CopyPasteDebug: SelectionRequest at a time when CopyPasteOngoing is true, denying request\n");
+  #endif
   NB_Copy_DenyRequest( &Myevent.xselectionrequest );
   return;
  }
@@ -1297,6 +1323,7 @@ void NB_DrawBmp(int x, int y, int sx, int sy, int w, int h, Bmp *bmp){
  char *image_data = malloc( bmp->structure.width * bmp->structure.height * 4 );
  int i,j,k,p;
  p=0;
+ if( SDepth == 24 )
  for(i=0; i<bmp->structure.height; i++){ // perform the necessary conversion of BMP image data, from BMP's bottom-to-top RGB+padding pixel array format, to RGBA top-to-bottom
   p = 4 * bmp->structure.width * (bmp->structure.height-i-1);
   for(j=0; j<bmp->structure.width; j++){
@@ -1304,6 +1331,18 @@ void NB_DrawBmp(int x, int y, int sx, int sy, int w, int h, Bmp *bmp){
     image_data[p++] = *((((char*)bmp->rawdata) + bmp->structure.offset) + bmp->structure.width*i*3 + 3*j + k + ( (bmp->structure.width%4*i) ) );
    }
    image_data[p++]=0;
+  }
+ }
+ else
+ for(i=0; i<bmp->structure.height; i++){ // this should hopefully work in the unlikely case that someone is still using 16bit colour depth.
+  p = 2 * bmp->structure.width * (bmp->structure.height-i-1);
+  for(j=0; j<bmp->structure.width; j++){
+   unsigned char rgb[3];
+   for(k=0; k<3; k++){
+    rgb[k] = *((((char*)bmp->rawdata) + bmp->structure.offset) + bmp->structure.width*i*3 + 3*j + k + ( (bmp->structure.width%4*i) ) );
+   }
+   *(short*)(image_data+p) = MyColour( rgb[2], rgb[1], rgb[0] );
+   p += 2;
   }
  }
  // create and initialise XImage structure with the converted image data, draw it onto the screen, and then free the memory allocated for the XImage
@@ -1575,12 +1614,24 @@ int NewBase_HandleEvents(int EnableBlocking){
   #if CopyPasteDebug
   printf("CopyPasteTimeoutCounter : %d\n",CopyPasteTimeoutCounter);
   #endif
-  if( ! CopyPasteTimeoutCounter ){
+  if( CopyPasteTimeoutCounter < 0 ){
    #if CopyPasteDebug
-   printf("CopyPasteDebug: copy/paste INCR timeout occurred\n");
+   printf("CopyPasteDebug: copy/paste timeout occurred. CopyPasteOngoing == %d ",CopyPasteOngoing);
    #endif
+   //tb();
    switch( CopyPasteOngoing ){
+    case CPO__PASTE_CONVERSION_REQUESTED: {
+     #if CopyPasteDebug
+     printf("(CPO__PASTE_CONVERSION_REQUESTED)\n");
+     #endif
+     PasteSucceeded = 0;
+     CopyPasteRequested = 0;
+     CopyPasteOngoing = 0;
+    } break;
     case CPO__INCOMING_INCR: {
+     #if CopyPasteDebug
+     printf("(CPO__INCOMING_INCR)\n");
+     #endif
      if( PasteBuffer ){
       free( (void*)PasteBuffer );
       PasteBufferContentsSize = 0;
@@ -1590,6 +1641,9 @@ int NewBase_HandleEvents(int EnableBlocking){
      }
     } break;
     case CPO__OUTGOING_INCR: {
+     #if CopyPasteDebug
+     printf("(CPO__OUTGOING_INCR)\n");
+     #endif
      CopyPasteOngoing = 0;
     } break;
    }//endcase
@@ -1645,14 +1699,31 @@ void start_newbase_thread(int w, int h){
 
 int main(int argc, char **argv){
 
+ Bmp *mybmp = NULL;
+
  start_newbase_thread(640,480);
 
  //Wait(1);
  //GcolBGDirect(0); // FUCK! setting a background colour makes it so that the window is automatically cleared whenever it's resized, results in bad flickering
-
+ int a=0,b=0;
  while(1){
   Gcol(Rnd(256),Rnd(256),Rnd(256));
-  Circle(Rnd(WinW),Rnd(WinH),Rnd(WinH));
+  if( a=NB_HasClipBmp() ){
+   Circle(Rnd(WinW),Rnd(WinH),Rnd(WinH));
+  }else{
+   Rectangle( Rnd(WinW),Rnd(WinH), Rnd(100), Rnd(100));
+  }
+  if(a!=b)Cls();
+  b=a;
+  if(mouse_b){
+   if( NB_PasteBmp() ){
+    if( mybmp ) free(mybmp);
+    mybmp = malloc(PasteBufferContentsSize);
+    memcpy(mybmp, (void*)PasteBuffer, PasteBufferContentsSize);
+    NB_DrawBmp(0, 0, 0, 0, -1, -1, mybmp );
+   }
+   while(mouse_b) Wait(1);
+  }
   Wait(1);
  }
 
