@@ -6,10 +6,11 @@ then
  exit
 fi
 
-if [[ ! $# -eq 1 ]]
+if [[ $# -lt 1 ]]
 then
- echo "This script builds and runs a johnsonscript program via the johnsonscript to C transcompiler"
- echo "It accepts only one argument: program text or a file path to program text"
+ echo "This is the Johnsonscript trans-compiler run script"
+ echo "Usage:"
+ echo "$0 [program text or path to a file containing program text]"
  exit
 fi
 
@@ -23,7 +24,17 @@ gcc TEMP_FILE.c -lm -lXext -lX11 -lpthread
 rm TEMP_FILE.c
 if [[ -e a.out ]]
 then
- ./a.out
+ # bash really just sucks, I end up using johnsonscript to do stuff instead because it's just such a pain to work out how you're meant to do it in bash
+ ./gfxbin '
+ variable i;
+ stringvar cmdstr;
+ set i 1
+ while < i _argc
+  set cmdstr cat$ cmdstr " " chr$34 $i chr$34
+  set i + i 1
+ endwhile
+ oscli cat$ "./a.out " cmdstr
+ quit' "$@"
 else
  echo "Compilation failed";
 fi
