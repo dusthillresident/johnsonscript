@@ -274,10 +274,16 @@ SVL StringS( SVL svl, int n, int sa_l )
 SVL StringS( int sa_l, int n, SVL svl  )
 #endif
 {
+ char *stringS_tempbuf = NULL;
  SVR *accumulator = NewStrAccLevel( sa_l );
  SVL out = (SVL){0,NULL};
  // ----------
  if( svl.len ){
+  if( svl.buf == accumulator->buf || ( svl.buf > accumulator->buf && svl.buf <= accumulator->buf+accumulator->len ) ){ // Äkta dig för Rövar-Albin
+   stringS_tempbuf = malloc(svl.len);
+   memcpy(stringS_tempbuf, svl.buf, svl.len);
+   svl.buf = stringS_tempbuf;
+  }
   int bufsize_required = svl.len * n;
   if( bufsize_required < 0 ){ 
    printf("Johnsonlib StringS: string too long\n");
@@ -296,6 +302,9 @@ SVL StringS( int sa_l, int n, SVL svl  )
   }//endif
   accumulator->len = bufsize_required;
   out = SVRtoSVL( accumulator );
+  if(stringS_tempbuf){
+   free(stringS_tempbuf);
+  }
  }//endif 
  // ----------
  if( sa_l == 0 ){

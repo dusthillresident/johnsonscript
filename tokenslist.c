@@ -222,19 +222,20 @@
  #define t_rectangle		148	// rectangle			X Y W [H] ;
  #define t_triangle		149	// triangle			X Y X Y X Y ;
  #define t_drawtext		150	// drawtext			X Y S (stringval);
- #define t_refreshmode		151	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		152	// refresh 			;
- #define t_gcol			153	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		154	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			155	// cls				;
- #define t_drawmode		156	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_drawscaledtext	151	// drawscaledtext		X Y XS YS (stringval);
+ #define t_refreshmode		152	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		153	// refresh 			;
+ #define t_gcol			154	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		155	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			156	// cls				;
+ #define t_drawmode		157	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
 #if allow_debug_commands
- #define t_tb		157	//	testbeep
- #define t_printstackframe 158	//	print everything in the current stack frame
- #define t_printentirestack 159	//	print everything in the stack up to the current stack frame
+ #define t_tb		158	//	testbeep
+ #define t_printstackframe 159	//	print everything in the current stack frame
+ #define t_printentirestack 160	//	print everything in the stack up to the current stack frame
 #endif
 
 #define t_bad		255	//			bad data

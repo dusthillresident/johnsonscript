@@ -221,6 +221,7 @@
  #define t_rectangle		COCKSPENIS	// rectangle			X Y W [H] ;
  #define t_triangle		COCKSPENIS	// triangle			X Y X Y X Y ;
  #define t_drawtext		COCKSPENIS	// drawtext			X Y S (stringval);
+ #define t_drawscaledtext	COCKSPENIS	// drawscaledtext		X Y XS YS (stringval);
  #define t_refreshmode		COCKSPENIS	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
  #define t_refresh		COCKSPENIS	// refresh 			;
  #define t_gcol			COCKSPENIS	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;

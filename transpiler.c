@@ -1702,7 +1702,7 @@ void translate_command(program *prog, int *p){
     #ifdef enable_graphics_extension 
     PrintMain("{ SVL s = ");
     translate_stringvalue(prog,p);
-    PrintMain("; if( s.len > 54 ) NB_CopyTextN( s.buf, s.len ); } \n");
+    PrintMain("; if( s.len > 54 ) NB_CopyBmpN( s.buf, s.len ); } \n");
     #else
     ErrorOut("FUCK OFF!\n");
     #endif

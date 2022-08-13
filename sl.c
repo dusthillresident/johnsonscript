@@ -25,21 +25,21 @@
 #if 0
  void* mymallocfordebug(size_t size    ,int n, char *f){
   void *out = malloc(size);
-  printf("line %d,	%s:	MALLOC	%x\n",n,f,out);
+  printf("line %d,	%s:	MALLOC	%p\n",n,f,out);
   return out;
  }
  void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f){
   void *out = calloc(nmemb,size);
-  printf("line %d,	%s:	CALLOC	%x\n",n,f,out); 
+  printf("line %d,	%s:	CALLOC	%p\n",n,f,out); 
   return out;
  }
  void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f){
   void *out = realloc(ptr,size);
-  printf("line %d,	%s:	REALLOC	%x\n",n,f,out);
+  printf("line %d,	%s:	REALLOC	%p (input %p)\n",n,f,out,ptr);
   return out;
  }
  void myfreefordebug(void *ptr,      int n, char *f){
-  printf("line %d,	%s:	FREEING	%x\n",n,f,ptr);
+  printf("line %d,	%s:	FREEING	%p\n",n,f,ptr);
   free(ptr);
  }
  #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__)
@@ -1279,6 +1279,9 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"drawtext", text) ){	//	
   out = maketoken( t_drawtext ); goto gettoken_normalout;
  }
+ if( wordmatch( pos,"drawscaledtext", text) ){	//	
+  out = maketoken( t_drawscaledtext ); goto gettoken_normalout;
+ }
  if( wordmatch( pos,"refreshmode", text) ){	//	
   out = maketoken( t_refreshmode ); goto gettoken_normalout;
  }
@@ -1792,6 +1795,7 @@ char* tokenstring(token t){
  case t_rectangle: return "rectangle";
  case t_triangle: return "triangle";
  case t_drawtext: return "drawtext";
+ case t_drawscaledtext: return "drawscaledtext";
  case t_refreshmode: return "refreshmode";
  case t_refresh: return "refresh";
  case t_gcol: return "gcol";
@@ -1989,13 +1993,21 @@ getstringvalue( program *prog, int *pos ){
  }
  case t_stringS:
  {
+  char *stringS_tempbuf = NULL;
   int n = (int)getvalue(pos,prog);
   stringval svl = getstringvalue( prog,pos );
   if( ! svl.len ){
    return (stringval){NULL,0};
   }
+  if( svl.string == accumulator->string || ( svl.string > accumulator->string && svl.string <= accumulator->string+accumulator->len ) ){ // Äkta dig för Rövar-Albin
+   stringS_tempbuf = malloc(svl.len);
+   memcpy(stringS_tempbuf, svl.string, svl.len);
+   svl.string = stringS_tempbuf;
+  }
   int bufsize_required = svl.len * n;
-  if( bufsize_required > accumulator->bufsize ) stringvar_adjustsizeifnecessary(accumulator, bufsize_required, 1);
+  if( bufsize_required > accumulator->bufsize ){
+   stringvar_adjustsizeifnecessary(accumulator, bufsize_required, 1);
+  }
   if( svl.len == 1 ){ // if it's one character we can just do a nice memset()
    memset(accumulator->string, svl.string[0], n);
   }else{ // or otherwise
@@ -2009,6 +2021,9 @@ getstringvalue( program *prog, int *pos ){
   stringval out;
   out.len = bufsize_required;
   out.string = accumulator->string;
+  if(stringS_tempbuf){
+   free(stringS_tempbuf);
+  }
   return out;
  }
  case t_strS:
@@ -3485,6 +3500,17 @@ interpreter(int p, program *prog){
   sv = getstringvalue( prog, &p );
   char holdthis = sv.string[sv.len]; sv.string[sv.len]=0;
   drawtext_(x,y,s, sv.string);
+  sv.string[sv.len]=holdthis;
+  break;
+ }
+ case t_drawscaledtext:
+ {
+  p+=1;
+  int x,y,xs,ys; stringval sv;
+  x=getvalue(&p,prog); y=getvalue(&p,prog); xs=getvalue(&p,prog); ys=getvalue(&p,prog);
+  sv = getstringvalue( prog, &p );
+  char holdthis = sv.string[sv.len]; sv.string[sv.len]=0;
+  drawscaledtext(x,y,xs,ys, sv.string);
   sv.string[sv.len]=holdthis;
   break;
  }
