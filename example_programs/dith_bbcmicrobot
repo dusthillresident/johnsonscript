@@ -1,0 +1,110 @@
+#!/usr/local/bin/gfxbin
+/*
+
+ ====================================================
+ == Dithered fireballz atop a dark blue background ==
+ ====================================================
+ by dusthillresident
+ 
+ This is an adapted and expanded version of a program I wrote in BBC BASIC for the BBCMicroBot on twitter
+ https://twitter.com/bbcmicrobot/status/1557054874705182722
+
+ See also: a modified version by Kweepa:
+ https://twitter.com/bbcmicrobot/status/1557194250957324289
+
+*/
+
+startgraphics 320 256
+
+variable i w h s j x y _X _Y _R _D xs ys seed;
+stringvar plswait; set plswait "Please wait"; constant txt_sc 2;
+
+set seed 73
+
+.start
+
+# Draw "please wait" message
+set x (- >> winw 1 * 0.5 len$plswait 8 txt_sc / winw 320)
+set y (>> winh 1)
+set w (* txt_sc / winw 320)
+set h (* << txt_sc 1 / winh 256)
+set _X (- x * 7 int w) 
+set _Y (- y int h)
+gcol 0 0 127
+rectanglef _X _Y (* (+ 8 1) len$plswait int w) (* (+ 8 1) int h)
+gcol 128 128 255
+rectangle _X _Y (* (+ 8 1) len$plswait int w) (* (+ 8 1) int h)
+drawscaledtext x y w h plswait;
+
+# Prepare some variables used in the main drawing loop
+set w winw
+set h winh
+set xs / winw 320
+set ys / winw 256
+
+# Main drawing loop
+set x 0
+while < x w
+ set y 0
+ while < y h
+  if expose goto ".start" endif
+  option "seedrnd" seed;
+  set s 0
+  set j 0
+  while < j 12
+   set _X * xs rnd 320
+   set _Y * ys rnd 256
+   set _R * ys + (* 64 0.25) rnd * 0.25 250
+   set _D sqr + pow(- x _X )2 pow(- y _Y )2;
+   if < _D _R
+    set s + s - 1 / _D _R
+    if > s 1
+     set s 1 
+    endif
+   endif
+   set j + j 1
+  endwhile
+  if > s 0;
+   fngcol - (+ s fnd( - (* s 2) > s 0.5 )) neg > s 0.5
+  else
+   fngcol * 4 fnd / y h
+  endif
+  pixel x (- h y 1) (+ x 1) (- h y 1)
+  set y + y 1
+ endwhile
+ set x + x 2
+endwhile
+
+while ! expose
+ caseof mouseb
+  when 1; 
+   set seed - seed 1
+  when 4;
+   set seed + seed 1
+ endcase
+ if mouseb
+  while mouseb
+   wait 1
+  endwhile
+  goto ".start"
+ endif
+ wait 16
+endwhile
+
+goto ".start"
+
+function fnd v; return < (+ 0.5 * sin(+ (* sin y _pi) * x 4.1) 0.5) v
+
+function fngcol c;
+ set c int c
+ caseof c;
+  when 0; gcol 0
+  when 1; gcol 255 0 0
+  when 2; gcol 255 255 0
+  when 3; gcol -1
+  when 4; gcol 255
+  otherwise
+   print "unknown: " c;
+   gcol 0
+ endcase
+endfunction
