@@ -1354,7 +1354,7 @@ void translate_command(program *prog, int *p){
    PrintMain(") );\n");
   } break;
  #ifdef enable_graphics_extension 
- case t_startgraphics: case t_stopgraphics: case t_winsize: case t_pixel: case t_line: case t_circlef: case t_circle: case t_rectanglef: case t_rectangle: case t_triangle: case t_drawtext:
+ case t_startgraphics: case t_stopgraphics: case t_winsize: case t_pixel: case t_line: case t_circlef: case t_circle: case t_rectanglef: case t_rectangle: case t_triangle: case t_drawtext: case t_drawscaledtext:
  case t_refreshmode: case t_refresh: case t_gcol: case t_bgcol: case t_cls: case t_drawmode:
   {
    trans_program_uses_gfx = 1;
@@ -1485,6 +1485,22 @@ void translate_command(program *prog, int *p){
       PrintMain(");\n");
      }
      free(x); free(y); free(s);
+    }
+    break;
+   case t_drawscaledtext:
+    {
+     *p += 1;
+     char *x,*y,*xs,*ys;
+     x  = trans__transval_into_tempbuf( prog, p );
+     y  = trans__transval_into_tempbuf( prog, p );
+     xs = trans__transval_into_tempbuf( prog, p );
+     ys = trans__transval_into_tempbuf( prog, p );
+     PrintMain("{\n int x = %s;\nint y = %s;\nint xs = %s;\nint ys = %s;\n",x,y,xs,ys);
+     PrintMain("SVL str ="); translate_stringvalue(prog,p); PrintMain("; int holdthis = str.buf[str.len]; str.buf[str.len]=0;\n");
+     PrintMain("drawscaledtext(x,y,xs,ys,str.buf);\n");
+     PrintMain("str.buf[str.len] = holdthis;\n");
+     PrintMain("}\n");
+     free(x); free(y); free(xs); free(ys);
     }
     break;
    case t_refreshmode:
