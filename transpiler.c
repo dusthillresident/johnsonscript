@@ -1584,11 +1584,19 @@ void translate_command(program *prog, int *p){
  case t_bput:
   {
    *p += 1;
-   PrintMain("Johnson_Bput(");
-   translate_value(prog, p);
-   PrintMain(",");
-   translate_value(prog, p);
-   PrintMain(");");
+   char *fp = trans__transval_into_tempbuf( prog, p );
+   char *v  = trans__transval_into_tempbuf( prog, p );
+   if( isvalue(CurTok.type) ){
+    PrintMain("{\ndouble fp = %s;\n",fp);
+    PrintMain("Johnson_Bput(fp,%s);",v);
+    do{
+     PrintMain("Johnson_Bput(fp,"); translate_value(prog, p); PrintMain(");\n");
+    }while( isvalue(CurTok.type) );
+    PrintMain("}\n");
+   }else{
+    PrintMain("Johnson_Bput(%s,%s);",fp,v);
+   }
+   free(fp); free(v);   
   } break;
  case t_sptr:
   {

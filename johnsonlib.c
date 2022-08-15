@@ -842,6 +842,8 @@ void Johnsonlib_init(int argc, char **argv){
   SetSVR( NewStringvar_svrp(), ToSVL( argv[i] ) );
  }
  Johnson_Argc = argc-1;
+ // seed random number generator
+ SeedRng();
 }
 
 
