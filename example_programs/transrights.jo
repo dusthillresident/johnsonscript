@@ -45,7 +45,7 @@ while < i 3
  set j ! i;
  while < j 2;
   rectanglef 0
-             ( + (* 2 / winh 5) (* (/ winh 5) i | = j 0 neg = j 1 ) )
+             ( + (* 2 / winh 5) (* (/ winh 5) i | ! j neg j ) )
              winw
              / winh 5;
   set j + j 1;
