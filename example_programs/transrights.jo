@@ -1,0 +1,64 @@
+# TransRights.jo
+/*
+ =========================================
+ == A demonstration of 'drawscaledtext' ==
+ =========================================
+*/
+
+variable x y w h i j;
+
+/*
+ * Create the graphics window with size 640x480
+ */
+
+startgraphics 640 480;
+.start
+
+/*
+ * Configure text position and size parameters according to window size
+ */
+
+set w  int / winw * 8 6;
+set h  int / winh * 8 2;
+set x  (- winw * w 8 6);
+set y  >> (- winh * h 8 2) 1;
+
+/*
+ * Draw the text in bright white on a black background
+ */
+
+drawmode 3
+cls
+gcol -1
+drawscaledtext x y w h "Trans";
+drawscaledtext x (+ y * 8 h ) w h "Rights";
+
+/*
+ * Set drawing mode to 'GXand' (source AND destination),
+ * and draw the trans flag onto the screen, colouring in the text
+ */
+
+drawmode 1
+set i 0
+while < i 3
+ gcol val$ mid$ "0xffffff0xff7fff0x7fffff" (* i 8) 8;
+ set j ! i;
+ while < j 2;
+  rectanglef 0
+             ( + (* 2 / winh 5) (* (/ winh 5) i | = j 0 neg = j 1 ) )
+             winw
+             / winh 5;
+  set j + j 1;
+ endwhile
+ set i + i 1;
+endwhile
+
+/*
+ * Wait for the expose event which tells us if we need to repaint the screen
+ */
+
+while ! expose;
+ wait 16.6;
+endwhile
+
+goto ".start"
