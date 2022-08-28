@@ -1,0 +1,147 @@
+option "vsize" 1024
+startgraphics 320 320
+
+variable x y i v oldr;
+variable rx ry rr rm; # ripple x,y,radius,magnitude,state
+constant n * 5 45;
+set rx alloc n
+set ry alloc n
+set rr alloc n
+set rm alloc n
+constant step 12
+constant isoffscreenadjust 100
+constant d8pim2 / (* _pi 2) 8;
+
+while 1
+ set x 0
+ while < x winw
+  set y 0
+  while < y winh
+
+   set v 0
+
+   set i 0
+   while < i n
+
+    if > Arm(i) 0.007
+     set v + v ripple Arx(i) Ary(i) Arr(i) Arm(i)
+    endif
+
+    set i + i 1
+   endwhile   
+   if < v -1 set v -1 endif
+   if > v 1 set v 1 endif
+   gcol 64 64 + 128 * v 96
+   rectanglef x y step
+
+   set y + y step
+  endwhile
+  set x + x step
+ endwhile
+
+ set i 0
+ while < i n
+  if > Arm(i) 0.007
+   set oldr Arr(i)
+   set Arr(i) + Arr(i) 5
+   set Arm(i) * Arm(i) 0.985
+   # reverberation from right side
+   if && < (+ Arx(i) oldr) winw
+         >= (+ Arx(i) Arr(i)) winw;
+    addripple ( + winw - winw Arx(i) ) Ary(i) Arr(i) Arm(i)
+   endif
+   # reverberation from left side
+   if && >= (- Arx(i) oldr) 0
+         < (- Arx(i) Arr(i)) 0;
+    addripple ( neg Arx(i) ) Ary(i) Arr(i) Arm(i)
+   endif
+   # reverberation from bottom side
+   if && < (+ Ary(i) oldr) winh
+         >= (+ Ary(i) Arr(i)) winh;
+    addripple Arx(i) ( + winh - winh Ary(i) ) Arr(i) Arm(i)
+   endif
+   # reverberation from top side
+   if && >= (- Ary(i) oldr) 0
+         < (- Ary(i) Arr(i)) 0;
+    addripple Arx(i) ( neg Ary(i) ) Arr(i) Arm(i)
+   endif
+   # pruning
+   if isoffscreen Arx(i) Ary(i) Arr(i)
+    #testbeep
+    set Arm(i) 0
+   endif
+  endif #magnitude above threshold
+  .next
+  set i + i 1
+ endwhile
+ 
+ if mouseb
+  addripple (* step int / mousex step) ( * step int / mousey step) 0.1 1
+
+  #while mouseb endwhile
+ endif
+
+ wait 2
+ 
+endwhile
+
+function isoffscreen x y r local i xx yy;
+ set i 0
+ while < i 8
+  set xx + x * r cos * i d8pim2
+  set yy + y * r sin * i d8pim2 
+  if && >= xx neg isoffscreenadjust
+         < xx (+ winw isoffscreenadjust)
+        >= yy neg isoffscreenadjust
+         < yy (+ winh isoffscreenadjust)
+   endfunction
+  endif
+  set i + i 1
+ endwhile
+return 1
+
+function addripple x y r m local i;
+ set i 0
+ while < i n
+  if <= Arm(i) 0.02
+   set Arx(i) x
+   set Ary(i) y
+   set Arr(i) r
+   set Arm(i) m;
+   endfunction
+  else
+   if && = Arx(i) x = Ary(i) y
+    endfunction
+   endif
+  endif
+  set i + i 5
+ endwhile
+endfunction
+
+function ripple _x _y r m local d dx dy xx yy dr;
+ #if <= m 0.007 endfunction endif
+/*
+ if < _x - x r
+  endfunction
+ endif
+ if > _x + x r
+  endfunction
+ endif
+ if < _y - y r
+  endfunction
+ endif
+ if > _y + y r
+  endfunction
+ endif 
+*/
+ set dx - x _x
+ set dy - y _y
+ set d sqr + (* dx dx) * dy dy
+ if > d r
+  endfunction
+ endif
+ if < d - r * r 0.17
+  endfunction
+ endif
+ set dr / d r
+return * m dr dr sin * _pi 2 ( + 1 * r 0.02 ) - 1 dr
