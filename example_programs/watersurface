@@ -1,15 +1,15 @@
 option "vsize" 1024
-startgraphics 320 320
+startgraphics 360 360
 
-variable x y i v oldr;
+variable x y i v oldr fc;
 variable rx ry rr rm; # ripple x,y,radius,magnitude,state
-constant n * 5 45;
+constant n 67;
 set rx alloc n
 set ry alloc n
 set rr alloc n
 set rm alloc n
 constant step 12
-constant isoffscreenadjust 100
+constant isoffscreenadjust 50
 constant d8pim2 / (* _pi 2) 8;
 
 while 1
@@ -48,22 +48,22 @@ while 1
    # reverberation from right side
    if && < (+ Arx(i) oldr) winw
          >= (+ Arx(i) Arr(i)) winw;
-    addripple ( + winw - winw Arx(i) ) Ary(i) Arr(i) Arm(i)
+    addripple ( + winw - winw Arx(i) ) Ary(i) Arr(i) Arm(i) 1
    endif
    # reverberation from left side
    if && >= (- Arx(i) oldr) 0
          < (- Arx(i) Arr(i)) 0;
-    addripple ( neg Arx(i) ) Ary(i) Arr(i) Arm(i)
+    addripple ( neg Arx(i) ) Ary(i) Arr(i) Arm(i) 1
    endif
    # reverberation from bottom side
    if && < (+ Ary(i) oldr) winh
          >= (+ Ary(i) Arr(i)) winh;
-    addripple Arx(i) ( + winh - winh Ary(i) ) Arr(i) Arm(i)
+    addripple Arx(i) ( + winh - winh Ary(i) ) Arr(i) Arm(i) 1
    endif
    # reverberation from top side
    if && >= (- Ary(i) oldr) 0
          < (- Ary(i) Arr(i)) 0;
-    addripple Arx(i) ( neg Ary(i) ) Arr(i) Arm(i)
+    addripple Arx(i) ( neg Ary(i) ) Arr(i) Arm(i) 1
    endif
    # pruning
    if isoffscreen Arx(i) Ary(i) Arr(i)
@@ -71,17 +71,19 @@ while 1
     set Arm(i) 0
    endif
   endif #magnitude above threshold
-  .next
   set i + i 1
  endwhile
  
- if mouseb
-  addripple (* step int / mousex step) ( * step int / mousey step) 0.1 1
+ if fc
+  if mouseb
+   addripple (* step int / mousex step) ( * step int / mousey step) 0.1 1 4
 
-  #while mouseb endwhile
+   #while mouseb endwhile
+  endif
  endif
 
- wait 2
+ wait 16
+ set fc ! fc
  
 endwhile
 
@@ -100,7 +102,8 @@ function isoffscreen x y r local i xx yy;
  endwhile
 return 1
 
-function addripple x y r m local i;
+function addripple x y r m stp local i low lowp;
+ set low 999
  set i 0
  while < i n
   if <= Arm(i) 0.02
@@ -114,13 +117,28 @@ function addripple x y r m local i;
     endfunction
    endif
   endif
-  set i + i 5
+  if < Arm(i) low
+   set low Arm(i)
+   set lowp i
+  endif
+  set i + i stp
  endwhile
+ #testbeep
+ if = stp 1
+  if( > m Arm(lowp) )
+   set Arx(lowp) x
+   set Ary(lowp) y
+   set Arr(lowp) r
+   set Arm(lowp) m;
+   #testbeep
+   endfunction
+  endif
+ endif
 endfunction
 
 function ripple _x _y r m local d dx dy xx yy dr;
  #if <= m 0.007 endfunction endif
-/*
+
  if < _x - x r
   endfunction
  endif
@@ -133,9 +151,10 @@ function ripple _x _y r m local d dx dy xx yy dr;
  if > _y + y r
   endfunction
  endif 
-*/
+
  set dx - x _x
  set dy - y _y
+
  set d sqr + (* dx dx) * dy dy
  if > d r
   endfunction
