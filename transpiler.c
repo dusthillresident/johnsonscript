@@ -1750,6 +1750,20 @@ void translate_command(program *prog, int *p){
     #else
     ErrorOut("FUCK OFF!\n");
     #endif
+   }else if( TheseStringsMatch(opstr, "customchar") ){
+    #ifdef enable_graphics_extension 
+    PrintMain("{ // option \"customchar\"\nint character_number; unsigned char glyph_bytes[8];\ncharacter_number =");
+    translate_value(prog,p); PrintMain(";\n");
+    int i;
+    for(i=0; i<8; i++){
+     PrintMain("glyph_bytes[%d] = ",i); translate_value(prog,p); PrintMain(";\n");
+    }
+    PrintMain("if( !( character_number & ~0xff ) ){\n");
+    PrintMain("CustomChar( character_number, glyph_bytes[0],glyph_bytes[1],glyph_bytes[2],glyph_bytes[3],glyph_bytes[4],glyph_bytes[5],glyph_bytes[6],glyph_bytes[7] );\n");
+    PrintMain("}\n}\n");
+    #else
+    ErrorOut("PENIS\n");
+    #endif
    }else{
     trans_print_sourcetext_location( prog, *p);
     PrintErr("translate_command: option: unrecognised option\n");

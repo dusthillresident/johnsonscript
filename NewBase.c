@@ -1565,7 +1565,7 @@ void drawscaledtext(int x, int y, int xs, int ys, unsigned char *s){
  }
  int step = 8 * xs;
  int CharPix( int x, int y ){
-  if( x<0 || x>8 || y<0 || y>8 ) return 0;
+  if( x<0 || x>7 || y<0 || y>7 ) return 0;
   return !!(BBCFont[*s][y] & (128>>x));
  } 
 

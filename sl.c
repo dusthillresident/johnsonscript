@@ -634,6 +634,7 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_pastebmp    109     // read bmp from clipboard
 #define opt_hascliptext 110	// check if the clipboard has text	
 #define opt_hasclipbmp	111	// check if the clipboard has .bmp image
+#define opt_customchar  112	// define a custom font character
 #endif
 
 void option( program *prog, int *p ){
@@ -666,6 +667,7 @@ void option( program *prog, int *p ){
   if( !strncmp( "pastebmp", id_string.string, id_string.len ) ){ opt_number=opt_pastebmp;goto option__identify_option_string_out;}	// pastebmp [string var reference number]
   if( !strncmp( "hascliptext", id_string.string, id_string.len ) ){ opt_number=opt_hascliptext;goto option__identify_option_string_out;}// hascliptext [variable reference number]
   if( !strncmp( "hasclipbmp", id_string.string, id_string.len ) ){ opt_number=opt_hasclipbmp;goto option__identify_option_string_out;}// hasclipbmp [variable reference number]
+  if( !strncmp( "customchar", id_string.string, id_string.len ) ){ opt_number=opt_customchar;goto option__identify_option_string_out;}// hasclipbmp [variable reference number]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
@@ -840,6 +842,18 @@ void option( program *prog, int *p ){
    error("option: hasclip: bad variable access\n");
   }
   prog->vars[ variable_number ] = ( opt_number == opt_hascliptext ? NB_HasClipText() : NB_HasClipBmp() );
+ } break;
+ case opt_customchar: {
+  int character_number; unsigned char glyph_bytes[8]; int i;
+  character_number = (int)getvalue(p,prog);
+  for( i=0; i<8; i++ ){
+   glyph_bytes[i] = (unsigned char)getvalue(p,prog);
+  }
+  if( !( character_number & ~0xff ) ){
+   CustomChar( character_number,
+               glyph_bytes[0],  glyph_bytes[1], glyph_bytes[2], glyph_bytes[3],
+               glyph_bytes[4],  glyph_bytes[5], glyph_bytes[6], glyph_bytes[7] ); 
+  }
  } break;
 #endif
  }
@@ -1852,7 +1866,7 @@ void mystrncpy(char *dest, char *src, size_t n){
 
 void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve){
  if(bufsize_required<sv->bufsize){
-  tb();
+  //tb();
   return;
  }
  int new_bufsize = bufsize_required+(256-bufsize_required % 256);
