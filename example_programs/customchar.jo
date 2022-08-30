@@ -1,0 +1,18 @@
+constant xoffset 60
+
+startgraphics 512 512
+
+option "customchar" 224 126 129 165 129 165 153 129 126
+option "customchar" 225 54 127 127 127 62 28 8 0
+
+bgcol -1
+gcol 0
+
+while 1
+ if expose
+  cls
+  drawscaledtext xoffset xoffset (/ (- winw << xoffset 1) 8 ) (/ (- winh << xoffset 1) 8 ) chr$224
+  drawscaledtext (- >> winw 1 (* 3 8 3) ) (- winh + 10 * 3 8 ) 3 3 cat$ "Hello " chr$225
+ endif
+ wait 16.6
+endwhile
