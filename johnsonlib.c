@@ -278,7 +278,7 @@ SVL StringS( int sa_l, int n, SVL svl  )
  SVR *accumulator = NewStrAccLevel( sa_l );
  SVL out = (SVL){0,NULL};
  // ----------
- if( svl.len ){
+ if( svl.len && n > 0 ){
   if( svl.buf == accumulator->buf || ( svl.buf > accumulator->buf && svl.buf <= accumulator->buf+accumulator->len ) ){ // Äkta dig för Rövar-Albin
    stringS_tempbuf = malloc(svl.len);
    memcpy(stringS_tempbuf, svl.buf, svl.len);

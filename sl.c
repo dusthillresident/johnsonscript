@@ -2010,7 +2010,7 @@ getstringvalue( program *prog, int *pos ){
   char *stringS_tempbuf = NULL;
   int n = (int)getvalue(pos,prog);
   stringval svl = getstringvalue( prog,pos );
-  if( ! svl.len ){
+  if( ! svl.len || n < 1 ){
    return (stringval){NULL,0};
   }
   if( svl.string == accumulator->string || ( svl.string > accumulator->string && svl.string <= accumulator->string+accumulator->len ) ){ // Äkta dig för Rövar-Albin
