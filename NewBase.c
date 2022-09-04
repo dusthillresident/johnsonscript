@@ -1397,6 +1397,7 @@ void Line(int x,int y,int xb,int yb){
 
 void Circle(int x,int y, int r){
  if(!newbase_is_running) return;
+ if(r<0) r = -r;
  XDrawArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
@@ -1405,6 +1406,7 @@ void Circle(int x,int y, int r){
 
 void CircleFill(int x,int y, int r){
  if(!newbase_is_running) return;
+ if(r<0) r = -r;
  XFillArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
