@@ -988,6 +988,41 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   }
  }
 
+ // binary number literal/constant
+ if( text[*pos] == '0' && text[*pos+1] == 'b' ){
+  int pos2 = *pos + 2;
+  int bin_value_result = 0;
+  while( text[pos2] == '0' || text[pos2] == '1' ){
+   bin_value_result = (bin_value_result << 1) | (text[pos2] == '1');
+   pos2 += 1;
+  }
+  out = maketoken_num( (double) bin_value_result );
+  *pos = pos2;
+  goto gettoken_normalout;
+ }
+
+ // hex number literal/constant 
+ if( text[*pos] == '0' && text[*pos+1] == 'x' ){ 
+  int hexchar(unsigned char c){
+   if( c >= '0' && c <= '9') {
+    return c-'0';
+   } else if( c>='A' && c<='F') {
+    return c-'A'+10;
+   } else if( c>='a' && c<='f') {
+    return c-'a'+10;
+   } else return -1;
+  }
+  int pos2 = *pos + 2;
+  int hex_value_result = 0; int new_hex_value;
+  while( ( new_hex_value=hexchar(text[pos2]) ) != -1 ){
+   hex_value_result = ( hex_value_result << 4 ) | new_hex_value;
+   pos2 += 1;
+  }
+  out = maketoken_num( (double) hex_value_result );
+  *pos = pos2;
+  goto gettoken_normalout;
+ }
+ 
  // number literal/constant
  l = patternmatch( *pos,"-123456789.0", text);
  if( l && !(l==1 && text[*pos] == '-') && patterncontains( *pos,"1234567890", text) ){	
