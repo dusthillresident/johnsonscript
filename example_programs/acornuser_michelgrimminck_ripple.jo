@@ -2,8 +2,8 @@ REM  ......................................
 REM  .. 2D Water Surface Simulation Demo ..
 REM  ......................................
 REM 
-REM  Based on an algorithm posted in the August 92 issue of Acorn User magazine,
-REM  attributed to Michel Grimminck
+REM  Based on an algorithm posted in the August 92 issue of Acorn User magazine, attributed to Michel Grimminck.
+REM  Thanks to Rich Talbot-Watkins for finding this info.
 REM  https://archive.org/details/AcornUser1992Magazine/AcornUser9208/page/n67/mode/2up
 REM  https://stardot.org.uk/forums/viewtopic.php?f=29&t=25379
 
