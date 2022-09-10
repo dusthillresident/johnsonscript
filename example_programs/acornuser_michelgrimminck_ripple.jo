@@ -1,0 +1,100 @@
+REM  ......................................
+REM  .. 2D Water Surface Simulation Demo ..
+REM  ......................................
+REM 
+REM  Based on an algorithm posted in the August 92 issue of Acorn User magazine,
+REM  attributed to Michel Grimminck
+REM  https://archive.org/details/AcornUser1992Magazine/AcornUser9208/page/n67/mode/2up
+REM  https://stardot.org.uk/forums/viewtopic.php?f=29&t=25379
+
+
+constant wh 64;
+option "vsize" + 512 * wh wh 2;
+constant shift 3;
+variable x y;
+
+variable heights velocities v ox oy;
+
+constant friction 0.02;
+constant tension 0.5;
+
+set heights alloc wh;
+set y 0
+while < y wh
+ set Aheights(y) alloc wh
+ set y + y 1 
+endwhile
+set velocities alloc wh
+set y 0
+while < y wh
+ set Avelocities(y) alloc wh
+ set y + y 1
+endwhile
+
+/*
+set x 0
+while < x 32
+ set AAheights( + 1 rnd - wh 2 )( + 1 rnd - wh 2 ) ( - rnd 5 2 )
+ set x + x 1
+endwhile
+*/
+
+startgraphics << wh shift << wh shift;
+option "wintitle" "2D Water Surface Demo, original by Michel Grimminck"
+
+while 1
+
+ REM process velocities
+ set x 1
+ while < x - wh 1
+  set y 1
+  while < y - wh 1
+   set AAvelocities(x)(y)
+        * (- 1 friction )
+          (
+           - AAvelocities(x)(y)
+             * tension
+               ( - (* 4 AAheights(x)(y))
+                   AAheights(- x 1)(  y  )
+                   AAheights(+ x 1)(  y  )
+                   AAheights(  x  )(- y 1)
+                   AAheights(  x  )(+ y 1)
+               )
+          )
+   set y + y 1
+  endwhile
+  set x + x 1
+ endwhile
+
+ REM process heights, we also draw here
+ if expose cls endif
+ set x 1
+ while < x - wh 1
+  set y 1
+  while < y - wh 1
+   set AAheights(x)(y) + AAheights(x)(y) AAvelocities(x)(y)
+   set v AAheights(x)(y)
+   set v + 128 * v 256
+   if > v 255 set v 255 else if < v 0 set v 0 endif endif
+   gcol 32 (+ 64 * v 0.25 ) v
+   rectanglef (<< x shift) (<< y shift) (<< 1 shift)
+   set y + y 1
+  endwhile
+  set x + x 1
+ endwhile
+ 
+ if mouseb
+  if ! && = ox mousex = oy mousey
+   set x >> mousex shift
+   set y >> mousey shift
+   if && > x 0 > y 0 < x (- wh 1) < y (- wh 1)
+    set AAvelocities(x)(y) 1
+   endif
+  endif
+  set ox mousex
+  set oy mousey
+ endif
+
+ wait * 1.5 16.6
+
+endwhile
