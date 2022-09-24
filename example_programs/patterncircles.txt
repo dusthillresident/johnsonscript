@@ -1,0 +1,69 @@
+
+REM Johnsonscript version of this demo I wrote for the BBCMicroBot
+REM https://twitter.com/bbcmicrobot/status/1573651852150935553
+
+variable _P _D _C _F a i r _xorigin _yorigin;
+
+constant scale 2;
+startgraphics (* scale 320) (* scale 256)
+
+if expose endif
+.start
+set _P / _pi 5
+set _D 25
+set _F 0
+set _xorigin >> (- winw (* scale 320)) 1
+set _yorigin >> (- winh (* scale 256)) 1
+option "clearcliprect"; bgcol 0x00007f; cls; bgcol 0;
+option "setcliprect" _xorigin _yorigin (* scale 320) (* scale 256);
+option "seedrnd" 123 456 789;
+cls
+
+set _C 1
+while <= _C 21
+ set _F + _F 1
+ set a * _P _C;
+ _PROCc (+ 160 * _D cos a) (+ 128 * _D sin a) (int * _D 0.45) (% _F 5)
+ set _D + _D _C
+ set _C + _C 1
+endwhile
+
+while ! expose
+ wait 32
+endwhile
+goto ".start"
+
+function _PROCc x y _r f local j l;
+ set r _r
+ set x - x r
+ set y - y r
+ set i 0
+ while < i << r 1
+  set l * r sin acos( + -1 / i r)
+  set j + neg l + y r
+  while < j (+ y r l);
+   _PROCp (+ x i) (j) (_FNf i j f)
+   set j + j 1
+  endwhile
+  set i + i 1
+ endwhile
+endfunction
+
+function _FNf x y f;
+ caseof f;
+  when 0; return !! & x y;
+  when 1; return & 1 + x y;
+  when 2; return & 1 + >> x 2 >> y 2;
+  when 3; return < (/ rnd 999999 999999) abs * 0.55 / i r;
+  when 4; return & 1 & 15 + (* 4 sin * y 0.1 ) * x 1.76;
+ endcase
+endfunction
+
+function _PROCp x y c;
+ gcol neg c
+ if > scale 1
+  rectanglef (+ _xorigin * scale int x) (+ _yorigin * scale int y) scale
+ else
+  pixel (+ _xorigin x) (+ _yorigin y)
+ endif
+endfunction
