@@ -1,0 +1,31 @@
+startgraphics 512 512
+bgcol 0x7f7f7f
+
+while 1
+ if expose
+  cls
+  yinyang (>> winw 1) (>> winh 1) (+ -16 q(< winw winh) winw winh) + _pi _pi
+ endif
+ wait 16.6
+endwhile
+
+function q a b c; if a return b else return c endif
+
+function yinyang x y r a local i rh xx yy;
+ set a + a * _pi 0.5
+ gcol -1
+ circlef x y + r 2
+ gcol 0
+ arcf x y r r (+ a _pi) _pi
+ set rh * r 0.5
+ set i 0
+ while < i 2
+  set xx (+ x * 0.5 rh cos (- a * _pi i))
+  set yy (+ y * 0.5 rh sin (- a * _pi i))
+  gcol neg i
+  circlef xx yy rh
+  gcol neg !i
+  circlef xx yy / r 6
+  set i + i 1
+ endwhile
+endfunction
