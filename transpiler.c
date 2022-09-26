@@ -1354,7 +1354,7 @@ void translate_command(program *prog, int *p){
    PrintMain(") );\n");
   } break;
  #ifdef enable_graphics_extension 
- case t_startgraphics: case t_stopgraphics: case t_winsize: case t_pixel: case t_line: case t_circlef: case t_circle: case t_rectanglef: case t_rectangle: case t_triangle: case t_drawtext: case t_drawscaledtext:
+ case t_startgraphics: case t_stopgraphics: case t_winsize: case t_pixel: case t_line: case t_circlef: case t_circle: case t_arcf: case t_arc: case t_rectanglef: case t_rectangle: case t_triangle: case t_drawtext: case t_drawscaledtext:
  case t_refreshmode: case t_refresh: case t_gcol: case t_bgcol: case t_cls: case t_drawmode:
   {
    trans_program_uses_gfx = 1;
@@ -1431,6 +1431,27 @@ void translate_command(program *prog, int *p){
       PrintMain("Circle%s(%s,%s,%s);\n",fill?"Fill":"",x,y,r);
      }
      free(x); free(y); free(r);
+    }
+    break;
+   case t_arcf: case t_arc:
+    {
+     int fill = (CurTok.type == t_arcf);
+     *p += 1;
+     char *x, *y, *rx, *ry, *start_angle, *extent_angle;
+     x = trans__transval_into_tempbuf( prog, p );
+     y = trans__transval_into_tempbuf( prog, p );
+     rx = trans__transval_into_tempbuf( prog, p );
+     ry = trans__transval_into_tempbuf( prog, p );
+     start_angle = trans__transval_into_tempbuf( prog, p );
+     extent_angle = trans__transval_into_tempbuf( prog, p );
+     if( trans_reverse_function_params ){
+      PrintMain("{\nint arc_x,arc_y,arc_rx,arc_ry; double arc_start,arc_extent;\narc_x=%s;\narc_y=%s;\narc_rx=%s;\narc_ry=%s;\narc_start=%s;\narc_extent=%s;\n",
+                x, y, rx, ry, start_angle, extent_angle );
+      PrintMain("Arc(arc_x, arc_y, arc_rx, arc_ry, arc_start, arc_extent, %d);\n}\n",fill);
+     }else{
+      PrintMain("Arc(%s,%s,%s,%s,%s,%s,%d);\n",x,y,rx,ry,start_angle,extent_angle,fill);
+     }
+     free(x); free(y); free(rx); free(ry); free(start_angle); free(extent_angle); 
     }
     break;
    case t_rectanglef: case t_rectangle: 
@@ -2025,6 +2046,9 @@ void translate_command(program *prog, int *p){
    int const_token_p = *p;
    *p += 1;
    int const_id_p = *p;
+   if( CurTok.type != t_id ){
+    ErrorOut("translate_command: t_const: bad constant declaration, wanted an id but got '%s'\n",tokenstring(CurTok));
+   }
    char *idstring = (char*)prog->tokens[ *p ].data.pointer;
    *p += 1;
 

@@ -1413,6 +1413,16 @@ void CircleFill(int x,int y, int r){
  #endif
 }
 
+void Arc(int x,int y, int rx, int ry, double start, double extent, int fill){
+ if(!newbase_is_running) return;
+ if(rx<0) rx = -rx;
+ if(ry<0) ry = -ry;
+ ( fill ? XFillArc : XDrawArc )(Mydisplay, Mydrawable, MyGC, x-rx/2, y-ry/2, rx, ry, (int)(-start * 0x1.ca5dc1a63c1f8p+11) % CircleArcMaxAngle, (int)(-extent * 0x1.ca5dc1a63c1f8p+11) % CircleArcMaxAngle );
+ #ifdef NewBase_HaventRemovedThisYet
+ if(xflush_for_every_draw)XFlush(Mydisplay);
+ #endif
+}
+
 void Plot69(int x, int y){
  if(!newbase_is_running) return;
  XDrawPoint(Mydisplay, Mydrawable, MyGC, x,y);
@@ -2100,9 +2110,21 @@ void start_newbase_thread(int w, int h){
 
 int main(int argc, char **argv){
 
+ start_newbase_thread(640,480);
 
+ while(1){
+  Wait(1)
+  Circle(Rnd(WinW),Rnd(WinH),Rnd(200));
+ }
+ 
+ //void Arc(int x,int y, int rx, int ry, double start, double extent, int fill); 
 
- start_newbase_thread(940,480);
+ /*
+ XGCValues penismagic;
+ XGetGCValues(Mydisplay, MyGC, GCLineWidth, &penismagic);
+ penismagic.line_width=4;
+ XChangeGC(Mydisplay, MyGC, GCLineWidth, &penismagic);
+ */
 
  #if 0
  RefreshOff();
@@ -2114,12 +2136,29 @@ int main(int argc, char **argv){
  }
  while(1) Wait(1);
  #endif
+ /*
+ int ang=0;
+
+ int cw=400;
+ int ch=400;
 
  while (1){
-  GcolDirect( Rnd(0x1000000) );
-  drawscaledtext( Rnd(WinW)-100, Rnd(WinH), 1+Rnd(10), 1+Rnd(10), "\x10Scaled text test");
+  //GcolDirect( Rnd(0x1000000) );
+  //drawscaledtext( Rnd(WinW)-100, Rnd(WinH), 1+Rnd(10), 1+Rnd(10), "\x10Scaled text test");
+  if( 1 ){ 
+   ang -= 1; 
+   double angle = ang*0.1;
+   cw=400 + sin(angle*0.04)*350;
+   ch=400 + sin(angle*0.0331)*350;
+   Cls();
+   GcolDirect(-1);  Arc(WinW/2,WinH/2,cw,ch,angle,M_PI,1);
+   GcolDirect(0xff0000);  Arc(WinW/2,WinH/2,cw,ch,angle+M_PI,M_PI,1);
+   GcolDirect(0x7f7fff);  Line(WinW/2,WinH/2,WinW/2+cos(angle)*(cw>>1),WinH/2+sin(angle)*(ch>>1));
+   
+  }
   Wait(1);
  }
+ */
 
  //Wait(1);
  //GcolBGDirect(0); // FUCK! setting a background colour makes it so that the window is automatically cleared whenever it's resized, results in bad flickering

@@ -887,6 +887,19 @@ int wordmatch(int *pos, unsigned char *word, unsigned char *text){
  return 1;
 }
 
+// do wordmatch but only return true if the word has whitespace after it
+int wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text){
+ int holdpos = *pos;
+ int result = wordmatch(pos, word, text);
+ if( result ){
+  //tb();
+  //printf("fuckin shit %d\n",*pos);
+  if( isspace(text[*pos]) ) return 1;
+  *pos = holdpos;
+ }
+ return 0;
+}
+
 int patternmatch(int pos, unsigned char *chars, unsigned char *text){
  int i,l,L,p, check;
  p=pos;
@@ -1316,6 +1329,12 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"circle", text) ){	//	
   out = maketoken( t_circle ); goto gettoken_normalout;
  }
+ if( wordmatch_plus_whitespace(pos, "arc", text) ){
+  out = maketoken( t_arc ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace(pos, "arcf", text) ){
+  out = maketoken( t_arcf ); goto gettoken_normalout;
+ }
  if( wordmatch( pos,"rectanglef", text) ){	//	
   out = maketoken( t_rectanglef ); goto gettoken_normalout;
  }
@@ -1595,8 +1614,7 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
  }
  int count = 0, pos = 0; token t;
  while(pos<len){
-  t = gettoken(progstrings,!tokens_return,&pos,text);
-  if(tokens_return)tokens_return[count]=t;
+  // token text locations for error reports
   if(TextPosses){ 
    while( pos >= line_end_array[linep] ){
     linep += 1;
@@ -1604,6 +1622,8 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
    TextPosses[count] = (TTP){ linep+1 ,pos-(line_end_array[linep-1]+1) };//tb();
   }
   //if(TextPosses){ tb(); printf("test this shit: line %d, col %d, '%s'\n",TextPosses[count].line,TextPosses[count].column,tokenstring(t)); }
+  // the token itself
+  t = gettoken(progstrings,!tokens_return,&pos,text); if(tokens_return)tokens_return[count]=t;
   count +=1;
  }
  if(line_end_array) free( (line_end_array-1) );
@@ -1840,6 +1860,8 @@ char* tokenstring(token t){
  case t_line: return "line";
  case t_circlef: return "circlef";
  case t_circle: return "circle";
+ case t_arcf: return "arcf ";
+ case t_arc:  return "arc ";
  case t_rectanglef: return "rectanglef";
  case t_rectangle: return "rectangle";
  case t_triangle: return "triangle";
@@ -3520,6 +3542,18 @@ interpreter(int p, program *prog){
    CircleFill(x,y,r);
   else
    Circle(x,y,r);
+  break;
+ }
+ case t_arcf: case t_arc: {
+  p+=1;
+  int x,y,rx,ry; double start_angle,extent_angle;
+  x  = getvalue(&p,prog);
+  y  = getvalue(&p,prog);
+  rx = getvalue(&p,prog);
+  ry = getvalue(&p,prog);
+  start_angle = getvalue(&p,prog);
+  extent_angle = getvalue(&p,prog);
+  Arc( x, y, rx, ry, start_angle, extent_angle, t.type == t_arcf );
   break;
  }
  case t_rectanglef: case t_rectangle:

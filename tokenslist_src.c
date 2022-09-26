@@ -217,6 +217,8 @@
  #define t_line			COCKSPENIS	// line				X Y X Y ([X Y] ...) ;
  #define t_circlef		COCKSPENIS	// circlef			X Y R ;
  #define t_circle		COCKSPENIS	// circle			X Y R ;
+ #define t_arcf			COCKSPENIS	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_arc			COCKSPENIS	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
  #define t_rectanglef		COCKSPENIS	// rectanglef			X Y W [H] ;
  #define t_rectangle		COCKSPENIS	// rectangle			X Y W [H] ;
  #define t_triangle		COCKSPENIS	// triangle			X Y X Y X Y ;

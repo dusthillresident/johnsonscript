@@ -218,24 +218,26 @@
  #define t_line			144	// line				X Y X Y ([X Y] ...) ;
  #define t_circlef		145	// circlef			X Y R ;
  #define t_circle		146	// circle			X Y R ;
- #define t_rectanglef		147	// rectanglef			X Y W [H] ;
- #define t_rectangle		148	// rectangle			X Y W [H] ;
- #define t_triangle		149	// triangle			X Y X Y X Y ;
- #define t_drawtext		150	// drawtext			X Y S (stringval);
- #define t_drawscaledtext	151	// drawscaledtext		X Y XS YS (stringval);
- #define t_refreshmode		152	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		153	// refresh 			;
- #define t_gcol			154	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		155	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			156	// cls				;
- #define t_drawmode		157	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_arcf			147	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_arc			148	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_rectanglef		149	// rectanglef			X Y W [H] ;
+ #define t_rectangle		150	// rectangle			X Y W [H] ;
+ #define t_triangle		151	// triangle			X Y X Y X Y ;
+ #define t_drawtext		152	// drawtext			X Y S (stringval);
+ #define t_drawscaledtext	153	// drawscaledtext		X Y XS YS (stringval);
+ #define t_refreshmode		154	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		155	// refresh 			;
+ #define t_gcol			156	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		157	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			158	// cls				;
+ #define t_drawmode		159	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
 #if allow_debug_commands
- #define t_tb		158	//	testbeep
- #define t_printstackframe 159	//	print everything in the current stack frame
- #define t_printentirestack 160	//	print everything in the stack up to the current stack frame
+ #define t_tb		160	//	testbeep
+ #define t_printstackframe 161	//	print everything in the current stack frame
+ #define t_printentirestack 162	//	print everything in the stack up to the current stack frame
 #endif
 
 #define t_bad		255	//			bad data
