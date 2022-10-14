@@ -40,9 +40,9 @@ while < i 1671
   drawmode rand_select 1 2 4 6 7 9 10 11 13 14
  when 2; # circle
   if & rnd 0 1
-   circle rnd winw rnd winh rnd winh
+   circle rnd winw rnd winh >> rnd winh 1
   else
-   circlef rnd winw rnd winh rnd winh
+   circlef rnd winw rnd winh >> rnd winh 1
   endif
  when 3; # rectangle
   if & rnd 0 1
