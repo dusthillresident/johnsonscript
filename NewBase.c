@@ -1398,7 +1398,7 @@ void Line(int x,int y,int xb,int yb){
 void Circle(int x,int y, int r){
  if(!newbase_is_running) return;
  if(r<0) r = -r;
- XDrawArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,CircleArcMaxAngle );
+ XDrawArc(Mydisplay, Mydrawable, MyGC, x-r, y-r, r<<1, r<<1, 0,CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
  #endif
@@ -1407,7 +1407,7 @@ void Circle(int x,int y, int r){
 void CircleFill(int x,int y, int r){
  if(!newbase_is_running) return;
  if(r<0) r = -r;
- XFillArc(Mydisplay, Mydrawable, MyGC, x-r/2, y-r/2, r, r, 0,CircleArcMaxAngle );
+ XFillArc(Mydisplay, Mydrawable, MyGC, x-r, y-r, r<<1, r<<1, 0,CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
  #endif
@@ -1417,7 +1417,7 @@ void Arc(int x,int y, int rx, int ry, double start, double extent, int fill){
  if(!newbase_is_running) return;
  if(rx<0) rx = -rx;
  if(ry<0) ry = -ry;
- ( fill ? XFillArc : XDrawArc )(Mydisplay, Mydrawable, MyGC, x-rx/2, y-ry/2, rx, ry, (int)(-start * 0x1.ca5dc1a63c1f8p+11) % CircleArcMaxAngle, (int)(-extent * 0x1.ca5dc1a63c1f8p+11) % CircleArcMaxAngle );
+ ( fill ? XFillArc : XDrawArc )(Mydisplay, Mydrawable, MyGC, x-rx, y-ry, rx<<1, ry<<1, (int)(-start * 0x1.ca5dc1a63c1f8p+11) % CircleArcMaxAngle, (int)(-extent * 0x1.ca5dc1a63c1f8p+11) % CircleArcMaxAngle );
  #ifdef NewBase_HaventRemovedThisYet
  if(xflush_for_every_draw)XFlush(Mydisplay);
  #endif

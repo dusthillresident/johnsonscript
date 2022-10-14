@@ -2151,7 +2151,7 @@ void translate_command(program *prog, int *p){
     prog->current_function = (func_info*)t.data.pointer; trans_fn = prog->current_function->function_number;
    } 
 
-   if(trans_fn == 1){
+   if(trans_fn == 0){
     PrintMain("printf(\"\\nJOHNSONSCRIPT WARNING: Reached end of main(). This should not normally happen\\n\");\n}\n\n");
    }else{
     PrintMain("}\n\n");
