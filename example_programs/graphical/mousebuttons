@@ -22,13 +22,13 @@ while 1;
  if ! = b ob;
   set i 0; 
   while < i 3;
-   _circ (+ 32 (* i 32)) 32 30 ( & mouseb << 1 ( i ) ); set i + i 1;
+   _circ (+ 32 (* i 32)) 32 15 ( & mouseb << 1 ( i ) ); set i + i 1;
   endwhile;
  endif;
 
  if ! = z oz;
-  gcol bgc;  wheel wx wy 64 oz;
-  gcol -1; wheel wx wy 64 z;
+  gcol bgc;  wheel wx wy 32 oz;
+  gcol -1; wheel wx wy 32 z;
  endif;
 
  wait 16.6;
@@ -38,7 +38,6 @@ endwhile;
 function wheel x y r a;
  circle  x y r;
  circlef x y 8;
- set r * r 0.5;
  circlef ( + x * cos a r ) ( + y * sin a r ) 8;
 endfunction;
 

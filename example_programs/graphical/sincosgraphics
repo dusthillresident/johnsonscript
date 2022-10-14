@@ -1,0 +1,60 @@
+constant pi 3.14159265358979323846264338327950288;
+
+startgraphics 640 480;
+wait 10;
+
+variable ow oh; set ow winw; set oh winh;
+variable i r;
+
+constant numpoints 128;
+while ! & mouseb 4;
+ cls;
+  set i 0;
+  set r  * (min winw winh) 0.45;
+  gcol 255 128 0;
+  circle (/ winw 2) (/ winh 2) r;
+  gcol 0 128 255;
+  while < i numpoints;
+   line (+ (/ winw 2) (* fncos (* pi 2 (/ i numpoints)) r )) (+ (/ winh 2) (* fnsin (* pi 2 (/ i numpoints)) r ))
+        (+ (/ winw 2) (* fncos (* pi 2 (/ (+ i 1) numpoints)) r )) (+ (/ winh 2) (* fnsin (* pi 2 (/ (+ i 1) numpoints)) r ));
+   set i + i 1;
+  endwhile;
+ set ow winw; set oh winh;
+ while & !expose (! & mouseb 4);
+  wait 10;
+ endwhile;
+endwhile;
+stopgraphics;
+return 0;
+
+REM --------------
+
+function fnsin  in;
+return fns / (+ in * pi 0.5) pi;
+
+function fncos  in;
+return fns / (+ in pi) pi;
+
+function fns  in ;
+ set in  abs in
+ if & in 1
+  set in  - 1 - in int in
+ else
+  set in  - in int in
+ endif
+ if < in 0.5
+  return + -1 * 2 fn_s in
+ endif
+return + -1 * 2 - 1 fn_s - 1 in
+
+function fn_s  i  local  r;
+ set r  *  0.7 - 0.5 abs - i 0.5 
+return + (* (* i i 2) - 1 r) * i r
+
+REM --------------
+
+function min a b;
+ if < a b;
+  return a;
+ endif;
+return b;
