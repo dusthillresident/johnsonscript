@@ -1,6 +1,6 @@
 constant numballs 32;
 variable ballarray i;
-constant ball_radius 48;
+constant ball_radius 24;
 
 set ballarray alloc * 4 numballs;    REM  colour, decayspeed, x, y
 

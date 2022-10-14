@@ -19,7 +19,7 @@ if < fnrnd 100 99;
  set i 0;
  while < i 500
   gcol (* fnr a) (* fnr b) (* fnr c)
-  circlef fnrnd winw fnrnd winh fnrnd / winh 6
+  circlef fnrnd winw fnrnd winh fnrnd / winh 12
   set i + i 1
  endwhile
 endif
@@ -80,9 +80,9 @@ function procs x y s a as local i;
 endfunction
 
 function procc x y s local i;
- set i 0
+ set i 2
  while < i thisv
-  circle x y i
+  circle x y >> i 1
   set i + i s
  endwhile
 endfunction

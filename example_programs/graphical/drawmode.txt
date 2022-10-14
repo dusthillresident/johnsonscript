@@ -22,13 +22,13 @@
  GXset			15		 1 
 */
 
-constant bradius 32;
-constant brd2 / bradius 2;
+constant bdiameter 32;
+constant bradius >> bdiameter 1;
 constant pad 16;
 constant pd2 / pad 2;
 constant bgstep 8;
 
-startgraphics ( + pad 16 * bradius 8  ) ( + pad * bradius 16 );
+startgraphics ( + pad 16 * bdiameter 8  ) ( + pad * bdiameter 16 );
 
 variable i;
 
@@ -42,10 +42,10 @@ while ! mouseb
   while < i 16
    REM ----
    drawmode i;
-   drawballs (+ 16 pd2 brd2) (+ pd2 brd2 * bradius i);
+   drawballs (+ 16 pd2 bradius) (+ pd2 bradius * bdiameter i);
    REM ----
    drawmode 3; gcol -1;
-   drawtext 4 (+ pd2 -8 brd2 * bradius i) 1 str$i
+   drawtext 4 (+ pd2 -8 bradius * bdiameter i) 1 str$i
    REM ----
    set i + i 1
   endwhile
@@ -77,7 +77,7 @@ function drawballs x y local i;
  set i 0
  while < i 3
   gcol << 255 * 8 i;
-  circlef (+ x * bradius i) y bradius
+  circlef (+ x * bdiameter i) y bradius
   set i + i 1
  endwhile
  set i 0
@@ -89,10 +89,10 @@ function drawballs x y local i;
   if = i 4
    gcol -1
   endif
-  circlef (+ x (* bradius 3) * bradius i) y bradius
+  circlef (+ x (* bdiameter 3) * bdiameter i) y bradius
   set i + i 1
  endwhile
  drawmode 15
  gcol -1
- rectangle (- x brd2) (- y brd2) (* bradius 8) bradius;
+ rectangle (- x bradius) (- y bradius) (* bdiameter 8) bdiameter;
 endfunction
