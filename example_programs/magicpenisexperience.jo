@@ -1,0 +1,80 @@
+startgraphics 640 504
+variable vx vy vr p w h dx dy d a x y _x _y c dd nd fc xv;
+constant res 8
+
+if expose endif
+
+.start
+
+set vx 640
+set vy 512
+set vr 4000
+set p * _pi 7.7
+set w 1280
+set h 1024
+
+set c -15
+
+set xv 2
+
+refreshmode 1
+
+while 1
+set x 0
+while < x w
+ set y 0 
+ while < y h
+  set dx - x vx; set dy - y vy;
+  set d sqr( + (* dx dx) (* dy dy) )
+  if 1
+   set a + atan2 ( - y vy ) ( - x vx ) *  p / d vr
+   set dd - 1 * 0.05 c
+   #if < dd 0 set dd 0 endif
+   set nd - 1 dd
+   set _x + (* x nd ) * dd (+ x * d 0.25 cos a)
+   set _y + (* y nd ) * dd (+ y * d 0.25 sin a)
+  else
+   set _x x
+   set _y y
+  endif
+  gcol colour * 4 + (* cos (* fc 0.01) / _x w) (* sin (* fc 0.01) / _y h )
+  #gcol colour * !!( & 128 + _x _y ) 4 
+  rectanglef >> x 1 ( >> (- h y 32) 1 ) res
+  set y + y << res 1
+ endwhile
+ set x + x << res 1
+endwhile
+#set c + c 0.2
+set vr + 10000 * 10000 0.5 (+ sin(* fc 0.0065) sin(* fc 0.00455) )
+set p + (* _pi 16) * _pi 8 sin * fc 0.01
+set c + -100 * 50 sin * 0.005 fc
+#set c + (neg xv) * (* 0.5 xv) sin * 0.005 fc
+#set xv + xv 0.1
+set fc + fc 1
+refresh
+wait 1
+endwhile
+
+while ! expose
+ wait 16.6
+endwhile
+goto ".start"
+
+function colour v local c1 c2 r1 g1 b1 r2 g2 b2;
+ if < v 0
+  set v + 8 v
+ endif
+ set v fmod ( + v * fc 0.05 ) 8
+ set c1 val$ mid$ "0x000000 0xff0000 0x00ff00 0xffff00 0x0000ff 0xff00ff 0x00ffff 0xffffff " (* floor v 9) 9
+ set c2 val$ mid$ "0x000000 0xff0000 0x00ff00 0xffff00 0x0000ff 0xff00ff 0x00ffff 0xffffff " (* ceil v 9) 9
+ set v - v int v
+ set r1 & 255 >> c1 16
+ set g1 & 255 >> c1 8
+ set b1 & 255 c1
+ set r2 & 255 >> c2 16
+ set g2 & 255 >> c2 8
+ set b2 & 255 c2
+return | << ( + r1 * v ( - r2 r1 ) ) 16 
+         << ( + g1 * v ( - g2 g1 ) ) 8
+            ( + b1 * v ( - b2 b1 ) ); 
+
