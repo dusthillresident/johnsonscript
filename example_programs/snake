@@ -1,3 +1,5 @@
+#!/usr/local/bin/gfxbin
+
 load_pic;
 
 constant max_len 111;
@@ -15,6 +17,7 @@ set seg_x  alloc max_len;
 set seg_y  alloc max_len;
 
 startgraphics 480 480;
+option "wintitle" "Snake";
 
 while 1
  while ! expose
@@ -108,7 +111,7 @@ function _explod x y local i;
  gcol 255 128 0
  set i 0
  while < i 10
-  circle x y * i 10
+  circle x y * i 5
   set i + i 1
  endwhile
 endfunction
@@ -176,30 +179,21 @@ return && =  (& dira 2) (& dirb 2)
           != (& dira 1) (& dirb 1);
 
 function control local c newdir;
- set newdir dir;
+ set newdir dir
  while keybuffer
-  set c >> readkey 8;
-  if = c 9 
-   quit
-  endif
-  if = c 111   REM up
-   set newdir dir_u
-   goto ".control_out"
-  endif
-  if = c 116   REM down
-   set newdir dir_d
-   goto ".control_out"
-  endif
-  if = c 113   REM left
-   set newdir dir_l
-   goto ".control_out"
-  endif
-  if = c 114   REM right
-   set newdir dir_r
-   goto ".control_out"
-  endif
+  set c >> readkey 8
+  caseof c
+   when 9; quit
+   when 111;
+    set newdir dir_u
+   when 116;
+    set newdir dir_d
+   when 113;
+    set newdir dir_l
+   when 114; 
+    set newdir dir_r
+  endcase
  endwhile
- .control_out
  if ! is_opposite dir newdir
   set dir newdir
  endif
