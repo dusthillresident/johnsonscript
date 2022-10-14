@@ -2,10 +2,6 @@ startgraphics 640 504
 variable vx vy vr p w h dx dy d a x y _x _y c dd nd fc xv;
 constant res 8
 
-if expose endif
-
-.start
-
 set vx 640
 set vy 512
 set vr 4000
@@ -54,11 +50,6 @@ set fc + fc 1
 refresh
 wait 1
 endwhile
-
-while ! expose
- wait 16.6
-endwhile
-goto ".start"
 
 function colour v local c1 c2 r1 g1 b1 r2 g2 b2;
  if < v 0
