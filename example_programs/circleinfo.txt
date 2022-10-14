@@ -1,0 +1,40 @@
+startgraphics 512 512
+bgcol -1;
+
+while 1
+ if expose
+  display
+ endif
+ wait 16.6
+endwhile
+
+function display local i step x y radius diameter;
+ cls
+ set x >> winw 1
+ set y >> winh 1
+ if < x y
+  set radius x
+ else
+  set radius y
+ endif
+ set radius int * radius 0.7
+ set diameter << radius 1
+ set step / _pi 128
+
+ gcol 0xCCffCC; circlef x y radius
+
+ gcol 0xff7f00; line x (- y radius) x ( + y radius); drawtext (+ x 8) (- y >> radius 1) 1 "Diameter"
+
+ gcol 0xAAAA00; line (- x radius) y x y; drawtext (- x (* 0.5 8 len$ "Radius") >> radius 1 ) (+ y 8) 1 "Radius"
+
+ gcol 0; circlef x y 6; drawtext (+ x 8 ) y 0 "Centre"
+
+ gcol 0x0000BB
+ set i 0
+ while < i * _pi 2
+  line (+ x * radius cos i) (+ y * radius sin i) (+ x * radius cos + i step) (+ y * radius sin + i step)
+  set i + i step
+ endwhile
+ drawtext (- x 16 (* 8 len$ "Circumference") * radius sin * _pi 0.25 ) (- y * radius sin * _pi 0.25) 1 "Circumference"
+
+endfunction

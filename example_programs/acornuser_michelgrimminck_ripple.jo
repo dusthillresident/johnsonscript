@@ -88,7 +88,7 @@ while 1
    set x >> mousex shift
    set y >> mousey shift
    if && > x 0 > y 0 < x (- wh 1) < y (- wh 1)
-    set AAvelocities(x)(y) 1
+    set AAheights(x)(y) 1
    endif
   endif
   set ox mousex

@@ -4,7 +4,7 @@ bgcol 0x7f7f7f
 while 1
  if expose
   cls
-  yinyang (>> winw 1) (>> winh 1) (+ -16 q(< winw winh) winw winh) + _pi _pi
+  yinyang (>> winw 1) (>> winh 1) (+ -16 >> q(< winw winh) winw winh 1) + _pi _pi
  endif
  wait 16.6
 endwhile
@@ -20,8 +20,8 @@ function yinyang x y r a local i rh xx yy;
  set rh * r 0.5
  set i 0
  while < i 2
-  set xx (+ x * 0.5 rh cos (- a * _pi i))
-  set yy (+ y * 0.5 rh sin (- a * _pi i))
+  set xx (+ x * rh cos (- a * _pi i))
+  set yy (+ y * rh sin (- a * _pi i))
   gcol neg i
   circlef xx yy rh
   gcol neg !i
