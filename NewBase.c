@@ -1756,7 +1756,7 @@ void NB_DrawBmp(int x, int y, int sx, int sy, int w, int h, Bmp *bmp){
  image->byte_order = LSBFirst;
  image->bitmap_bit_order = LSBFirst;
  XInitImage(image);
- XPutImage(Mydisplay,Mywindow,MyGC,image, sx,sy,x,y, w, h);
+ XPutImage(Mydisplay,Mydrawable,MyGC,image, sx,sy,x,y, w, h);
  XDestroyImage(image); // XDestroyImage frees not only the XImage structure itself, but also the data pointer we put in the XImage struct, so image_data has already been free()'d
 }
 
