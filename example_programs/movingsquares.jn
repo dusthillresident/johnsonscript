@@ -1,0 +1,55 @@
+startgraphics 640 512
+option "setcliprect" 0 0 640 512
+variable r; set r 50
+variable a; set a 0
+variable i j d _I _A _C fix fc;
+refreshmode 1
+while 1
+ set fix * _pi ! fix
+ set fc & 15 + fc 1
+ cls
+ gcol 255
+ set i -512
+ while < i 512
+  line 0 (+ fc i) 1024 + fc i 512
+  set i + i 4
+ endwhile
+ set i * 4 0.07
+ while < i 1.25
+  set j 0
+  while <= j 15
+   set _A + (* _pi 0.125 j) i * a 0.0004
+   set a + a * 1.001 / _pi 16
+   set d * i i;
+   procr (+ 320 * 320 cos _A) (+ 256 * 256 sin _A)
+   set j + j 1
+  endwhile
+  set i + i 0.14
+ endwhile
+ refresh 
+ wait * 16.6 2
+endwhile
+
+function fnx x; return + 320 * (- x 320) d
+function fny y; return + 256 * (- y 256) d
+
+function procr x y local t; set t * _pi 0.5;
+ set _I + fix a * t 0.5
+ while < _I + fix a * _pi 2;
+  set _C + _C 1; gcol bbccol % _C 7
+  triangle fnx(x) fny(y)
+           fnx(+ x * cos _I r) fny(+ y * sin _I r)
+           fnx(+ x * cos(+ _I t) r) fny(+ y * sin(+ _I t) r)
+  gcol -1
+  line fnx(+ x * cos(+ _I t) r)
+       fny(+ y * sin(+ _I t) r)
+       fnx(+ x * cos _I r)
+       fny(+ y * sin _I r)
+  set _I + _I t
+ endwhile
+endfunction
+
+function bbccol n;
+return | (&(neg   & 0b001 n)0xff0000)
+         (&(neg !!& 0b010 n)0x00ff00)
+         (&(neg !!& 0b100 n)0x0000ff)
