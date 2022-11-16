@@ -2113,7 +2113,7 @@ int main(int argc, char **argv){
  start_newbase_thread(640,480);
 
  while(1){
-  Wait(1)
+  Wait(1);
   Circle(Rnd(WinW),Rnd(WinH),Rnd(200));
  }
  

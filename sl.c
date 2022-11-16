@@ -50,8 +50,10 @@
 
 #define allow_debug_commands 1
 
+#define TOKENTYPE_TYPE unsigned int
+
 struct token {
- unsigned char type;
+ TOKENTYPE_TYPE type;
  union {
   double number;
   void *pointer;
@@ -197,8 +199,8 @@ token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_retur
 void process_function_definitions(program *prog,int startpos);
 void error(char *s);
 stringval getstringvalue( program *prog, int *pos );
-int isstringvalue(unsigned char type);
-int isvalue(unsigned char type);
+int isstringvalue(TOKENTYPE_TYPE type);
+int isvalue(TOKENTYPE_TYPE type);
 int determine_valueorstringvalue(program *prog, int p);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
@@ -269,7 +271,7 @@ file* getfile(program *prog, int file_reference_number, int read, int write){
 }
 // -------------------------------------------------------------------------------------------
 
-token maketoken( unsigned char type ){
+token maketoken( TOKENTYPE_TYPE type ){
  token out;
  out.type=type;
  out.data.pointer = NULL;
@@ -1946,7 +1948,7 @@ void copy_stringval_to_stringvar(stringvar *dest, stringval src){
  dest->len = src.len;
 }
 
-int isstringvalue(unsigned char type){
+int isstringvalue(TOKENTYPE_TYPE type){
  return (type==t_leftb || type==t_id || (type>=STRINGVALS_START && type<=STRINGVALS_END)) ;
 }
 
@@ -2212,7 +2214,7 @@ void error(char *s){
  exit(0); 
 }
 
-int isvalue(unsigned char type){
+int isvalue(TOKENTYPE_TYPE type){
  return ( type && (type <= VALUES_END) ) ;
 }
 

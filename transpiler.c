@@ -2589,7 +2589,7 @@ void check_for_oldstyle_functions(program *prog){
  }//next
 }//endproc
 
-void BlockValidityCheck(program *prog, unsigned char opener, unsigned char closer){
+void BlockValidityCheck(program *prog, TOKENTYPE_TYPE opener, TOKENTYPE_TYPE closer){
  int i;
  int *p = &i; // this is for ErrorOut
  int level=0;
