@@ -1,0 +1,93 @@
+startgraphics 640 480;
+constant wh winh;
+constant of neg / _pi 2;
+constant s / (* _pi 2) 30;
+constant x / winw 2;
+constant y / winh 2;
+constant r / 720 2;
+variable i capture_v;
+
+
+refreshmode 1
+
+variable j fc fc2;
+
+#while = readkey -1 wait 1 endwhile
+
+set fc 0
+while 1
+ set fc + fc 8
+ set j 40
+ while >= j 0
+  set fc2 + fc2 0.0005
+  gcol 
+#    & neg ! = j 0
+    colour + neg ( * 6 int / fc 32 ) * j 6;
+  star x y (+ (* r 2.5 / j 40) (* 0.68 & fc 31)) sin fc2
+  #refresh;  wait 250
+  set j - j 1
+ endwhile
+
+ refresh
+ wait 16.6
+ #while = readkey -1  wait 1 endwhile
+ #capture;
+endwhile
+
+
+function star x y r o local a;
+ set a neg o
+ while < a + neg o * _pi 2;
+  triangle x y
+           (+ x * fn_r(a)(r)(o) (cos a) ) (+ y * fn_r(a)(r)(o) (sin a) )
+           (+ x * fn_r(+ a s)(r)(o) (cos + a s) ) (+ y * fn_r(+ a s)(r)(o) (sin + a s) )
+  set a + a s
+ endwhile
+endfunction
+
+
+function fn_r a r of;
+return + (* 0.5 r) (* 0.5 r abs tri * (+ of a) 2.5)
+
+
+function tri a local o;
+ set a abs / a * _pi 0.5
+ set o - a int a
+ if & a 1
+  set o - 1 o
+ endif
+ if & a 2
+  set o neg o
+ endif
+return o
+
+function tri_cos a; return tri + a * _pi 0.5 (| sgn a = a 0)
+
+function safemod a b;
+ if = int b 0 endfunction endif
+return % a b
+function colour v local c1 c2 r1 g1 b1 r2 g2 b2;
+ set v / abs v 60.223222222222222222
+ set c1 val$ mid$ "0xff0000 0xffff00 0x00ff00 0x00ffff 0x0000ff 0xff00ff " (* (safemod floor v 6) 9) 9
+ set c2 val$ mid$ "0xff0000 0xffff00 0x00ff00 0x00ffff 0x0000ff 0xff00ff " (* (safemod ceil  v 6) 9) 9
+ #print " v:" v " c1:" c1 " c2:" c2;
+ set v - v int v
+ set r1 & 255 >> c1 16
+ set g1 & 255 >> c1 8
+ set b1 & 255 c1
+ set r2 & 255 >> c2 16
+ set g2 & 255 >> c2 8
+ set b2 & 255 c2
+return | << ( + r1 * v ( - r2 r1 ) ) 16 
+         << ( + g1 * v ( - g2 g1 ) ) 8
+            ( + b1 * v ( - b2 b1 ) ); 
+
+
+function capture;
+ set capture_v + capture_v 1;
+ wait 32
+ oscli cat$ "scrot -u outpng" str$(+ capture_v 1000) ".png"
+ if > capture_v 6000
+  quit
+ endif
+endfunction
