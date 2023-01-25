@@ -2,6 +2,7 @@
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/Xproto.h>
+#include <X11/Xresource.h>
 #include <stdio.h>
 #include <stdlib.h> 
 #include <string.h>
@@ -1866,9 +1867,36 @@ void RefreshOff(){
 }//endproc
 
 
-
-
-
+char* NewBase_GetXResourceString(char *itemname, char *classname){
+ if( itemname == NULL ) return NULL;
+ if( classname == NULL ) classname = "*";
+ char *returnvalue = NULL;
+ char *xrm = NULL;
+ static int we_need_to_initialise_xrm = 1;
+ if( we_need_to_initialise_xrm ){
+  XrmInitialize();
+  we_need_to_initialise_xrm = 0;
+ }
+ XrmDatabase Myxrmdb;
+ if( (xrm = XResourceManagerString(Mydisplay)) == NULL ){
+  return NULL;
+ }
+ Myxrmdb = XrmGetStringDatabase(xrm);
+ XrmValue value_return;
+ char *str_type_return;
+ //printf("returned: %d\n",XrmGetResource(Myxrmdb,itemname,classname,&str_type_return,&value_return));
+ //printf("str_type_return: %s\n",str_type_return);
+ //printf("value return: %s\n",value_return.addr);
+ if( XrmGetResource(Myxrmdb,itemname,classname,&str_type_return,&value_return) ){
+  if( ! strcmp("String",str_type_return) ){
+   returnvalue = calloc( strlen( value_return.addr ), sizeof(char) );
+   strcpy( returnvalue, value_return.addr );
+  }
+ }
+ //XFree(xrm);
+ XrmDestroyDatabase( Myxrmdb );
+ return returnvalue;
+}
 
 // ==============================================================================================================================
 // ==============================================================================================================================
@@ -2095,9 +2123,6 @@ void start_newbase_thread(int w, int h){
  NewBase_MyInit(w,h,1);
  pthread_t newbasethread;
  pthread_create(&newbasethread, NULL, &newbase_eventhandlerloopfunction, NULL);
- while(!newbase_is_running){
-  usleep(1000);
- }
  usleep(1000);
  SetWindowSize(w,h);
  Gcol(255,255,255);
@@ -2110,7 +2135,7 @@ void start_newbase_thread(int w, int h){
 
 int main(int argc, char **argv){
 
- start_newbase_thread(640,480);
+ start_newbase_thread(80,80);
 
  while(1){
   Wait(1);

@@ -204,6 +204,7 @@ int isvalue(TOKENTYPE_TYPE type);
 int determine_valueorstringvalue(program *prog, int p);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
+void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -637,6 +638,9 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_hascliptext 110	// check if the clipboard has text	
 #define opt_hasclipbmp	111	// check if the clipboard has .bmp image
 #define opt_customchar  112	// define a custom font character
+#define opt_xresource	113	// get an X resource value
+#define opt_startgraphics 114	// start graphics in single threaded mode, where the johnsonscript program itself will manually decide when to update (process events etc)
+#define opt_xupdate	115	// process x events and update display etc
 #endif
 
 void option( program *prog, int *p ){
@@ -670,6 +674,9 @@ void option( program *prog, int *p ){
   if( !strncmp( "hascliptext", id_string.string, id_string.len ) ){ opt_number=opt_hascliptext;goto option__identify_option_string_out;}// hascliptext [variable reference number]
   if( !strncmp( "hasclipbmp", id_string.string, id_string.len ) ){ opt_number=opt_hasclipbmp;goto option__identify_option_string_out;}// hasclipbmp [variable reference number]
   if( !strncmp( "customchar", id_string.string, id_string.len ) ){ opt_number=opt_customchar;goto option__identify_option_string_out;}// hasclipbmp [variable reference number]
+  if( !strncmp( "xresource",  id_string.string, id_string.len ) ){ opt_number=opt_xresource;goto option__identify_option_string_out;}// xresource [stringvar ref num] [itemname] [classname]
+  if( !strncmp( "startgraphics",  id_string.string, id_string.len ) ){ opt_number=opt_startgraphics;goto option__identify_option_string_out;}// startgraphics [width] [height]
+  if( !strncmp( "xupdate",  id_string.string, id_string.len ) ){ opt_number=opt_xupdate;goto option__identify_option_string_out;}// xupdate [enableblocking]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   option__identify_option_string_out:
@@ -856,6 +863,37 @@ void option( program *prog, int *p ){
                glyph_bytes[0],  glyph_bytes[1], glyph_bytes[2], glyph_bytes[3],
                glyph_bytes[4],  glyph_bytes[5], glyph_bytes[6], glyph_bytes[7] ); 
   }
+ } break;
+ case opt_xresource: {
+  int stringvar_num = (int)getvalue(p,prog);
+  if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+   print_sourcetext_location( prog, starting_p );
+   printf("stringvar_num: %d\n",stringvar_num);
+   error("pastetext: bad stringvariable access\n");
+  }
+  stringvar *sv = prog->stringvars[stringvar_num];
+  stringval itemname = getstringvalue( prog, p ); unsigned char h1 = itemname.string[itemname.len]; itemname.string[itemname.len]=0;
+  stringval classname = getstringvalue( prog, p ); unsigned char h2 = classname.string[classname.len]; classname.string[classname.len]=0;
+  char *result = NewBase_GetXResourceString(itemname.string, classname.string);
+  sv->len = 0;
+  if( result ){
+   int l = strlen(result);
+   stringvar_adjustsizeifnecessary(sv, l, 0);
+   strcpy(sv->string, result);
+   sv->len = l;
+  }
+  // Never repost any of our correspondence without my permission.
+  itemname.string[itemname.len]=h1;
+  classname.string[classname.len]=h2;
+ } break;
+ case opt_startgraphics: {
+  int w = (int)getvalue(p,prog);
+  int h = (int)getvalue(p,prog);
+  NewBase_MyInit(w,h,0);
+  usleep(1000);
+ } break;
+ case opt_xupdate: {
+  NewBase_HandleEvents( isvalue( prog->tokens[*p].type ) ? (int)getvalue(p,prog) : 0 );
  } break;
 #endif
  }
