@@ -3,7 +3,7 @@ constant pid2 / _pi 2;
 constant numstars * 64 1.5;
 option "vsize" + 17  * numstars 6;
 
-startgraphics 640 480;
+option "startgraphics" 640 480;
 wait 10;
 refreshmode 1;
 
@@ -50,6 +50,7 @@ while ! & mouseb 4;
 
  procstarfield x y
  textscroller @craigdavid
+ option "xupdate"
  refresh
  wait 16
 
