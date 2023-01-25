@@ -1,5 +1,23 @@
+
 option "startgraphics" 512 512
-bgcol 0x7f7f7f
+
+variable yinColour yangColour bgColour;
+
+set bgColour  xResourceColourLookup @"*background" 0x00007f
+set yangColour xResourceColourLookup @"*foreground" 0xffffff
+
+if < (+ (& 255 yangColour) (& 255 >> yangColour 8) (& 255 >> yangColour 16) ) * 255 3 0.5;
+ set yangColour & ~yangColour 0xffffff
+endif
+
+set yinColour >>(& yangColour ~0x030303)2
+
+if > (+ (& 255 yinColour ) (& 255 >> yinColour 8 ) (& 255 >> yinColour 16 ) )
+     (+ (& 255 yangColour) (& 255 >> yangColour 8) (& 255 >> yangColour 16) );
+ swap @yinColour @yangColour
+endif
+
+bgcol bgColour
 
 while 1
  if expose
@@ -14,19 +32,36 @@ function q a b c; if a return b else return c endif
 
 function yinyang x y r a local i rh xx yy;
  set a + a * _pi 0.5
- gcol -1
+ gcol yangColour
  circlef x y + r 2
- gcol 0
+ gcol yinColour
  arcf x y r r (+ a _pi) _pi
  set rh * r 0.5
  set i 0
  while < i 2
   set xx (+ x * rh cos (- a * _pi i))
   set yy (+ y * rh sin (- a * _pi i))
-  gcol neg i
+  gcol A@yinColour(i)
   circlef xx yy rh
-  gcol neg !i
+  gcol A@yinColour(!i)
   circlef xx yy / r 6
   set i + i 1
  endwhile
+endfunction
+
+function xResourceColourLookup xResourceName defaultColour local s;
+ set s S;
+ option "xresource" s $xResourceName ""
+ option "unclaim" s
+ if ! len$ $s
+  return defaultColour
+ else
+  print "Successfully obtained value '" $s "' for X resource name '" $xResourceName "'";
+ endif
+return val$ cat$ "0x" right$ $s - len$ $s 1
+
+function swap a b local c;
+ set c Da
+ set Da Db
+ set Db c
 endfunction
