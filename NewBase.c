@@ -1868,6 +1868,7 @@ void RefreshOff(){
 
 
 char* NewBase_GetXResourceString(char *itemname, char *classname){
+ if( ! newbase_is_running ) return NULL;
  if( itemname == NULL ) return NULL;
  if( classname == NULL ) classname = "*";
  char *returnvalue = NULL;
