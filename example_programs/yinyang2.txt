@@ -1,7 +1,7 @@
 
 option "startgraphics" 512 512
 
-variable yinColour yangColour bgColour;
+variable yinColour yangColour bgColour omz;
 
 set bgColour  xResourceColourLookup @"*background" 0x00007f
 set yangColour xResourceColourLookup @"*foreground" 0xffffff
@@ -20,10 +20,11 @@ endif
 bgcol bgColour
 
 while 1
- if expose
+ if || expose ! = mousez omz
   cls
-  yinyang (>> winw 1) (>> winh 1) (+ -16 >> q(< winw winh) winw winh 1) + _pi _pi
+  yinyang (>> winw 1) (>> winh 1) (+ -16 >> q(< winw winh) winw winh 1) neg * mousez / _pi 16
  endif
+ set omz mousez
  option "xupdate" 1
  refresh
 endwhile
