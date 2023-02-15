@@ -2011,6 +2011,7 @@ getstringvalue( program *prog, int *pos ){
  {
   int stringvar_num = (int)getvalue(pos,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+   print_sourcetext_location( prog, *pos - 1);
    printf("stringvar_num: %d\n",stringvar_num);
    error("getstringvalue: bad stringvariable access\n");
   }
@@ -2163,7 +2164,10 @@ getstringvalue( program *prog, int *pos ){
  case t_leftb:
  {
   stringval out = getstringvalue( prog,pos );
-  if( prog->tokens[ *pos ].type != t_rightb ) error("getstringvalue: expected closing bracket\n");
+  if( prog->tokens[ *pos ].type != t_rightb ){
+   print_sourcetext_location( prog, *pos - 1);
+   error("getstringvalue: expected closing bracket\n");
+  }
   *pos += 1;
   return out;
  }
