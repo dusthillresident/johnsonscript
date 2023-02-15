@@ -1787,7 +1787,7 @@ void translate_command(program *prog, int *p){
     #endif
    }else if( TheseStringsMatch(opstr, "startgraphics") ){
     #ifdef enable_graphics_extension 
-    PrintMain("{\nint startgraphics_w = "); translate_value(prog,p);
+    PrintMain("/* option \"startgraphics\" */\n{\nint startgraphics_w = "); translate_value(prog,p);
     PrintMain(";\nint startgraphics_h = "); translate_value(prog,p); 
     PrintMain(";\nNewBase_MyInit(startgraphics_w,startgraphics_h,0);usleep(1000);\n}\n");
     #else
@@ -1796,7 +1796,7 @@ void translate_command(program *prog, int *p){
    }else if( TheseStringsMatch(opstr, "xupdate") ){
     #ifdef enable_graphics_extension
     if( translate_determine_valueorstringvalue_(prog, *p, 0) == 0 ){
-     PrintMain("NewBase_HandleEvents("); 
+     PrintMain("/* option \"xupdate\" */NewBase_HandleEvents("); 
      translate_value(prog,p);
      PrintMain(");\n");
     }else{
@@ -1807,15 +1807,15 @@ void translate_command(program *prog, int *p){
     #endif
    }else if( TheseStringsMatch(opstr, "xresource") ){
     #ifdef enable_graphics_extension
-    PrintMain("{\nSVR *dest = StringVars[(int)");
+    PrintMain("{\n/* option \"xresource\" */\nSVR *dest = StringVars[(int)");
     translate_value(prog, p);
     PrintMain("];\nSVL a = ");
     translate_stringvalue(prog,p);
     PrintMain(";\nSVL b = ");
     translate_stringvalue(prog,p);
     PrintMain(";\nunsigned char h_a = a.buf[a.len], h_b=b.buf[b.len]; a.buf[a.len]=0; b.buf[b.len]=0;\n");
-    PrintMain("char *xresource_result = NewBase_GetXResourceString(a.buf, b.buf); int l = strlen(xresource_result); ExpandSVR( dest, l );\n");
-    PrintMain("strcpy(dest->buf, xresource_result); dest->len=l; a.buf[a.len]=h_a; b.buf[b.len]=h_b;\n}\n");
+    PrintMain("char *xresource_result = NewBase_GetXResourceString(a.buf, b.buf); if(xresource_result) {\nint l = strlen(xresource_result); ExpandSVR( dest, l );\n");
+    PrintMain("strcpy(dest->buf, xresource_result); dest->len=l; free(xresource_result);\n}else{\ndest->len=0;\n}\na.buf[a.len]=h_a; b.buf[b.len]=h_b;\n}\n");
     #else
     ErrorOut("PENIS\n");
     #endif
@@ -2774,7 +2774,7 @@ void translate_program(program *prog){
   "int main(int argc, char **argv){\nJohnsonlib_init(argc,argv);\n",
   VarsArrayDeclaration,
   trans_vars,
-  "\n",
+  "/* translated body of program */\n",
   trans_main
  );
  printf("}\n");

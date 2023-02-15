@@ -881,6 +881,7 @@ void option( program *prog, int *p ){
    stringvar_adjustsizeifnecessary(sv, l, 0);
    strcpy(sv->string, result);
    sv->len = l;
+   free(result);
   }
   // Never repost any of our correspondence without my permission.
   itemname.string[itemname.len]=h1;
