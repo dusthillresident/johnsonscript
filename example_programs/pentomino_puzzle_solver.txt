@@ -2,6 +2,7 @@
 option "vsize" 2148;
 option "ssize" 2048;
 
+startgraphics 362 356; option "wintitle" "Pentomino puzzle solver"; refreshmode 1
 guiinit;
 
 constant max_pieces * 8 32;
@@ -33,7 +34,6 @@ __addpiece @"S";
 __addpiece @"|";
 symmetry_check;
 
-startgraphics 362 356; option "wintitle" "Pentomino puzzle solver"; refreshmode 1
 variable www hhh opx opy animate paused cancel solutions maxspaces pauseforsol; set pauseforsol 1;
 set opx -1 set opy -1;
 set maxspaces * 5 12;
@@ -755,13 +755,24 @@ return 1
 
 # ---------------------------------------------------------------------------------------
 
+function xResourceColourLookup xResourceName defaultColour local s;
+ set s S;
+ option "xresource" s $xResourceName ""
+ option "unclaim" s
+ if ! len$ $s
+  return defaultColour
+ else
+  print "Successfully obtained value '" $s "' for X resource name '" $xResourceName "'";
+ endif
+return val$ cat$ "0x" right$ $s - len$ $s 1
+
 function guiinit;
  constant gui_pad 8;
  constant gui_padd2 / gui_pad 2;
  constant gui_btnh + gui_pad 16;
  variable gui_fg gui_bg gui_mb gui_omb gui_redraw gui_reqrd gui_csx gui_csy;
- set gui_bg val$"0x204060"
- set gui_fg val$"0x90a0ff"
+ set gui_bg xResourceColourLookup @"*background" 0x204060
+ set gui_fg xResourceColourLookup @"*foreground" 0x90a0ff
  set gui_redraw 1
 endfunction
 
@@ -798,6 +809,7 @@ function gui_proc allow_wait;
   set gui_redraw 0
  endif
  if | gui_reqrd expose 
+  bgcol gui_bg
   cls
   set gui_redraw 1
   set gui_reqrd 0
@@ -904,13 +916,13 @@ function __piece_switch x y n local w h;
   if !Aisinuse(n)
    gcol gui_bg
   else 
-   gcol 0
+   gcol >> (& gui_bg 0xfefefe) 1
   endif
   rectanglef x y w h
   if !Aisinuse(n)
    gcol gui_fg
   else 
-   gcol 127 127 127
+   gcol >> (& gui_fg 0xfefefe) 1
   endif
   rectangle x y w h;
   drawpiece Apieces(* n 8) (+x gui_pad) (+y gui_pad )  4 0 0
