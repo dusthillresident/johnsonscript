@@ -58,7 +58,7 @@ while 1
   .solmessage
    gui_proc 1
    if gui_redraw
-    gcol -1
+    gcol gui_fg
     drawtext gui_pad gui_pad 0 cat$ str$ solutions " solutions found"
    endif
   if ! button gui_pad (+gui_pad 16 gui_pad) @"thanks"; goto ".solmessage" endif
