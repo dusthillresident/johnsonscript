@@ -2,7 +2,7 @@
 option "vsize" 2148;
 option "ssize" 2048;
 
-startgraphics 362 356; option "wintitle" "Pentomino puzzle solver"; refreshmode 1
+startgraphics 360 349; option "wintitle" "Pentomino puzzle solver"; refreshmode 1
 guiinit;
 
 constant max_pieces * 8 32;
@@ -34,13 +34,16 @@ __addpiece @"S";
 __addpiece @"|";
 symmetry_check;
 
-variable www hhh opx opy animate paused cancel solutions maxspaces pauseforsol; set pauseforsol 1;
+variable www hhh opx opy animate currentstylenum stylenames paused cancel solutions maxspaces pauseforsol; set pauseforsol 1;
 set opx -1 set opy -1;
 set maxspaces * 5 12;
 set www getw board
 set hhh geth board
 
-
+set stylenames alloc 3
+set Astylenames(0) @"Style: 3D   "
+set Astylenames(1) @"Style: Flat "
+set Astylenames(2) @"Style: Round"
 
 while 1
  _options_screen;
@@ -560,18 +563,18 @@ return = D pindex piece (+ px xo) (+ py yo) D pindex piece px py;
 
 function _12cols c;
  caseof c 
- when 1; return val$"0xff2030"
- when 2; return val$"0xff8030"
- when 3; return val$"0xffff00"
- when 4; return val$"0x00ff00"
- when 5; return val$"0x00ffff"
- when 6; return val$"0x2060ef"
- when 7; return val$"0xff00ff"
- when 8; return val$"0x8080ff"
- when 9; return val$"0x80ff80"
- when 10; return val$"0xdeef90"
- when 11; return val$"0xff8080"
- when 12; return val$"0xffffff"
+ when 1; return 0xff2030
+ when 2; return 0xff8030
+ when 3; return 0xffff00
+ when 4; return 0x00ff00
+ when 5; return 0x00ffff
+ when 6; return 0x2060ef
+ when 7; return 0xff00ff
+ when 8; return 0x8080ff
+ when 9; return 0x80ff80
+ when 10; return 0xdeef90
+ when 11; return 0xff8080
+ when 12; return 0xffffff
  endcase
 return -1
 
@@ -586,7 +589,14 @@ _mulcol c m
 << _mulcol (>> c 8) m 8
 << _mulcol (>> c 16) m 16;
 
-function _dp_square x y sc col borders local t_left t_right t_top t_bottom x1 x2 y1 y2 c1 c2 c3 c4;
+function stylefn a b c d e;
+caseof currentstylenum
+ when 0; return _dp_square_3d a b c d e
+ when 1; return _dp_square_simple a b c d e
+ when 2; return _dp_square_round a b c d e
+endcase
+
+function _dp_square_3d x y sc col borders local t_left t_right t_top t_bottom x1 x2 y1 y2 c1 c2 c3 c4;
 if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
 /*
   2
@@ -680,6 +690,74 @@ if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
  triangle x1 y1 x1 y2 x2 y2
 endfunction
 
+function _dp_square_simple x y sc col borders local t_left t_right t_top t_bottom;
+ if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
+
+ set t_left & borders 1
+ set t_right & borders 4
+ set t_top & borders 2
+ set t_bottom & borders 8
+
+ gcol 0
+ rectangle x y - sc 1
+ gcol (& _12cols col 0xf0f0f0)
+ rectanglef (+ x !!t_left) (+ y !!t_top) (- sc !!t_left !!t_right) (- sc !!t_top !!t_bottom)
+
+endfunction
+
+
+
+function _dp_square_round x y sc col borders local t_left t_right t_top t_bottom xx yy r rr c1 p;
+ if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
+
+ set t_left & borders 1
+ set t_right & borders 4
+ set t_top & borders 2
+ set t_bottom & borders 8
+
+ set r >> sc 1
+ set rr  - r ! & sc 1
+ set xx + x r
+ set yy + y r
+ set p * _pi 0.5
+  
+ set c1 & _12cols col 0xf0f0f0
+
+ gcol 0
+ rectangle x y - sc 1
+ gcol c1
+ rectanglef (+ x !!t_left) (+ y !!t_top) (- sc !!t_left !!t_right) (- sc !!t_top !!t_bottom)
+ 
+ if && t_left t_top
+  gcol 0
+  rectanglef xx yy neg r
+  gcol c1
+  arcf xx yy rr rr neg _pi p
+ endif
+
+ if && t_right t_top
+  gcol 0
+  rectanglef xx yy r neg r
+  gcol c1
+  arcf xx yy rr rr neg p p
+ endif
+
+ if && t_left t_bottom
+  gcol 0
+  rectanglef xx yy neg r r
+  gcol c1
+  arcf xx yy rr rr (neg + _pi p) p
+ endif
+
+ if && t_right t_bottom 
+  gcol 0
+  rectanglef xx yy r
+  gcol c1
+  arcf xx yy rr rr 0 p
+ endif
+
+endfunction
+
 function drawpiece piece sx sy sc label border local x y w h c chr; set label 0
  set w Dpiece
  set h Apiece 1
@@ -689,7 +767,7 @@ function drawpiece piece sx sy sc label border local x y w h c chr; set label 0
   while < y h
    set chr D pindex piece x y
    if chr
-    _dp_square (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
+    stylefn (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
      |
      << ( !_dp_surrounds piece x y 0 1 ) 3 # underneath
      << ( !_dp_surrounds piece x y  1  0 ) 2  # right
@@ -708,7 +786,7 @@ function drawpiece piece sx sy sc label border local x y w h c chr; set label 0
   set x + x 1
  endwhile
  #while mouseb wait 16.6 endwhile
- if border gcol -1 rectangle sx sy (* sc w ) * sc h endif
+ if border gcol -1 rectangle (- sx 1) (- sy 1) (+ 1 * sc w ) + 1 * sc h endif
 endfunction
 
 function drawavailable x y sc local i;
@@ -937,9 +1015,22 @@ function __piece_switch x y n local w h;
  endif
 endfunction
 
-function _options_screen local i;
+function _options_screen_stylebutton x y;
+ if button x y Astylenames(currentstylenum)
+  set currentstylenum % (+ currentstylenum 1) 3
+  set gui_reqrd 1
+  return 1
+ endif
+endfunction
+
+function _options_screen local i squarer_x squarer_y squarer_sc;
+ set squarer_x + 1 gui_pad
+ set squarer_y (+ 1 gui_pad gui_btnh gui_pad 40 gui_pad gui_btnh gui_pad )
+ set squarer_sc 20
  while 1
   gui_proc 1
+
+  set squarer_sc int min (/ (- winw squarer_x gui_pad) www) (/ (- winh squarer_y gui_pad) hhh )
 
   if button gui_pad gui_pad @"Solve"
    set gui_reqrd 1
@@ -956,14 +1047,15 @@ function _options_screen local i;
   if gui_reqrd
    configure_board www hhh
   else
-   if _squarer gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 gui_pad ) 20 
+   if _squarer squarer_x squarer_y squarer_sc
     set bspaces countspaces board
    endif
   endif
-  gui_tickbox gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad ) @animate @"animate"
-  gui_tickbox 100 (+ gui_pad gui_btnh gui_pad 40 gui_pad ) @pauseforsol @"autopause"
+  _options_screen_stylebutton gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad )
+  gui_tickbox (+ gui_pad gui_btnw 12 gui_pad 10) (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 ) @animate @"animate"
+  gui_tickbox (+ gui_pad gui_btnw 12 gui_pad 100) (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 ) @pauseforsol @"autopause"
   if && gui_redraw ! gui_reqrd;
-   drawpiece board gui_pad (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 gui_pad ) 20 1 1
+   drawpiece board squarer_x squarer_y squarer_sc 1 1
   endif
 
   set i 0
@@ -987,11 +1079,12 @@ function _controlbox local s;
   set paused ! paused 
   set gui_reqrd 1
  endif
- if button 100 gui_pad @"Cancel"
+ if button 90 gui_pad @"Cancel"
   set cancel 1
  endif
- gui_tickbox 175 (+ gui_pad 8) @animate @"animate" 
- gui_tickbox 260 (+ gui_pad 8) @pauseforsol @"autopause"
+ _options_screen_stylebutton 155 gui_pad;
+ gui_tickbox 270 gui_pad @animate @"animate" 
+ gui_tickbox 270 (+ gui_pad 16) @pauseforsol @"autopause"
  if || gui_redraw animate;
   graphics_display
   #refresh
@@ -1000,7 +1093,7 @@ function _controlbox local s;
 endfunction 
 
 function graphics_display;
- drawpiece board gui_pad (+ gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1 1
+ drawpiece board (+ 1 gui_pad) (+ 1 gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1 1
  refresh
 endfunction
  
