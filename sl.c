@@ -194,7 +194,7 @@ typedef struct program program;
 double getvalue(int *p, program *prog);
 double interpreter(int p, program *prog);
 void free_ids(id_info *ids);
-token* tokenise(stringslist *progstrings, char *text, int *length_return);
+token* tokenise(stringslist *progstrings, char *text, int *length_return, char *name_of_source_file);
 token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_return);
 void process_function_definitions(program *prog,int startpos);
 void error(char *s);
@@ -351,7 +351,7 @@ program* init_program( char *str,int str_is_filepath ){
  if( str_is_filepath){
   tokens = loadtokensfromtext(program_strings,str,&tokens_length);
  }else{
-  tokens = tokenise(program_strings,str,&tokens_length);
+  tokens = tokenise(program_strings,str,&tokens_length,"[command line input]");
  }
  // check for 'option' commands that set things like stack size, variable array size, etc.
  int vsize = DEFAULT_VSIZE;
@@ -1643,24 +1643,35 @@ int* get_line_end_array(unsigned char *text){
  return out; 
 }
 
-typedef struct tokentextpos { int line; int column; } TTP;
+typedef struct tokentextpos { int line; int column; char *file; int arraysize; int lastindex; } TTP;
 
-int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned char *text){
+int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned char *text, unsigned char *name_of_source_file ){
  int *line_end_array=NULL; TTP *TextPosses = NULL; int linep=0;
  if(progstrings && tokens_return){
   //tb();
   line_end_array = get_line_end_array(text);
   TextPosses = (TTP*)progstrings->string;
+  if(TextPosses->lastindex){ //rellocate TTP for extra tokens
+   int newarraysize = TextPosses->arraysize + 6 + len/2; // it may be temporarily larger than the actual amount of tokens we will store, because we don't know that yet
+   progstrings->string = realloc( progstrings->string, newarraysize * sizeof(TTP) );
+   TextPosses = (TTP*)progstrings->string;
+   if( TextPosses == NULL ){
+    printf("gettokens: couldn't allocate memory for TTP\n");
+    exit(0);
+   }
+   TextPosses->arraysize = newarraysize;
+  }
   //printf("%p\n",TextPosses);
  }
  int count = 0, pos = 0; token t;
+ int ttp_arraysize=0, ttp_lastindex=0; if(TextPosses) { ttp_arraysize = TextPosses->arraysize; ttp_lastindex = TextPosses->lastindex; }
  while(pos<len){
   // token text locations for error reports
   if(TextPosses){ 
    while( pos >= line_end_array[linep] ){
     linep += 1;
    }
-   TextPosses[count] = (TTP){ linep+1 ,pos-(line_end_array[linep-1]+1) };//tb();
+   TextPosses[ ttp_lastindex + count ] = (TTP){ linep+1 ,pos-(line_end_array[linep-1]+1), name_of_source_file };//tb();
   }
   //if(TextPosses){ tb(); printf("test this shit: line %d, col %d, '%s'\n",TextPosses[count].line,TextPosses[count].column,tokenstring(t)); }
   // the token itself
@@ -1668,17 +1679,31 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
   count +=1;
  }
  if(line_end_array) free( (line_end_array-1) );
+ if(TextPosses){ // update and trim the TTP array
+  TextPosses->lastindex = ttp_lastindex + count;
+  //printf("shit %d\n",TextPosses->lastindex);
+  TextPosses->arraysize = TextPosses->lastindex+1;
+  TextPosses = realloc( TextPosses, TextPosses->arraysize * sizeof(TTP) );
+  TextPosses[TextPosses->lastindex]=(TTP){0,0,0,0,0};
+  progstrings->string = (char*) TextPosses;
+ }
  return count;
 }
 
-token* tokenise(stringslist *progstrings, char *text, int *length_return){
+token* tokenise(stringslist *progstrings, char *text, int *length_return, char *name_of_source_file){
  int len = strlen(text);
- int count = gettokens(NULL,NULL,len,text);
+ int count = gettokens(NULL,NULL,len,text,NULL);
  // about 'count+1': allocate 1 space for one extra token that goes unused (set to 0) so that there's less likely to be trouble with segmentation faults
  token *out = calloc(count+1,sizeof(token)); 
  // stringslist_addstring(progstrings,(char*) calloc( count,sizeof(TTP) ) );
- progstrings->string = (char*) calloc( count,sizeof(TTP) );
- gettokens(progstrings,out,len,text);
+ if( ! progstrings->string ) progstrings->string = (char*) calloc( count,sizeof(TTP) );
+ char *name_of_source_file_permanent_address = NULL;
+ if( name_of_source_file ){
+  name_of_source_file_permanent_address = calloc( strlen(name_of_source_file), sizeof(char) );
+  strcpy( name_of_source_file_permanent_address, name_of_source_file );
+  stringslist_addstring( progstrings, name_of_source_file_permanent_address );
+ }
+ gettokens(progstrings,out,len,text,name_of_source_file_permanent_address);
  if(length_return)*length_return = count;
  return out;
 }
@@ -1690,7 +1715,7 @@ token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_retur
  unsigned char *text = calloc( ext+1, sizeof(unsigned char));
  size_t ReturnValue;
  ReturnValue = fread((void*)text, sizeof(char), ext, f);
- token *out = tokenise(progstrings, text,length_return);
+ token *out = tokenise(progstrings, text,length_return,path);
  fclose(f); free(text);
  return out;
 }
@@ -1698,10 +1723,11 @@ token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_retur
 void print_sourcetext_location( program *prog, int token_p){
  if( prog->program_strings->string == NULL ) return;
  TTP *ttp = (TTP*)prog->program_strings->string;
+ //printf("hmm, ttp==%p\n",ttp); printf("ttp->arraysize==%d, ttp->lastindex==%d\n",ttp->arraysize,ttp->lastindex); //test
  if( token_p<0 || token_p>=prog->length ){
   printf("print_sourcetext_location: token_p out of range\n");
  }else{
-  printf(":::: At line %d, column %d ::::\n", ttp[token_p].line, ttp[token_p].column );
+  printf(":::: At line %d, column %d, in file '%s' ::::\n", ttp[token_p].line, ttp[token_p].column, ttp[token_p].file == NULL ? "null" : ttp[token_p].file );
  }
 }
 

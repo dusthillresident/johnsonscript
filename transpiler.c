@@ -23,6 +23,7 @@ char *trans_varp = NULL; int trans_varp_p=0;
 char *trans_vars = NULL; int trans_vars_p=0;
 
 int trans_fn=0;
+int trans_num_funcs=0;
 int trans_var_n=0;
 int trans_program_contains_F=0; // if the program makes use of function references, every function must be of the sort that takes its parameters as a single 'double[]'
 int trans_vsize = 2048; // size of the variables array
@@ -52,7 +53,7 @@ void trans_print_sourcetext_location( program *prog, int token_p){
  if( token_p<0 || token_p>=prog->length ){
   PrintErr("trans_print_sourcetext_location: token_p out of range\n");
  }else{
-  PrintErr(":::: At line %d, column %d ::::\n", ttp[token_p].line, ttp[token_p].column );
+  PrintErr(":::: At line %d, column %d, file '%s' ::::\n", ttp[token_p].line, ttp[token_p].column, ttp[token_p].file );
  }
 }
 
@@ -481,7 +482,11 @@ void translate_value(program *prog, int *p){
  PrintMain(" ");
  trans_val_start:
  #if TRANS_CRASHDEBUG
- fprintf(stderr,"translate_value: %s\n",tokenstring(prog->tokens[ *p ]));
+ if( CurTok.type == t_Ff ){
+  fprintf(stderr,"translate_value: t_Ff '%s'\n",  getfuncname(prog,CurTok.data.pointer) );
+ }else{
+  fprintf(stderr,"translate_value: %s\n",  tokenstring(prog->tokens[ *p ])  );
+ }
  #endif
  switch( prog->tokens[ *p ].type ){
  case t_endstatement:
@@ -2302,6 +2307,11 @@ void translate_command(program *prog, int *p){
    *p += 1;
 
   } break;
+ case t_F:
+  {
+   translate_value(prog, p);
+   PrintMain(";\n");
+  } break;
 /*
  case t_:
   {
@@ -2750,6 +2760,11 @@ void translate_program(program *prog){
  translate_preprocess_declarations(prog);
 //TestThisShit();exit(0);
 
+ // count number of functions
+ for(p=0; p<prog->length; p++){
+  if( prog->tokens[p].type == t_deffn ) trans_num_funcs += 1;
+ }
+
  // ---------------
 
  p=0;
@@ -2760,7 +2775,7 @@ void translate_program(program *prog){
  // ---------------
  
  char VarsArrayDeclaration[384];
- sprintf(VarsArrayDeclaration,"double VarsArray[%d]; Johnson_vsize=%d; FirstVarP = VarsArray;\nJohnson_num_funcs = %d;\n",trans_vsize,trans_vsize,trans_fn);
+ sprintf(VarsArrayDeclaration,"double VarsArray[%d]; Johnson_vsize=%d; FirstVarP = VarsArray;\nJohnson_num_funcs = %d;\n",trans_vsize,trans_vsize,trans_num_funcs);
 
  printf("%s%s%s%s%s%s%s%s%s%s%s%s%s",
   trans_program_uses_maths ? "\n#include <math.h>\n" : "\n",
