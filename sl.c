@@ -3794,16 +3794,6 @@ int main(int argc, char **argv){
  SeedRng();
  //printf("sz %d\n",sizeof(token)); return 0;
  program *prg = NULL;
- 
- // ---- remove this soon ----
- int f;
- FILE *fout=Openout("/home/patrick/fuckingshit.txt");
- for(f=0; f<argc; f++){
-  fprintf(fout, "%s ", argv[f]);
- }
- fprintf(fout, "\n");
- fclose(fout);
- // -------------------------
 
  if(argc>1){
   prg = init_program( argv[1], Exists(argv[1]) ); 
