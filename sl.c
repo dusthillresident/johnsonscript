@@ -23,29 +23,29 @@
 
 // memory problem debugging stuff
 #if 0
- void* mymallocfordebug(size_t size    ,int n, char *f){
+ void* mymallocfordebug(size_t size    ,int n, char *f,char *fun){
   void *out = malloc(size);
-  printf("line %d,	%s:	MALLOC	%p\n",n,f,out);
+  printf("line %d,	%s,	%s,	MALLOC	%p\n",n,f,fun,out);
   return out;
  }
- void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f){
+ void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f,char *fun){
   void *out = calloc(nmemb,size);
-  printf("line %d,	%s:	CALLOC	%p\n",n,f,out); 
+  printf("line %d,	%s,	%s,	CALLOC	%p\n",n,f,fun,out); 
   return out;
  }
- void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f){
+ void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun){
   void *out = realloc(ptr,size);
-  printf("line %d,	%s:	REALLOC	%p (input %p)\n",n,f,out,ptr);
+  printf("line %d,	%s,	%s,	REALLOC	%p (input %p)\n",n,f,fun,out,ptr);
   return out;
  }
- void myfreefordebug(void *ptr,      int n, char *f){
-  printf("line %d,	%s:	FREEING	%p\n",n,f,ptr);
+ void myfreefordebug(void *ptr,      int n, char *f,char *fun){
+  printf("line %d,	%s,	%s,	FREEING	%p\n",n,f,fun,ptr);
   free(ptr);
  }
- #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__)
- #define calloc(a,b) mycallocfordebug(a,b,__LINE__,__FILE__)
- #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__)
- #define free(p) myfreefordebug(p,__LINE__,__FILE__)
+ #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__,(char*)__FUNCTION__)
+ #define calloc(a,b) mycallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__)
+ #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__)
+ #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__)
 #endif
 
 #define allow_debug_commands 1
@@ -1652,7 +1652,7 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
   line_end_array = get_line_end_array(text);
   TextPosses = (TTP*)progstrings->string;
   if(TextPosses->lastindex){ //rellocate TTP for extra tokens
-   int newarraysize = TextPosses->arraysize + 6 + len/2; // it may be temporarily larger than the actual amount of tokens we will store, because we don't know that yet
+   int newarraysize = TextPosses->arraysize + 1 + len; // it may be temporarily larger than the actual amount of tokens we will store, because we don't know that yet
    progstrings->string = realloc( progstrings->string, newarraysize * sizeof(TTP) );
    TextPosses = (TTP*)progstrings->string;
    if( TextPosses == NULL ){
@@ -1680,12 +1680,17 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
  }
  if(line_end_array) free( (line_end_array-1) );
  if(TextPosses){ // update and trim the TTP array
-  TextPosses->lastindex = ttp_lastindex + count;
-  //printf("shit %d\n",TextPosses->lastindex);
-  TextPosses->arraysize = TextPosses->lastindex+1;
-  TextPosses = realloc( TextPosses, TextPosses->arraysize * sizeof(TTP) );
-  TextPosses[TextPosses->lastindex]=(TTP){0,0,0,0,0};
-  progstrings->string = (char*) TextPosses;
+  if( ttp_lastindex ){
+   TextPosses->lastindex = ttp_lastindex + count;
+   //printf("shit %d\n",TextPosses->lastindex);
+   TextPosses->arraysize = TextPosses->lastindex+1;
+   TextPosses = realloc( TextPosses, TextPosses->arraysize * sizeof(TTP) );
+   TextPosses[TextPosses->lastindex]=(TTP){0,0,0,0,0};
+   progstrings->string = (char*) TextPosses;
+  } else {
+   TextPosses->lastindex = count;
+   TextPosses->arraysize = ttp_arraysize;
+  }  
  }
  return count;
 }
@@ -1696,10 +1701,13 @@ token* tokenise(stringslist *progstrings, char *text, int *length_return, char *
  // about 'count+1': allocate 1 space for one extra token that goes unused (set to 0) so that there's less likely to be trouble with segmentation faults
  token *out = calloc(count+1,sizeof(token)); 
  // stringslist_addstring(progstrings,(char*) calloc( count,sizeof(TTP) ) );
- if( ! progstrings->string ) progstrings->string = (char*) calloc( count,sizeof(TTP) );
+ if( ! progstrings->string ){
+  progstrings->string = (char*) calloc( count+1,sizeof(TTP) );
+  ((TTP*)progstrings->string)->arraysize = count+1;
+ }
  char *name_of_source_file_permanent_address = NULL;
  if( name_of_source_file ){
-  name_of_source_file_permanent_address = calloc( strlen(name_of_source_file), sizeof(char) );
+  name_of_source_file_permanent_address = calloc( strlen(name_of_source_file)+1, sizeof(char) );
   strcpy( name_of_source_file_permanent_address, name_of_source_file );
   stringslist_addstring( progstrings, name_of_source_file_permanent_address );
  }
@@ -3786,6 +3794,16 @@ int main(int argc, char **argv){
  SeedRng();
  //printf("sz %d\n",sizeof(token)); return 0;
  program *prg = NULL;
+ 
+ // ---- remove this soon ----
+ int f;
+ FILE *fout=Openout("/home/patrick/fuckingshit.txt");
+ for(f=0; f<argc; f++){
+  fprintf(fout, "%s ", argv[f]);
+ }
+ fprintf(fout, "\n");
+ fclose(fout);
+ // -------------------------
 
  if(argc>1){
   prg = init_program( argv[1], Exists(argv[1]) ); 
