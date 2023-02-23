@@ -40,10 +40,13 @@ set maxspaces * 5 12;
 set www getw board
 set hhh geth board
 
-set stylenames alloc 3
+set stylenames alloc 6
 set Astylenames(0) @"Style: 3D   "
 set Astylenames(1) @"Style: Flat "
 set Astylenames(2) @"Style: Round"
+set Astylenames(3) @"Style: Neon "
+set Astylenames(4) @"Style: Grid "
+set Astylenames(5) @"Style: Plain"
 
 while 1
  _options_screen;
@@ -538,45 +541,22 @@ endfunction
 # ----------------------------------------------
 # ----------------------------------------------
 
-function _dp_col c v;
- if < c 0
-  gcol 64 64 64 endfunction
- endif
- set c 7
- gcol (* v & c 1) (* v !! & c 2) (* v !! & c 4)
-endfunction
-
-function _dp_surrounds piece px py xo yo;
- if < (+ px xo) 0
-  endfunction
- endif
- if >= (+ px xo) Dpiece
-  endfunction
- endif
- if < (+ py yo) 0
-  endfunction
- endif
- if >= (+ py yo) Apiece 1
-  endfunction
- endif
-return = D pindex piece (+ px xo) (+ py yo) D pindex piece px py;
-
 function _12cols c;
  caseof c 
- when 1; return 0xff2030
- when 2; return 0xff8030
- when 3; return 0xffff00
- when 4; return 0x00ff00
- when 5; return 0x00ffff
- when 6; return 0x2060ef
- when 7; return 0xff00ff
- when 8; return 0x8080ff
- when 9; return 0x80ff80
- when 10; return 0xdeef90
- when 11; return 0xff8080
- when 12; return 0xffffff
+  when 1; return 0xff2030
+  when 2; return 0xff8030
+  when 3; return 0xffff00
+  when 4; return 0x00ff00
+  when 5; return 0x00ffff
+  when 6; return 0x2060ef
+  when 7; return 0xff00ff
+  when 8; return 0x8080ff
+  when 9; return 0x80ff80
+  when 10; return 0xdeef90
+  when 11; return 0xff8080
+  when 12; return 0xffffff
  endcase
-return -1
+return 0x404040
 
 function _mulcol c m;
  set c * (& c 255) m
@@ -589,29 +569,15 @@ _mulcol c m
 << _mulcol (>> c 8) m 8
 << _mulcol (>> c 16) m 16;
 
-function stylefn a b c d e;
-caseof currentstylenum
- when 0; return _dp_square_3d a b c d e
- when 1; return _dp_square_simple a b c d e
- when 2; return _dp_square_round a b c d e
-endcase
-
-function _dp_square_3d x y sc col borders local t_left t_right t_top t_bottom x1 x2 y1 y2 c1 c2 c3 c4;
-if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
 /*
+ 'borders' is a bitmask where the top/left/bottom/right sides are represented like this:
   2
  1 4
   8
 */
- _dp_col col 255
-# set sc - sc 1
 
- # 255  ff 16777215
- # 192	c0 12632256 
- # 128  80 8421504
- # 92   5c 6052956
+function _dp_square_3d x y sc col borders local t_left t_right t_top t_bottom x1 x2 y1 y2 c1 c2 c3 c4;
 
-# set col + col * 2 ! & col 7
  set col _12cols col
 
  set c1 mulcol col 1
@@ -690,8 +656,7 @@ if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
  triangle x1 y1 x1 y2 x2 y2
 endfunction
 
-function _dp_square_simple x y sc col borders local t_left t_right t_top t_bottom;
- if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
+function _dp_square_flat x y sc col borders local t_left t_right t_top t_bottom;
 
  set t_left & borders 1
  set t_right & borders 4
@@ -705,10 +670,7 @@ function _dp_square_simple x y sc col borders local t_left t_right t_top t_botto
 
 endfunction
 
-
-
 function _dp_square_round x y sc col borders local t_left t_right t_top t_bottom xx yy r rr c1 p;
- if < col 0 gcol 64 64 64 rectanglef x y sc endfunction endif
 
  set t_left & borders 1
  set t_right & borders 4
@@ -758,7 +720,78 @@ function _dp_square_round x y sc col borders local t_left t_right t_top t_bottom
 
 endfunction
 
-function drawpiece piece sx sy sc label border local x y w h c chr; set label 0
+function _dp_square_neon x y sc col borders;
+ set col _12cols col
+ gcol >> (& col 0xfefefe) 1
+ rectanglef x y sc;
+ gcol col
+ set sc - sc 1
+ if & borders 8
+  line x (+ y sc) (+ x sc) (+ y sc)
+ endif
+ if & borders 4
+  line (+ x sc) y (+ x sc) (+ y sc)
+ endif
+ if & borders 2
+  line x y (+ x sc) y
+ endif
+ if & borders 1
+  line x y x (+ y sc)
+ endif
+endfunction
+
+function _dp_square_grid x y sc col borders;
+ gcol 0
+ rectanglef x y sc
+ gcol _12cols col
+ rectanglef (+ x 1) (+ y 1) - sc 2
+endfunction
+
+function _dp_square_plain x y sc col borders;
+ gcol gui_bg
+ rectanglef x y sc;
+ gcol gui_fg
+ set sc - sc 1
+ if & borders 8
+  line x (+ y sc) (+ x sc) (+ y sc)
+ endif
+ if & borders 4
+  line (+ x sc) y (+ x sc) (+ y sc)
+ endif
+ if & borders 2
+  line x y (+ x sc) y
+ endif
+ if & borders 1
+  line x y x (+ y sc)
+ endif
+endfunction
+
+function _dp_surrounds piece px py xo yo;
+ if < (+ px xo) 0
+  endfunction
+ endif
+ if >= (+ px xo) Dpiece
+  endfunction
+ endif
+ if < (+ py yo) 0
+  endfunction
+ endif
+ if >= (+ py yo) Apiece 1
+  endfunction
+ endif
+return = D pindex piece (+ px xo) (+ py yo) D pindex piece px py;
+
+function stylefn a b c d e;
+caseof currentstylenum
+ when 0; return _dp_square_3d a b c d e
+ when 1; return _dp_square_flat a b c d e
+ when 2; return _dp_square_round a b c d e
+ when 3; return _dp_square_neon a b c d e
+ when 4; return _dp_square_grid a b c d e
+ otherwise return _dp_square_plain a b c d e
+endcase
+
+function drawpiece piece sx sy sc border local x y w h c chr;
  set w Dpiece
  set h Apiece 1
  set x 0
@@ -766,26 +799,21 @@ function drawpiece piece sx sy sc label border local x y w h c chr; set label 0
   set y 0
   while < y h
    set chr D pindex piece x y
-   if chr
+   if > chr 0
     stylefn (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
      |
      << ( !_dp_surrounds piece x y 0 1 ) 3 # underneath
      << ( !_dp_surrounds piece x y  1  0 ) 2  # right
      << ( !_dp_surrounds piece x y  0  -1 ) 1 # above
-          ! _dp_surrounds piece x y  -1  0   #
-    if label
-     gcol -1
-     drawtext (+ sx >> sc 1 * sc x) (+ sy >> sc 1 * sc y) 3 chr$ + 64 D pindex piece x y
-    endif
+          ! _dp_surrounds piece x y  -1  0   # left
    else
-    gcol 0 
+    gcol & 0x404040 neg < chr 0 
     rectanglef (+ sx * sc x) (+ sy * sc y) sc
    endif
    set y + y 1
   endwhile
   set x + x 1
  endwhile
- #while mouseb wait 16.6 endwhile
  if border gcol -1 rectangle (- sx 1) (- sy 1) (+ 1 * sc w ) + 1 * sc h endif
 endfunction
 
@@ -795,7 +823,7 @@ function drawavailable x y sc local i;
  rectanglef x y (* sc 6 >> num_pieces 3) * sc 5;
  while < i num_pieces
   if !Aisinuse >> i 3
-   drawpiece Apieces i (+ x * >> i 3 sc 6 ) y sc 0 0
+   drawpiece Apieces i (+ x * >> i 3 sc 6 ) y sc 0
   endif 
   set i + i 8
  endwhile
@@ -839,8 +867,8 @@ function xResourceColourLookup xResourceName defaultColour local s;
  option "unclaim" s
  if ! len$ $s
   return defaultColour
- else
-  print "Successfully obtained value '" $s "' for X resource name '" $xResourceName "'";
+ #else
+ # print "Successfully obtained value '" $s "' for X resource name '" $xResourceName "'";
  endif
 return val$ cat$ "0x" right$ $s - len$ $s 1
 
@@ -1003,7 +1031,7 @@ function __piece_switch x y n local w h;
    gcol >> (& gui_fg 0xfefefe) 1
   endif
   rectangle x y w h;
-  drawpiece Apieces(* n 8) (+x gui_pad) (+y gui_pad )  4 0 0
+  drawpiece Apieces(* n 8) (+x gui_pad) (+y gui_pad )  4 0
  endif
  if && ! gui_omb gui_mb
   if boxchk x y w h mousex mousey
@@ -1017,7 +1045,7 @@ endfunction
 
 function _options_screen_stylebutton x y;
  if button x y Astylenames(currentstylenum)
-  set currentstylenum % (+ currentstylenum 1) 3
+  set currentstylenum % (+ currentstylenum 1) 6
   set gui_reqrd 1
   return 1
  endif
@@ -1055,7 +1083,7 @@ function _options_screen local i squarer_x squarer_y squarer_sc;
   gui_tickbox (+ gui_pad gui_btnw 12 gui_pad 10) (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 ) @animate @"animate"
   gui_tickbox (+ gui_pad gui_btnw 12 gui_pad 100) (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 ) @pauseforsol @"autopause"
   if && gui_redraw ! gui_reqrd;
-   drawpiece board squarer_x squarer_y squarer_sc 1 1
+   drawpiece board squarer_x squarer_y squarer_sc 1
   endif
 
   set i 0
@@ -1093,7 +1121,7 @@ function _controlbox local s;
 endfunction 
 
 function graphics_display;
- drawpiece board (+ 1 gui_pad) (+ 1 gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1 1
+ drawpiece board (+ 1 gui_pad) (+ 1 gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1
  refresh
 endfunction
  
