@@ -798,6 +798,7 @@ function drawpiece piece sx sy sc border local x y w h c chr;
  while < x w
   set y 0
   while < y h
+   if expose set gui_reqrd 1 endfunction endif
    set chr D pindex piece x y
    if > chr 0
     stylefn (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
