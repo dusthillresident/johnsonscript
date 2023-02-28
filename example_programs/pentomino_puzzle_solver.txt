@@ -815,7 +815,7 @@ function drawpiece piece sx sy sc border local x y w h c chr;
   endwhile
   set x + x 1
  endwhile
- if border gcol -1 rectangle (- sx 1) (- sy 1) (+ 1 * sc w ) + 1 * sc h endif
+ if border gcol gui_fg rectangle (- sx 1) (- sy 1) (+ 1 * sc w ) + 1 * sc h endif
 endfunction
 
 function drawavailable x y sc local i;
