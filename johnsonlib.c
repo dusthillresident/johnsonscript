@@ -111,21 +111,22 @@ void ExpandSVR( SVR *svr, int newsize ){
  if( svr->bufsize >= newsize ){ 
   return;
  }
- if( svr->len > svr->bufsize ){
-  fprintf(stderr,"Johnsonlib: ExpandSVR: len > bufsize\n");
+ if( svr->len && (svr->len >= svr->bufsize) ){
+  fprintf(stderr,"Johnsonlib: ExpandSVR: len => bufsize\n");
   exit(0);
  }
  newsize = newsize+(512-(newsize % 512));
  //printf("ExpandSVR: %p : bufsize %d, newsize %d\n",svr->buf,svr->bufsize,newsize);
  if( svr->buf == NULL ){
   svr->buf = calloc(1, newsize);
-  Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer");
+  Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer allocation");
   svr->bufsize = newsize;
  }else{
   if( svr->bufsize < newsize ){
    svr->buf = realloc(svr->buf, newsize);
-   svr->bufsize = newsize;
    Johnsonlib_MemoryAllocFailCheck(svr->buf,"SVR buffer reallocation");
+   svr->bufsize = newsize;
+   svr->buf[svr->len]=0;
   }//endif bufsize < newsize
  }//endif buf == NULL
 }//endproc
@@ -284,7 +285,7 @@ SVL StringS( int sa_l, int n, SVL svl  )
    memcpy(stringS_tempbuf, svl.buf, svl.len);
    svl.buf = stringS_tempbuf;
   }
-  int bufsize_required = svl.len * n;
+  int bufsize_required = svl.len * n + 1;
   if( bufsize_required < 0 ){ 
    printf("Johnsonlib StringS: string too long\n");
    exit(0);

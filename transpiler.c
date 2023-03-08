@@ -1819,7 +1819,7 @@ void translate_command(program *prog, int *p){
     PrintMain(";\nSVL b = ");
     translate_stringvalue(prog,p);
     PrintMain(";\nunsigned char h_a = a.buf[a.len], h_b=b.buf[b.len]; a.buf[a.len]=0; b.buf[b.len]=0;\n");
-    PrintMain("char *xresource_result = NewBase_GetXResourceString(a.buf, b.buf); if(xresource_result) {\nint l = strlen(xresource_result); ExpandSVR( dest, l );\n");
+    PrintMain("char *xresource_result = NewBase_GetXResourceString(a.buf, b.buf); if(xresource_result) {\nint l = strlen(xresource_result); ExpandSVR( dest, l+1 );\n");
     PrintMain("strcpy(dest->buf, xresource_result); dest->len=l; free(xresource_result);\n}else{\ndest->len=0;\n}\na.buf[a.len]=h_a; b.buf[b.len]=h_b;\n}\n");
     #else
     ErrorOut("PENIS\n");

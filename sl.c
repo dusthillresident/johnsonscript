@@ -878,7 +878,7 @@ void option( program *prog, int *p ){
   sv->len = 0;
   if( result ){
    int l = strlen(result);
-   stringvar_adjustsizeifnecessary(sv, l, 0);
+   stringvar_adjustsizeifnecessary(sv, l+1, 0);
    strcpy(sv->string, result);
    sv->len = l;
    free(result);
@@ -2007,6 +2007,7 @@ void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int pr
   sv->string = realloc(sv->string, new_bufsize);
   if(sv->string == NULL) error("stringvar_adjustsize: realloc failed\n");
   sv->bufsize = new_bufsize;
+  sv->string[sv->len]=0;
  }else{
   free(sv->string);
   sv->bufsize = new_bufsize;
