@@ -1,0 +1,129 @@
+option "vsize" * 1024 64
+startgraphics 640 512
+
+refreshmode 1
+
+variable rr gg bb;
+set rr alloc 4
+set gg alloc 4
+set bb alloc 4
+
+set Arr(0) 255
+set Agg(0) 128
+set Abb(0) 0
+
+set Arr(1) 0
+set Agg(1) 0
+set Abb(1) 128
+
+set Arr(2) 0
+set Agg(2) 255
+set Abb(2) 0
+
+set Arr(3) 64
+set Agg(3) 64
+set Abb(3) 255
+
+variable p ps m st stm2 std2 r s h a b c d xymul;
+
+set p 0
+set ps 0.1
+set m 32
+set st 64
+set stm2 - st 2
+set std2 / st 2
+set r 480
+set s / r st
+set h 96
+
+variable xa ya i j x y _X _Y ox oy l aayaij aayai1j aayaij1 aayai1j1;
+set xa alloc st
+set ya alloc st
+set i 0
+while < i st
+ set Axa(i) alloc st
+ set Aya(i) alloc st
+ set i + i 1
+endwhile
+
+while 1
+ set _X / r 3
+ set _Y + winh r
+ set ox _X
+ set oy _Y
+
+ if & mouseb 1
+  set m * 96 / (- (* 1024 / mousey winh) 512) 512
+  set ps * (/ (* _pi 2) 32) / (- (* 1280 / mousex winh) 640 ) 640
+ endif
+
+ # Calculate x/y points
+
+ set j 0
+ while < j - st 0
+  set i 0
+  while < i - st 0
+   set AAxa(i)(j) (+ _X * s i)
+   set AAya(i)(j) (+ neg winh (+ _Y * s i) * m sin( + neg p * _pi 0.125 (/ 64 st) sqr( + pow(- i std2)2 pow(- j std2)2 ) ))
+   set i +  i 1
+  endwhile
+  set _X + _X s
+  set _Y - _Y s
+  set j + j 1
+ endwhile
+
+ # Render quads
+
+ set xymul fnmin (/ winw 1280) (/ winh 1024)
+
+ set j - stm2 1
+ while > j 1
+  set i 0
+  while < i stm2
+
+
+   set aayaij    AAya i j
+   set aayai1j   AAya(+i 1) j
+   set aayaij1   AAya i +j 1
+   set aayai1j1  AAya(+i 1) +j 1;
+
+   procc aayaij aayai1j aayaij1 aayai1j1
+
+   triangle   (* xymul AAxa i j)          (* xymul  aayaij)
+              (* xymul AAxa(+i 1)j)       (* xymul  aayai1j)
+              (* xymul AAxa i (+j 1))     (* xymul  aayaij1)
+   triangle   (* xymul AAxa i (+j 1))     (* xymul  aayaij1)
+              (* xymul AAxa(+ i 1)(+j 1)) (* xymul  aayai1j1)
+              (* xymul AAxa(+i 1)j)       (* xymul  aayai1j)
+
+   #refresh wait 16.6
+
+   set i + i 1
+  endwhile
+  set j - j 1
+ endwhile
+
+ refresh
+ wait 16.6
+ cls
+
+ set p + p ps
+ 
+ # end main loop
+endwhile
+
+function fnmin a b; return A@a > a b
+
+function fnmax a b; return A@a < a b
+
+function fnc rgb; return fnmin 255 + (* a Argb 0) (* b Argb 1) (* c Argb 2) (* d Argb 3) 
+
+function procc y0 y1 y2 y3 local min max;
+ set min fnmin fnmin y0 y1 fnmin y2 y3
+ set max + neg min fnmax fnmax y0 y1 fnmax y2 y3
+ set a / (- y0 min) max
+ set b / (- y1 min) max
+ set c / (- y2 min) max
+ set d / (- y3 min) max
+ gcol fnc rr fnc gg fnc bb
+endfunction
