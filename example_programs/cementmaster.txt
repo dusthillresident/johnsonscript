@@ -48,7 +48,7 @@ endwhile
 
 while 1
  set _X / r 3
- set _Y + winh r
+ set _Y + winh r 32
  set ox _X
  set oy _Y
 
