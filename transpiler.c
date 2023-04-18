@@ -201,7 +201,7 @@ void translate__process_id(program *prog, token *t){
  // if nothing was still found, error
  if(foundid==NULL){
   trans_print_sourcetext_location( prog, (int) (t - prog->tokens) );
-  fprintf(stderr,"translate__process_id: unknknown id: '%s'\n",(char*)t->data.pointer);
+  fprintf(stderr,"translate__process_id: unknown id: '%s'\n",(char*)t->data.pointer);
   exit(0);
  }
  // now do this check that tries to make sure the program is not referencing something before it's supposed to exist
@@ -218,6 +218,7 @@ void translate__process_id(program *prog, token *t){
   // ----
   int gpos = (prog->current_function == &initial_function) ? lpos : trans_function_gposses[ prog->current_function->function_number ] ;
   if( findd->gpos > gpos || (findd->gpos == gpos && findd->lpos > lpos ) ){
+   trans_print_sourcetext_location( prog, (int) (t - prog->tokens) );
    fprintf(stderr,"it looks like this id '%s' of type '%s' is being referenced before its declaration\n", (char*)t->data.pointer, findd->desc);
    #if DEBUG_GLPOS
    fprintf(stderr," gpos: %d\n lpos %d\n\n",findd->gpos,findd->lpos);
@@ -2135,6 +2136,7 @@ void translate_command(program *prog, int *p){
    // now we will do it.
    PrintMain("CON_%s = ",idstring);
    translate_value(prog, p);
+   PrintMain(";\n"); // Äkta dig för Rövar-Albin
   } break;
  case t_return:
   {
