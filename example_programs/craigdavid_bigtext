@@ -52,6 +52,20 @@ while ! & mouseb 4;
  textscroller @craigdavid
  option "xupdate"
  refresh
+
+ /*
+ if keypressed 52
+  while ! keypressed  65
+   option "xupdate"; refresh
+   wait 1
+  endwhile
+  while keypressed 65 
+   option "xupdate"; refresh
+   wait 1
+  endwhile
+ endif
+ */
+
  wait 16
 
 endwhile
@@ -98,6 +112,7 @@ REM ========================================
 REM   R  G  B  R
 REM   0        1
 
+#74 181 instead of 0 255
 function textcol_ p; 
 return + 74 * 181 + 0.5  * sin p 0.5;
 function textcol p;
@@ -106,18 +121,19 @@ function textcol p;
       textcol_  + p * pid2 2
 endfunction
 
-function textscroller  s  local i;
- set i 0
+function textscroller  s  local i x;
+ set i -128
  while < i + 1 / winw 32 ;
-  textcol * 0.12 + temp * i 4
-  drawscaledtext (+ neg % << temp 2 32 * i 32 )
-                 ( + (* winh 0.5) * sin ( * 0.04 + temp i) 116 )
+  set x (+ neg (& << temp 2 31) << i 5 )
+  textcol + (* 0.012 x) * temp 0.116
+  drawscaledtext x
+                 ( + (* winh 0.5) * sin ( + ( neg * 0.005 & temp 7 ) * 0.04 + temp i) 116 )
                  4
                  6
                  (mid$  $s   % (+ i / << temp 2 32) len$$s   4 )
   set i + i 1
  endwhile
- set temp + temp 1
+ set temp + temp 1 # ! keypressed 33 neg keypressed 32
 endfunction
 
 REM ========================================
