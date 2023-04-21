@@ -27,10 +27,8 @@ set Arr(3) 64
 set Agg(3) 64
 set Abb(3) 255
 
-variable p ps m st stm2 std2 r s h a b c d xymul;
+variable m st stm2 std2 r s h a b c d xymul;
 
-set p 0
-set ps 0.1
 set m 32
 set st 64
 constant adjv * -7 / 64 st
@@ -181,7 +179,7 @@ while 1
   
 
   #if ! && = oxp xp = oyp yp
-   if && > xp 0 > yp 0 < xp (- wh 1) < yp (- wh 1)
+   if && > xp 2 > yp 2 < xp (- wh 2) < yp (- wh 2)
     set AAheights(xp)(yp) 0.4
     set AAheights(-xp 1)(yp) 0.3
     set AAheights(xp)(-yp 1) 0.3
@@ -197,8 +195,6 @@ while 1
  wait 8.3
  cls
 
- set p + p ps
- 
  # end main loop
 endwhile
 
