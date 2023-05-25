@@ -44,7 +44,7 @@
 
 #define t_number	COCKSPENIS	//			number constant
 #define t_id		COCKSPENIS	//			identifier
-#define t_getref	COCKSPENIS	//	getref		'get reference'. returns function number for named functions, variable array index for variables and stack accesses
+#define t_getref	COCKSPENIS	//	@		'get reference'. returns function number for named functions, variable array index for variables and stack accesses
 
 // ===== string related functions that return numbers ======
 				//	EXAMPLE				RETURNS		DESCRIPTION
@@ -94,6 +94,8 @@
 #define t_ptr		COCKSPENIS	//	ptr  [filenumber]		check current position in file
 #define t_ext		COCKSPENIS	//	ext [filenumber]		check the current length of the file
 // ------------------------------------------------------
+
+#define t_extfun	COCKSPENIS	//	external function, t.data.pointer contains a function pointer, used for extensions
 
 #define t_leftb		COCKSPENIS	//	(
 
@@ -164,6 +166,8 @@
 #define t_wait			COCKSPENIS	//	wait [value];		usleep value*1000
 #define t_oscli			COCKSPENIS	//	oscli [stringvalue];	system("string");
 #define t_quit			COCKSPENIS	//	quit ([value]);		exit(value);
+// ---------------------------------------------
+#define t_extcom		COCKSPENIS	//	external command, used for extensions
 // ----- commands related to file handling -----
 #define t_sptr			COCKSPENIS	//	sptr [filenumber] [value] ;			set position in file to [value]
 #define t_bput			COCKSPENIS	//	bput [filenumber] [value] [...] ;		write bytes to file
@@ -196,8 +200,9 @@
 #define t_S			COCKSPENIS	//	$		string variable dereference
 #define t_Sf			COCKSPENIS	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
 #define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
+#define t_extsfun		COCKSPENIS	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst
-#define STRINGVALS_END   t_sget
+#define STRINGVALS_END   t_extsfun
 #ifdef enable_graphics_extension // graphics extension stringvalues
  #define t_readkeyS		COCKSPENIS	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
  #undef STRINGVALS_END

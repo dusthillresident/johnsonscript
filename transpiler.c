@@ -1808,6 +1808,7 @@ void translate_command(program *prog, int *p){
     }else{
      PrintMain("NewBase_HandleEvents(0);\n");
     }
+    PrintMain("XFlush(Mydisplay);\n");
     #else
     ErrorOut("PENIS\n");
     #endif

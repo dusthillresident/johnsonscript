@@ -205,6 +205,8 @@ int determine_valueorstringvalue(program *prog, int p);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
 void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve);
+void add_id(id_info *ids, id_info *new_id);
+id_info* make_id(char *id_string, token t);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -302,6 +304,47 @@ token maketoken_Sf( stringvar *pointer ){
  out.data.pointer = (void*)pointer;
  return out;
 }
+
+// --------------------------------------------
+// ---- External function/command routines ----
+// --------------------------------------------
+
+token maketoken_extfun( double (*external_function)(int*,program*) ){
+ token out;
+ out.type = t_extfun;
+ out.data.pointer = external_function; 
+ return out;
+}
+
+token maketoken_extsfun( stringval (*external_stringfunction)(program*,int*) ){
+ token out;
+ out.type = t_extsfun;
+ out.data.pointer = external_stringfunction;
+ return out;
+}
+
+token maketoken_extc( void (*external_command)(int*,program*) ){
+ token out;
+ out.type = t_extcom;
+ out.data.pointer = external_command;
+ return out;
+}
+
+void register_external_function( program *prog, double (*external_function)(int*,program*), char *id ){
+ add_id( prog->ids, make_id( id, maketoken_extfun( external_function ) ) );
+}
+
+void register_external_stringfunction( program *prog, stringval (*external_stringfunction)(program*,int*), char *id ){
+ add_id( prog->ids, make_id( id, maketoken_extsfun( external_stringfunction ) ) );
+}
+
+void register_external_command( program *prog, void (*external_command)(int*,program*), char *id ){
+ add_id( prog->ids, make_id( id, maketoken_extc( external_command ) ) );
+}
+
+// ---------------------------------------------------
+// ---- End of external function/command routines ----
+// ---------------------------------------------------
 
 void unloadprog(program *prog){
  int i;
@@ -895,6 +938,7 @@ void option( program *prog, int *p ){
  } break;
  case opt_xupdate: {
   NewBase_HandleEvents( isvalue( prog->tokens[*p].type ) ? (int)getvalue(p,prog) : 0 );
+  XFlush(Mydisplay);
  } break;
 #endif
  }
@@ -1785,6 +1829,9 @@ char* tokenstring(token t){
    snprintf(tokenstringbuf,sizeof(tokenstringbuf),"%.2f",t.data.number);
    return tokenstringbuf;
   }
+ case t_extfun: return "t_extfun";
+ case t_extsfun: return "t_extsfun";
+ case t_extcom: return "t_extcom";
  case t_leftb:		return "(";
  case t_rightb:		return ")";
  case t_endstatement:	return ";";
@@ -2196,6 +2243,10 @@ getstringvalue( program *prog, int *pos ){
   out.len=1;
   out.string=accumulator->string;
   return out;  
+ }
+ case t_extsfun:
+ {
+  return (( stringval(*)(program*,int*) )t.data.pointer)(prog,pos);
  }
  case t_leftb:
  {
@@ -2654,7 +2705,10 @@ getvalue(int *p, program *prog){
   }
   return svr->string_variable_number;
  }
-
+ case t_extfun:
+ {
+  return (( double(*)(int*,program*) )t.data.pointer)(p,prog);
+ }
  // --------- file related functions ---------
  case t_openin: case t_openup:  case t_openout:
  {
@@ -3427,7 +3481,11 @@ interpreter(int p, program *prog){
  case t_id: // ids can represent functions, so they must be processed if encountered by 'interpreter'
   process_id(prog,&prog->tokens[p]);
   goto interpreter_start;
- case t_F: case t_Ff: // procedure call (a function is called and the return value is discarded)
+ case t_extcom:
+  p+=1;
+  ( (void(*)(int*,program*)) t.data.pointer )(&p,prog);
+  break;
+ case t_F: case t_Ff: case t_extfun: // procedure call (a function is called and the return value is discarded)
   getvalue(&p,prog);
   break;
  case t_option:
@@ -3785,13 +3843,12 @@ interpreter(int p, program *prog){
 }
 
 // ----------------------------------------------------------------------------------------------------------------
+// ---- MAIN FUNCTION ---------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
-// ----------------------------------------------------------------------------------------------------------------
-
-#ifndef disable_sl_c_main
 
 #define main_printstuff 0
-int main(int argc, char **argv){
+#ifndef disable_sl_c_main
+int main (int argc, char **argv){
  SeedRng();
  //printf("sz %d\n",sizeof(token)); return 0;
  program *prg = NULL;
@@ -3841,5 +3898,4 @@ int main(int argc, char **argv){
 #endif
  return (int)result;
 }
-
 #endif

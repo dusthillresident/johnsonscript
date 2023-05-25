@@ -1587,6 +1587,13 @@ void drawscaledtext(int x, int y, int xs, int ys, unsigned char *s){
  #define drawscaledtext_above 2
  #define drawscaledtext_below 1 
 
+ if( x+step < 0 ){
+  while( *s && (x+step<0) ){
+   x += step;
+   s ++ ;
+  }
+ }
+
  while( *s ){
  
   int X,Y;
