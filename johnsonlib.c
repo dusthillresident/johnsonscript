@@ -301,7 +301,7 @@ SVL StringS( int sa_l, int n, SVL svl  )
     p+=svl.len;
    }//endif
   }//endif
-  accumulator->len = bufsize_required;
+  accumulator->len = bufsize_required-1;
   out = SVRtoSVL( accumulator );
   if(stringS_tempbuf){
    free(stringS_tempbuf);
