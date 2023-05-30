@@ -1,4 +1,5 @@
-option "vsize" * 1024 64
+constant st 64;
+option "vsize" + 1024 * 3 st st
 startgraphics 640 512
 
 refreshmode 1
@@ -24,12 +25,12 @@ set Arr(3) 64
 set Agg(3) 64
 set Abb(3) 255
 
-variable p ps m st stm2 std2 r s h a b c d xymul;
+variable p ps m stm2 std2 r s h a b c d xymul;
 
 set p 0
 set ps 0.1
 set m 32
-set st 64
+constant adjv * -7 / 64 st
 set stm2 - st 2
 set std2 / st 2
 set r 480
@@ -119,6 +120,8 @@ function fnmax a b; return A@a < a b
 function fnc rgb; return fnmin 255 + (* a Argb 0) (* b Argb 1) (* c Argb 2) (* d Argb 3) 
 
 function procc y0 y1 y2 y3 local min max;
+ set y0 + y0 adjv
+ set y1 + y1 adjv
  set min fnmin fnmin y0 y1 fnmin y2 y3
  set max + neg min fnmax fnmax y0 y1 fnmax y2 y3
  set a / (- y0 min) max
