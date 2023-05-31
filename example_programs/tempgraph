@@ -204,7 +204,7 @@ endfunction
 function colour  c;
  set c  + 1 % c 7
 return | 0x7f7f7f
-         (& 0x0000ff neg    & c 1)
-         (& 0x00ff00 neg !! & c 2)
-          & 0xff0000 neg !! & c 4;
+         (& 0x0000ff neg & c 1)
+         (& 0x00ff00 neg & >> c 1 1)
+          & 0xff0000 neg & >> c 2 1;
 
