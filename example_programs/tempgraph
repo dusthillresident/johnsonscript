@@ -177,7 +177,7 @@ function drawtemp  temp_ar p  local i xscale yscale st v;
  set yscale / winh current_highest_temp_celcius;
  move 0 
       - winh
-        * D( + temp_ar p ) yscale
+        * A temp_ar % p num_entries yscale
  if > num_entries winw
   set st / num_entries winw
  else
@@ -197,7 +197,7 @@ endfunction
 
 
 function addval  temp_ar p v;
- set D(+ temp_ar p) v
+ set A temp_ar p  v
 endfunction
 
 
