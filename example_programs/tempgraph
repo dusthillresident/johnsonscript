@@ -1,0 +1,209 @@
+constant highest_temp_celcius 65;
+constant wtime int * 1000 1; 
+
+constant max_temps 7;
+constant max_history * 640 1;
+
+constant wtime_step 64;
+
+option "vsize" + 64 * max_temps max_history;
+
+stringvar sensorsTextFolder;
+set sensorsTextFolder cat$ "/dev/shm/tempgraphTextFolder_" str$ rnd 100000 ;
+# print "'" sensorsTextFolder "'";
+oscli cat$ "mkdir " sensorsTextFolder;
+option "wmclose" 1;
+
+variable i p temps _ox _oy j num_entries;
+stringvar sensors_string;
+variable ss_p hhh;
+
+variable current_highest_temp_celcius new_highest; 
+set current_highest_temp_celcius highest_temp_celcius;
+
+set temps alloc * max_temps max_history;
+
+REM ===== get the names of the temperature sensors for the key/legend display ======
+
+stringvar tempnames tempstr rootname topname; variable foundtemps;
+update_sensors_string
+if && = -1 instr$ sensors_string "temp" = -1 instr$ sensors_string "_input"
+ sput _stderr "No temperature sensors found or 'sensors' command not found" chr$10;
+ quit 1
+endif
+while > len$sensors_string 5
+ set tempstr  left$ sensors_string (instr$ sensors_string (cat$ chr$10 chr$10))
+ set sensors_string right$ sensors_string - len$ sensors_string 2 len$ tempstr
+ set rootname left$ tempstr instr$ tempstr chr$10
+ if ! = -1 instr$ tempstr "temp"
+  set i 1
+  while < i 10 # look for temperature sensors from temp0_input to temp9_input
+   if ! = -1 instr$ tempstr cat$ "temp" str$i "_input";
+    set p instr$ tempstr cat$ "temp" str$i "_input"
+    set j 0
+    while < j 2 # skip back to find the name ('topname') of this temperature sensor
+     while ! = Ctempstr(p) 10
+      set p - p 1
+     endwhile
+     set p - p 1
+     set j + j 1
+    endwhile # next j 
+    set p + p 2
+    set topname mid$ tempstr p -1 
+    set topname left$ topname instr$ topname ":"
+    set tempnames cat$ tempnames chr$ S cat$ rootname " - " topname
+    set foundtemps + foundtemps 1
+    if = foundtemps max_temps
+     goto ".skipout"
+    endif # found as many temperatures as we have space for in the array
+   endif # found a temperature sensor numbered/labelled as temp(i)
+   set rootname string$ len$rootname " "; # presentation detail, only show the 'rootname' once
+   set i + i 1
+  endwhile # next i
+ endif # this block contained temperature sensor(s)
+endwhile
+
+.skipout
+set p 0
+set j 0
+
+option "startgraphics" 640 480;
+option "wintitle" "Temperatures"
+refreshmode 1;
+
+.start
+
+ set new_highest highest_temp_celcius
+
+ REM ======= load new values =============
+ update_sensors_string
+ set i 0
+ while < i foundtemps
+  addval (+ temps * max_history i) p load_value_from_sensors_string
+  set i + i 1
+ endwhile
+ set p  % (+ p 1) max_history
+ set num_entries + num_entries 1
+ if > num_entries max_history
+  set num_entries max_history
+ endif
+
+ .redraw
+
+ REM ======= marklines ====================
+ cls
+ gcol 6579300
+ set i 0
+ while < i current_highest_temp_celcius
+  set hhh  - winh * i (/ winh current_highest_temp_celcius)
+  line 0 hhh winw hhh
+  drawtext 0 hhh 1 str$ i
+  set i + i 10
+ endwhile
+ 
+ REM ======= draw display ================
+ set i 0
+ while < i foundtemps
+  gcol colour i
+  drawtext 16
+           (+ 16 * 12 i)
+           0
+           $Ctempnames(i)
+           #str$ i
+  drawtemp (+ temps * max_history i) p
+  set i + i 1
+ endwhile
+ REM =====================================
+ option "xupdate"
+ refresh
+
+ REM ======= delay until next frame ======
+ while < j wtime
+  option "xupdate"
+  if expose goto ".redraw" endif
+  if wmclose oscli cat$ "rm -r " sensorsTextFolder; quit; endif
+  set j + j wtime_step
+  wait wtime_step
+ endwhile
+ set j 0
+ REM =====================================
+ 
+ set current_highest_temp_celcius new_highest
+
+goto ".start"
+
+
+
+function load_value_from_sensors_string  local p out;
+ while  &&   >= ss_p 0    < ss_p len$sensors_string
+  set p  instr$  (mid$ sensors_string ss_p len$sensors_string) "temp"
+  if = p -1
+   REM testbeep;
+   return 0
+  endif
+  set ss_p  + ss_p p
+  if ! cmp$   mid$ sensors_string (+ ss_p 5) 7   "_input:" 
+   set out val$ mid$ sensors_string (+ ss_p 12) 20 
+   set ss_p + ss_p 4
+   return out
+  endif
+  set ss_p + ss_p 4
+ endwhile
+return 0;
+
+
+function update_sensors_string  local fp;
+ set ss_p 0
+ oscli cat$ "sensors -u > " sensorsTextFolder "/sensorsrubish"
+ set fp openin cat$ sensorsTextFolder "/sensorsrubish"
+ set sensors_string  sget fp ext fp
+ close fp
+endfunction
+
+
+function move x y;
+ set _ox x
+ set _oy y
+endfunction
+function draw x y;
+ line _ox _oy x y
+ set _ox x
+ set _oy y
+endfunction
+
+
+function drawtemp  temp_ar p  local i xscale yscale st v;
+ set xscale / winw - num_entries 1
+ set yscale / winh current_highest_temp_celcius;
+ move 0 
+      - winh
+        * D( + temp_ar p ) yscale
+ if > num_entries winw
+  set st / num_entries winw
+ else
+  set st 1
+ endif
+ set i 0
+ while < i num_entries
+  set v A temp_ar % (+ p i) num_entries
+  if > v new_highest
+   set new_highest v
+  endif
+  draw (* i xscale)
+       - winh * v yscale
+  set i + i st
+ endwhile
+endfunction
+
+
+function addval  temp_ar p v;
+ set D(+ temp_ar p) v
+endfunction
+
+
+function colour  c;
+ set c  + 1 % c 7
+return | (+ 127 * 127 !! & c 1)
+      << (+ 127 * 127 !!& c 2) 8
+      << (+ 127 * 127 !!& c 4) 16;
+
