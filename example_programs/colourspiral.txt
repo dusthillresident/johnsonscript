@@ -1,0 +1,47 @@
+
+
+startgraphics 500 500;
+
+constant steps 128;
+variable counter angle angle_adjust wh;
+
+refreshmode 1
+
+.redraw
+
+ set wh fnmin winw winh
+
+ set angle_adjust  + angle_adjust 0.05;
+ cls
+
+ set counter 0
+ while < counter + steps >> steps 2;
+
+  set angle  * (/ counter steps) (* _pi 2);
+  
+  gcol (+ 137 * 100 sin + angle_adjust * angle 2)
+       (+ 137 * 100 sin + angle_adjust * angle 4)
+       (+ 137 * 100 sin + angle_adjust angle);
+  
+  circlef (+ (>> winw 1) * cos(angle) (>> wh 2) )
+          (+ (>> winh 1) * sin(angle) (>> wh 2) )
+          (>> wh 2);
+
+  set counter  + counter 1
+
+  #wait 16.6
+ 
+  if = counter - steps >> steps 2;
+   option "setcliprect" 0 0 winw >> winh 1
+  endif
+ 
+ endwhile
+ 
+option "clearcliprect"
+refresh
+#while ! expose
+ wait 16.6
+#endwhile
+goto ".redraw"
+
+function fnmin a b; return A@a > a b
