@@ -1920,6 +1920,7 @@ char* tokenstring(token t){
  case t_wait:		return "wait";
  case t_alloc:		return "alloc";
  case t_endfn:		return "endfunction";
+ case t_extopt:
  case t_option:		return "option";
  case t_oscli:		return "oscli";
 
