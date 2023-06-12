@@ -163,6 +163,7 @@
 #define t_endfn			COCKSPENIS	//	endfunction	return from a function without returning a value (will return 0)
 #define t_goto			COCKSPENIS	//	goto [string];		will search for a label with matching string and execution will continue from there
 #define t_option		COCKSPENIS	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
+#define t_extopt		COCKSPENIS	//	a processed form of 'option' that has a pointer to a function, used for extensions
 #define t_wait			COCKSPENIS	//	wait [value];		usleep value*1000
 #define t_oscli			COCKSPENIS	//	oscli [stringvalue];	system("string");
 #define t_quit			COCKSPENIS	//	quit ([value]);		exit(value);

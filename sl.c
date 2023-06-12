@@ -182,6 +182,7 @@ struct program {
  file **files;
  // ------------
  id_info *ids;
+ id_info *external_options;
  stringslist *program_strings;
 };
 typedef struct program program;
@@ -340,6 +341,15 @@ void register_external_stringfunction( program *prog, stringval (*external_strin
 
 void register_external_command( program *prog, void (*external_command)(int*,program*), char *id ){
  add_id( prog->ids, make_id( id, maketoken_extc( external_command ) ) );
+}
+
+void register_external_option( program *prog, void (*external_option_procedure)(program*,int*), char *option_name){
+ if( ! prog->external_options ){
+  prog->external_options = calloc(1,sizeof(id_info));
+ }
+ token t; t.type = t_extopt; t.data.pointer = (void*) external_option_procedure;
+ int l = strlen(option_name); char *permanent_option_name_ptr = calloc(l+1,sizeof(char)); strcpy( permanent_option_name_ptr, option_name);
+ add_id( prog->external_options, make_id( permanent_option_name_ptr, t) );
 }
 
 // ---------------------------------------------------
@@ -722,6 +732,19 @@ void option( program *prog, int *p ){
   if( !strncmp( "xupdate",  id_string.string, id_string.len ) ){ opt_number=opt_xupdate;goto option__identify_option_string_out;}// xupdate [enableblocking]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
+  // ------ check external options -----
+  id_info *extopt = prog->external_options;
+  if( extopt ) extopt = extopt->next;
+  while( extopt ){
+   int l = strlen( extopt->name );
+   if( l == id_string.len && !strcmp(extopt->name, id_string.string) ){
+    prog->tokens[starting_p] = extopt->t;
+    *p = starting_p;
+    return;
+   }
+   extopt = extopt->next;
+  }
+  // -----------------------------------
   option__identify_option_string_out:
   if( opt_number != -1 && prog->tokens[id_stringconst_pos].type == t_stringconst ){
    prog->tokens[id_stringconst_pos] = maketoken_num(opt_number);
@@ -3491,6 +3514,13 @@ interpreter(int p, program *prog){
  case t_option:
  {
   option( prog, &p );
+  break;
+ }
+ case t_extopt:
+ {
+  void *fn = t.data.pointer;
+  p+=2;
+  ( (void(*)(int*,program*)) fn )(&p,prog);
   break;
  }
  case t_oscli:

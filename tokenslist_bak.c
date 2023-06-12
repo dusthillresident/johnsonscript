@@ -164,48 +164,49 @@
 #define t_endfn			111	//	endfunction	return from a function without returning a value (will return 0)
 #define t_goto			112	//	goto [string];		will search for a label with matching string and execution will continue from there
 #define t_option		113	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
-#define t_wait			114	//	wait [value];		usleep value*1000
-#define t_oscli			115	//	oscli [stringvalue];	system("string");
-#define t_quit			116	//	quit ([value]);		exit(value);
+#define t_extopt		114	//	a processed form of 'option' that has a pointer to a function, used for extensions
+#define t_wait			115	//	wait [value];		usleep value*1000
+#define t_oscli			116	//	oscli [stringvalue];	system("string");
+#define t_quit			117	//	quit ([value]);		exit(value);
 // ---------------------------------------------
-#define t_extcom		117	//	external command, used for extensions
+#define t_extcom		118	//	external command, used for extensions
 // ----- commands related to file handling -----
-#define t_sptr			118	//	sptr [filenumber] [value] ;			set position in file to [value]
-#define t_bput			119	//	bput [filenumber] [value] [...] ;		write bytes to file
-#define t_vput			120	//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
-#define t_sput			121	//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
-#define t_close			122	//	close [filenumber] ;				close an open file
+#define t_sptr			119	//	sptr [filenumber] [value] ;			set position in file to [value]
+#define t_bput			120	//	bput [filenumber] [value] [...] ;		write bytes to file
+#define t_vput			121	//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
+#define t_sput			122	//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
+#define t_close			123	//	close [filenumber] ;				close an open file
 // ---------------------------------------------
 // ===== end of commands ======
 
 // ===== fast modified versions of loop/control flow commands =====
-#define t_gotof			123	//      jump to position in token.i
-#define t_whilef		124	//	position of matching 'endwhile' in token.i
-#define t_endwhilef		125	//	position of matching 'while'+1 in token.i
-#define t_iff			126	//	position of matching else/endif in token.i
-#define t_elsef			127	//	position of matching endif in token.i
-#define t_endiff		128	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
+#define t_gotof			124	//      jump to position in token.i
+#define t_whilef		125	//	position of matching 'endwhile' in token.i
+#define t_endwhilef		126	//	position of matching 'while'+1 in token.i
+#define t_iff			127	//	position of matching else/endif in token.i
+#define t_elsef			128	//	position of matching endif in token.i
+#define t_endiff		129	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
 // ===================================
 
 // ===== string functions & stuff that's a 'string value' ======
 					//		EXAMPLE				RETURNS		DESCRIPTION
-#define t_stringconst		129	//	"string"					string constant
-#define t_stringconstf		130	//							string constant (fast), eliminates the need to call strlen()
-#define t_rightS		131	//	right$ [string] [n]		STR		get the last n characters of string
-#define t_leftS			132	//	left$  [string] [n]		STR		get the first n characters of string
-#define t_midS			133	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
-#define t_chrS			134	//	chr$ [num]			STR		return a string with the character [num]
-#define t_strS			135	//	str$ [num]			STR		return string containing representation of [num]
-#define t_catS			136	//	cat$ [string] [string] ...	STR		concatenate strings
-#define t_stringS		137	//	string$ [number] [string]	STR		Function returning multiple copies of a string.
-#define t_S			138	//	$		string variable dereference
-#define t_Sf			139	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
-#define t_sget			140	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
-#define t_extsfun		141	//	external string function, used for extensions
+#define t_stringconst		130	//	"string"					string constant
+#define t_stringconstf		131	//							string constant (fast), eliminates the need to call strlen()
+#define t_rightS		132	//	right$ [string] [n]		STR		get the last n characters of string
+#define t_leftS			133	//	left$  [string] [n]		STR		get the first n characters of string
+#define t_midS			134	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
+#define t_chrS			135	//	chr$ [num]			STR		return a string with the character [num]
+#define t_strS			136	//	str$ [num]			STR		return string containing representation of [num]
+#define t_catS			137	//	cat$ [string] [string] ...	STR		concatenate strings
+#define t_stringS		138	//	string$ [number] [string]	STR		Function returning multiple copies of a string.
+#define t_S			139	//	$		string variable dereference
+#define t_Sf			140	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
+#define t_sget			141	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
+#define t_extsfun		142	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_extsfun
 #ifdef enable_graphics_extension // graphics extension stringvalues
- #define t_readkeyS		142	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
+ #define t_readkeyS		143	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
  #undef STRINGVALS_END
  #define STRINGVALS_END t_readkeyS
 #endif
@@ -216,33 +217,33 @@
 #ifdef enable_graphics_extension
  // ===== graphics extension commands =====
  // commands
- #define t_startgraphics	143	// startgraphics		winwidth winheight ;
- #define t_stopgraphics		144	// stopgraphics			;
- #define t_winsize		145	// winsize			W H ;
- #define t_pixel		146	// pixel			X Y ([X Y] ...) ;
- #define t_line			147	// line				X Y X Y ([X Y] ...) ;
- #define t_circlef		148	// circlef			X Y R ;
- #define t_circle		149	// circle			X Y R ;
- #define t_arcf			150	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
- #define t_arc			151	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
- #define t_rectanglef		152	// rectanglef			X Y W [H] ;
- #define t_rectangle		153	// rectangle			X Y W [H] ;
- #define t_triangle		154	// triangle			X Y X Y X Y ;
- #define t_drawtext		155	// drawtext			X Y S (stringval);
- #define t_drawscaledtext	156	// drawscaledtext		X Y XS YS (stringval);
- #define t_refreshmode		157	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		158	// refresh 			;
- #define t_gcol			159	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		160	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			161	// cls				;
- #define t_drawmode		162	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_startgraphics	144	// startgraphics		winwidth winheight ;
+ #define t_stopgraphics		145	// stopgraphics			;
+ #define t_winsize		146	// winsize			W H ;
+ #define t_pixel		147	// pixel			X Y ([X Y] ...) ;
+ #define t_line			148	// line				X Y X Y ([X Y] ...) ;
+ #define t_circlef		149	// circlef			X Y R ;
+ #define t_circle		150	// circle			X Y R ;
+ #define t_arcf			151	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_arc			152	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_rectanglef		153	// rectanglef			X Y W [H] ;
+ #define t_rectangle		154	// rectangle			X Y W [H] ;
+ #define t_triangle		155	// triangle			X Y X Y X Y ;
+ #define t_drawtext		156	// drawtext			X Y S (stringval);
+ #define t_drawscaledtext	157	// drawscaledtext		X Y XS YS (stringval);
+ #define t_refreshmode		158	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		159	// refresh 			;
+ #define t_gcol			160	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		161	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			162	// cls				;
+ #define t_drawmode		163	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
 #if allow_debug_commands
- #define t_tb		163	//	testbeep
- #define t_printstackframe 164	//	print everything in the current stack frame
- #define t_printentirestack 165	//	print everything in the stack up to the current stack frame
+ #define t_tb		164	//	testbeep
+ #define t_printstackframe 165	//	print everything in the current stack frame
+ #define t_printentirestack 166	//	print everything in the stack up to the current stack frame
 #endif
 
 #define t_bad		255	//			bad data
