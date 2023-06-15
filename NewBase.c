@@ -1127,6 +1127,8 @@ void SetWindowTitle(char *title){
 }
 
 void MyCleanup(){
+ if(newbase_is_running==2 || !newbase_is_running) return;
+ newbase_is_running=2;
 #ifdef NewBase_HaventRemovedThisYet
  xflush_for_every_draw=0;
 #endif
