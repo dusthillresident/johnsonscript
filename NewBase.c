@@ -46,7 +46,7 @@ char **BBCFont = NULL;
 typedef
 struct {
  struct { int x,y,w,h; } rects[8*8];
- struct { int x1,y1,x2,y2,x3,y3; } tris[8*8];
+ struct { int x1,y1,x2,y2,x3,y3; } tris[8*8*2];
  int num_rects,num_tris;
 } DST_char;
 DST_char *DST_font = NULL;
@@ -87,6 +87,11 @@ void BuildDSTchar(unsigned char n){
   DST_font[n].tris[DST_font[n].num_tris].x3 = x3;
   DST_font[n].tris[DST_font[n].num_tris].y3 = y3;
   DST_font[n].num_tris += 1;
+  #if 0
+  if( DST_font[n].num_tris >= 8*8*2){
+   printf("OH SHIT! NO!!!!! %d\n",DST_font[n].num_tris);
+  }
+  #endif
   //printf("char '%c': added triangle(%d,%d, %d,%d, %d,%d)\n",n,(int)x1,(int)y1, (int)x2,(int)y2, (int)x3,(int)y3);
  }
  const int xs=2;
