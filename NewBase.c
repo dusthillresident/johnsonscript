@@ -43,6 +43,13 @@ int NewBase_last_fg_col=0;
 int NewBase_last_bg_col=0;
 //char *BBCFont[256];
 char **BBCFont = NULL;
+typedef
+struct {
+ struct { int x,y,w,h; } rects[8*8];
+ struct { int x1,y1,x2,y2,x3,y3; } tris[8*8];
+ int num_rects,num_tris;
+} DST_char;
+DST_char *DST_font = NULL;
 // declare key buffer here
 #define KeyBuffSize 256
 int KeyboardBuffer[KeyBuffSize];
@@ -69,6 +76,120 @@ void Wait(int w);
 #define MyInit(w,h) (NewBase_MyInit(w,h,0))
 #define MyInit_Threading(w,h) (NewBase_MyInit(w,h,1))
 
+void BuildDSTchar(unsigned char n){
+ DST_font[n].num_tris = 0;
+ DST_font[n].num_rects = 0;
+ void Triangle(float x1,float y1,float x2,float y2,float x3,float y3){
+  DST_font[n].tris[DST_font[n].num_tris].x1 = x1;
+  DST_font[n].tris[DST_font[n].num_tris].y1 = y1;
+  DST_font[n].tris[DST_font[n].num_tris].x2 = x2;
+  DST_font[n].tris[DST_font[n].num_tris].y2 = y2;
+  DST_font[n].tris[DST_font[n].num_tris].x3 = x3;
+  DST_font[n].tris[DST_font[n].num_tris].y3 = y3;
+  DST_font[n].num_tris += 1;
+  //printf("char '%c': added triangle(%d,%d, %d,%d, %d,%d)\n",n,(int)x1,(int)y1, (int)x2,(int)y2, (int)x3,(int)y3);
+ }
+ const int xs=2;
+ const int ys=2;
+ int step = 8 * xs;
+ int CharPix( int x, int y ){
+  if( x<0 || x>7 || y<0 || y>7 ) return 0;
+  return !!(BBCFont[n][y] & (128>>x));
+ } 
+ #define drawscaledtext_right 8
+ #define drawscaledtext_left  4
+ #define drawscaledtext_above 2
+ #define drawscaledtext_below 1 
+ int X,Y;
+ for(X=0; X<8; X++){
+  for(Y=0; Y<8; Y++){ 
+   int xx1 = xs*X;
+   int yy1 = ys*Y;
+   if( !CharPix(X,Y) ){   
+    int xx2,yy2,xc,yc;
+    xc  = xx1+(xs>>1);
+    yc  = yy1+(ys>>1);
+    xx2 = xx1+xs;
+    yy2 = yy1+ys;
+    int surroundings
+          =
+           (-CharPix( X,   Y+1 )&drawscaledtext_above) 
+            |
+           (-CharPix( X-1, Y   )&drawscaledtext_left) 
+            |
+           (-CharPix( X,   Y-1 )&drawscaledtext_below) 
+            |
+           (-CharPix( X+1, Y   )&drawscaledtext_right) ;
+    int nsurrounds = 0;
+    int i = surroundings;
+    while(i){
+     nsurrounds += (i&1);
+     i = i >> 1;
+    }     
+    if( nsurrounds <= 2)
+    switch( surroundings ){
+     case (drawscaledtext_above+drawscaledtext_left): { // upper left
+      Triangle(xx1,yy1, xx1,yy2, xx2,yy2);
+     } break;
+     case (drawscaledtext_above+drawscaledtext_right): { // upper right
+      Triangle(xx1,yy2, xx2,yy2, xx2,yy1);
+     } break;
+     case (drawscaledtext_below+drawscaledtext_left): { // lower left
+      Triangle(xx1,yy2, xx1,yy1, xx2,yy1);
+     } break;
+     case (drawscaledtext_below+drawscaledtext_right): { // lower right
+      Triangle(xx1,yy1, xx2,yy1, xx2,yy2);
+     } break;
+    }
+    else if( nsurrounds == 3){ // x split
+     if( surroundings & drawscaledtext_above ) Triangle(xx1,yy2, xc,yc, xx2,yy2);
+     if( surroundings & drawscaledtext_left  ) Triangle(xx1,yy1, xc,yc, xx1,yy2);
+     if( surroundings & drawscaledtext_below ) Triangle(xx1,yy1, xc,yc, xx2,yy1);
+     if( surroundings & drawscaledtext_right ) Triangle(xx2,yy1, xc,yc, xx2,yy2);
+    }else{
+     Triangle(xx1,yy1, xc,yy1, xx1,yc ); // top left
+     Triangle(xx1,yy2, xx1,yc, xc,yy2); // bottom left
+     Triangle(xc,yy1,  xx2, yy1, xx2,yc); //top right
+     Triangle(xc,yy2,  xx2, yy2, xx2,yc); // bottom right
+    }
+   } //endif CharPix(X,Y)
+  }//next Y
+ }//next X
+ unsigned long long int thischar = *(unsigned long long int*)BBCFont[n];
+ unsigned char *thischarn = (unsigned char *)&thischar;
+ int Pix(int x, int y){
+  return !!( thischarn[y] & (128>>x) );
+ }
+ int W=0,H=0,xx,yy,widthmask;
+ for(X=0; X<8; X++){
+  for(Y=0; Y<8; Y++){
+   if( Pix(X,Y) ){
+    W=0;H=0;
+    xx=X;yy=Y;
+    widthmask=0;
+    while( xx<8 && Pix(xx,yy) ){
+     widthmask |= (128>>xx);
+     W += 1; xx+=1;
+    }
+    while( yy<8 && ((thischarn[yy]&widthmask)==widthmask) ){
+     thischarn[yy] &= ~widthmask;
+     H += 1; yy+=1;
+    }
+    DST_font[n].rects[DST_font[n].num_rects].x=X*2;
+    DST_font[n].rects[DST_font[n].num_rects].y=Y*2;
+    DST_font[n].rects[DST_font[n].num_rects].w=W*2;
+    DST_font[n].rects[DST_font[n].num_rects].h=H*2;
+    DST_font[n].num_rects += 1;
+    //printf("char '%c': added rectangle(%d,%d, %d,%d)\n",n,X,Y,W,H);
+   }
+  }
+ }
+ return;
+}
+#undef drawscaledtext_right 
+#undef drawscaledtext_left  
+#undef drawscaledtext_above 
+#undef drawscaledtext_below 
 
 // ===========================================================================================================
 // ===========================================================================================================
@@ -1046,9 +1167,12 @@ void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
  XFontStruct *xfontstruct = XLoadQueryFont(Mydisplay,"-*-*-medium-r-normal-*-17-120-100-100-*-0-*-*");
  XSetFont(Mydisplay, MyGC, xfontstruct->fid);
  */
-
+ 
+ NewBase_last_fg_col=WhitePixel(Mydisplay,Myscreen);
+ NewBase_last_bg_col=BlackPixel(Mydisplay,Myscreen);
+ 
  XSetForeground(Mydisplay,MyGC,WhitePixel(Mydisplay,Myscreen));
- XSetBackground(Mydisplay,MyGC,0x306030);
+ XSetBackground(Mydisplay,MyGC,0x306030); // unclear if this should be here
 
  //XDrawLine(Mydisplay, Mywindow, MyGC, 0,0, winwidth,winheight);
 
@@ -1067,6 +1191,9 @@ void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
  }
  //printf("SDepth %d\n",SDepth);
  
+ if(DST_font == NULL ){
+  DST_font = calloc(256,sizeof(DST_char));
+ }
  if(BBCFont == NULL){
   BBCFont = calloc(256,sizeof(void*));
   char *c=calloc(8*256,sizeof(char));
@@ -1174,6 +1301,9 @@ void CustomChar(unsigned char n, unsigned char b0,unsigned char b1,unsigned char
  BBCFont[n][5]=b5;
  BBCFont[n][6]=b6;
  BBCFont[n][7]=b7;
+ if( DST_font ){
+  BuildDSTchar(n);
+ }
 }
 void DefaultFont(){
  if( BBCFont == NULL ) return;
@@ -1572,6 +1702,54 @@ void drawtext_(int x, int y, int scale, unsigned char *s){ // this only calls fu
 }
 
 void drawscaledtext(int x, int y, int xs, int ys, unsigned char *s){
+ if(!newbase_is_running)return;
+ if(xs<1)xs=1;
+ if(ys<1)ys=1;
+
+ if(xs==1 && ys==1){
+  Print(x,y,s);
+  return;
+ }
+
+ if(y>WinH || y+8*ys<0) return;
+ int step = 8 * xs;
+
+ if( x+step < 0 ){
+  while( *s && (x+step<0) ){
+   x += step;
+   s ++ ;
+  }
+ }
+ 
+ double _xs = xs*0.5;
+ double _ys = ys*0.5;
+
+ int i;
+ while( *s ){
+
+#if 1
+  for(i=0; i<DST_font[*s].num_rects; i++){
+   RectangleFill( x+DST_font[*s].rects[i].x*_xs, y+DST_font[*s].rects[i].y*_ys,
+                  DST_font[*s].rects[i].w*_xs, DST_font[*s].rects[i].h*_ys );
+                  
+  }
+#endif
+
+  for(i=0; i<DST_font[*s].num_tris; i++){
+   Triangle( x+DST_font[*s].tris[i].x1*_xs, y+DST_font[*s].tris[i].y1*_ys,
+             x+DST_font[*s].tris[i].x2*_xs, y+DST_font[*s].tris[i].y2*_ys,
+             x+DST_font[*s].tris[i].x3*_xs, y+DST_font[*s].tris[i].y3*_ys );
+  }
+
+  x += step; if(x>WinW) return;
+  s++;
+ }//endwhile 
+ 
+ return;
+}
+
+/*
+void drawscaledtext(int x, int y, int xs, int ys, unsigned char *s){
  if(xs<1)xs=1;
  if(ys<1)ys=1;
  if(xs==1 && ys==1){
@@ -1676,6 +1854,7 @@ void drawscaledtext(int x, int y, int xs, int ys, unsigned char *s){
 #undef drawscaledtext_left  
 #undef drawscaledtext_above 
 #undef drawscaledtext_below 
+*/
 
 // ============================================================
 // ======== Drawing microsoft .bmp files to the screen ========
