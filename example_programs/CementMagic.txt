@@ -2,7 +2,21 @@
 # water ripples effect based on an algorithm from Acorn User Magazine https://archive.org/details/AcornUser1992Magazine/AcornUser9208/page/n67/mode/2up
 
 option "vsize" * 1024 128
-startgraphics << 640 1 << 512 1
+startgraphics 640 512
+
+while && ! mouseb ! keypressed 65
+ if expose
+  cls
+  drawscaledtext 120 10 4 5 "'CementMagic'"
+  drawscaledtext 90 50 2 3 "  a water surface simulation"
+  drawtext 10 120 1 "Based on an article from Acorn User Magazine, August '92,"
+  drawtext 10 140 1 "attributed to Michel Grimminck."
+  drawtext 10 170 1 "Click on the surface to create ripples."
+  drawtext 10 300 1 "Press SPACE or click mouse to continue"
+ endif
+ wait 32
+endwhile
+cls
 
 refreshmode 1
 
@@ -27,18 +41,22 @@ set Arr(3) 64
 set Agg(3) 64
 set Abb(3) 255
 
-variable m st stm2 std2 r s h a b c d xymul;
+variable  
+#st stm2 stm3 std2 s r h
+a b c d xymul;
 
-set m 32
-set st 64
-constant adjv * -7 / 64 st
-set stm2 - st 2
-set std2 / st 2
-set r 480
-set s / r st
-set h 96
+constant st 64;
+constant adjvv * -7 / 64 st
+variable adjv;
+constant stm2 - st 2
+constant stm3 - st 3
+constant std2 / st 2
+constant r 480
+constant s / r st
+constant m 32
+constant h 96
 
-variable xa ya i j x y _X _Y ox oy l aayaij aayai1j aayaij1 aayai1j1 xp yp xd yd dis;
+variable xa ya i j x y _X _Y ox oy l aayaij aayai1j aayaij1 aayai1j1 aaxai1j aaxaij1 xp yp xd yd dis;
 set xa alloc st
 set ya alloc st
 set i 0
@@ -48,27 +66,29 @@ while < i st
  set i + i 1
 endwhile
 
-constant wh st;
-constant shift 3;
+constant wh st
+constant whm1 - wh 1
 
-variable heights velocities v oxp oyp;
+variable heights velocities v;
 
-constant friction * 0.03 / 64 st;
-constant frictionv - 1 friction;
-constant tension * 0.25 / 64 st;
+constant friction * 0.03 / 64 st
+constant frictionv - 1 friction
+constant tension * 0.25 / 64 st
 
 set heights alloc wh;
 set y 0
 while < y wh
- set Aheights(y) alloc wh
+ set Aheights y   alloc wh
  set y + y 1 
 endwhile
 set velocities alloc wh
 set y 0
 while < y wh
- set Avelocities(y) alloc wh
+ set Avelocities y  alloc wh
  set y + y 1
 endwhile
+
+#set AAheights std2 std2 10
 
 while 1
  set _X / r 3
@@ -79,21 +99,18 @@ while 1
 
  REM process velocities
  set x 1
- while < x - wh 1
+ while < x whm1
   set y 1
-  while < y - wh 1
-   set AAvelocities(x)(y)
+  while < y whm1
+   set AAvelocities x y
         * frictionv
-          (
-           - AAvelocities(x)(y)
+           - AAvelocities x y
              * tension
-               ( - (* 4 AAheights(x)(y))
-                   AAheights(- x 1)(  y  )
-                   AAheights(+ x 1)(  y  )
-                   AAheights(  x  )(- y 1)
-                   AAheights(  x  )(+ y 1)
-               )
-          )
+                 - (* 4 AAheights x y )
+                   AAheights(- x 1)   y  
+                   AAheights(+ x 1)   y  
+                   AAheights   x   (- y 1)
+                   AAheights   x    + y 1
    set y + y 1
   endwhile
   set x + x 1
@@ -101,10 +118,10 @@ while 1
 
  REM process heights
  set x 1
- while < x - wh 1
+ while < x whm1
   set y 1
-  while < y - wh 1
-   set AAheights(x)(y) + AAheights(x)(y) AAvelocities(x)(y)
+  while < y whm1
+   set AAheights x y   + AAheights x y   AAvelocities x y
    set y + y 1
   endwhile
   set x + x 1
@@ -112,12 +129,14 @@ while 1
 
  # Calculate x/y points
 
+ set xymul fnmin (/ winw 1280) / winh 1024
+ set adjv * adjvv xymul
  set j 0
  while < j - st 1
   set i 0
   while < i - st 1
-   set AAxa(i)(j) (+ _X * s i)
-   set AAya(i)(j) (+ neg winh (+ _Y * s i) * m (+ AAheights(i)(j) AAheights(+ i 1 )(j) AAheights(i)(+ j 1) AAheights(+ i 1)(+ j 1) ) 8  )
+   set AAxa i j  * xymul + _X * s i
+   set AAya i j  * xymul + neg winh (+ _Y * s i) * m 8 + AAheights i j  AAheights(+ i 1 ) j   AAheights i (+ j 1)  AAheights(+ i 1) + j 1
    set i +  i 1
   endwhile
   set _X + _X s
@@ -127,29 +146,27 @@ while 1
 
  # Render quads
 
- set xymul fnmin (/ winw 1280) (/ winh 1024)
-
- set j - stm2 1
+ set j stm3
  while > j 1
   set i 0
   while < i stm2
 
-
-   set aayaij    AAya i j
+   set aaxai1j   AAxa(+i 1)j
+   set aaxaij1	 AAxa i + j 1
+ 
+   set aayai1j1  AAya(+i 1) +j 1
    set aayai1j   AAya(+i 1) j
    set aayaij1   AAya i +j 1
-   set aayai1j1  AAya(+i 1) +j 1;
+   set aayaij    AAya i j
 
    procc aayaij aayai1j aayaij1 aayai1j1
 
-   triangle   (* xymul AAxa i j)          (* xymul  aayaij)
-              (* xymul AAxa(+i 1)j)       (* xymul  aayai1j)
-              (* xymul AAxa i (+j 1))     (* xymul  aayaij1)
-   triangle   (* xymul AAxa i (+j 1))     (* xymul  aayaij1)
-              (* xymul AAxa(+ i 1)(+j 1)) (* xymul  aayai1j1)
-              (* xymul AAxa(+i 1)j)       (* xymul  aayai1j)
-
-   #refresh wait 16.6
+   triangle    AAxa i j			aayaij
+               aaxai1j			aayai1j
+               aaxaij1			aayaij1
+   triangle    aaxaij1			aayaij1
+               AAxa(+ i 1)(+ j 1)	aayai1j1
+               aaxai1j			aayai1j
 
    set i + i 1
   endwhile
@@ -158,37 +175,19 @@ while 1
 
  if mouseb
 
-  set xp (* xymul + r -16 / r 3)
-  set yp (* xymul + r 16)
+  set xp  * xymul + r -16 / r 3
+  set yp  * xymul + r 16
 
-  set xd (- xp mousex )
-  set yd (- yp mousey )
+  set xd  - xp mousex 
+  set yd  - yp mousey 
 
-  # gcol 0xff0000;  circlef xp yp 5;  circle (- xp xd) (- yp yd) 5
-
-  set xd (/ xd (* xymul / r wh))
-  set yd neg (/ yd (* xymul / r wh))
+  set xd  / xd * xymul / r wh
+  set yd neg  / yd * xymul / r wh
 
   set dis sqr + (* xd xd ) * yd yd
+  set a + 0.785398 atan2 yd xd
 
-  set xp - >> wh 1 * 0.75 dis cos + 0.785398 atan2 yd xd
-  set yp - >> wh 1 * 0.75 dis sin + 0.785398 atan2 yd xd
-
-  #print "d:" xd ", " yd;
-  #print "p:" xp ", " yp;
-  
-
-  #if ! && = oxp xp = oyp yp
-   if && > xp 2 > yp 2 < xp (- wh 2) < yp (- wh 2)
-    set AAheights(xp)(yp) 0.4
-    set AAheights(-xp 1)(yp) 0.3
-    set AAheights(xp)(-yp 1) 0.3
-    set AAheights(+xp 1)(yp) 0.3
-    set AAheights(xp)(+yp 1) 0.3
-   endif
-  #endif
-  set oxp xp
-  set oyp yp
+  ;mouseaction (- std2 * 0.75 dis cos a) (- std2 * 0.75 dis sin a) 5
  endif
 
  refresh
@@ -198,20 +197,48 @@ while 1
  # end main loop
 endwhile
 
-function fnmin a b; return A@a > a b
+function fnmin a b; 
+ if > a b
+  return b
+ endif
+return a
 
-function fnmax a b; return A@a < a b
-
-function fnc rgb; return fnmin 255 + (* a Argb 0) (* b Argb 1) (* c Argb 2) (* d Argb 3) 
+function fnmax a b; 
+ if < a b
+  return b
+ endif
+return a
 
 function procc y0 y1 y2 y3 local min max;
  set y0 + y0 adjv
  set y1 + y1 adjv
  set min fnmin fnmin y0 y1 fnmin y2 y3
- set max + neg min fnmax fnmax y0 y1 fnmax y2 y3
- set a / (- y0 min) max
- set b / (- y1 min) max
- set c / (- y2 min) max
- set d / (- y3 min) max
- gcol fnc rr fnc gg fnc bb
+ set max / 1 + neg min fnmax fnmax y0 y1 fnmax y2 y3
+ set a * max - y0 min
+ set b * max - y1 min
+ set c * max - y2 min
+ set d * max - y3 min
+ gcol (fnmin 255 + (* a Arr 0) (* b Arr 1) (* c Arr 2) * d Arr 3)
+      (fnmin 255 + (* a Agg 0) (* b Agg 1) (* c Agg 2) * d Agg 3)
+       fnmin 255 + (* a Abb 0) (* b Abb 1) (* c Abb 2) * d Abb 3
+endfunction
+
+function mouseaction x y r local xx yy d h;
+ set xx - x r
+ while < xx + x r
+  set yy - y r
+  while < yy + y r
+   set d  sqr + pow(- xx x)2 pow(- yy y)2
+   if < d r
+    set h * 0.2 - 1 / d r
+    if && > xx 1 > yy 1 < xx whm1 < yy whm1
+     if < AAheights xx yy h
+      set AAheights xx yy h
+     endif
+    endif
+   endif
+   set yy + yy 1
+  endwhile 
+  set xx + xx 1
+ endwhile 
 endfunction
