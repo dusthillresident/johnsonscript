@@ -1,0 +1,226 @@
+startgraphics 640 480
+variable vr p dx dy d a x y _x _y c dd nd fc xv i j s temp yyc1 yyc2 yyxm yyym yyx yyy capture_v colour_array v;
+
+constant pid2 / _pi 2;
+constant yyr 100
+
+set colour_array alloc 8;
+
+
+
+variable rrcols bbcols ggcols;
+set rrcols alloc 8
+set ggcols alloc 8
+set bbcols alloc 8
+
+#while ! mouseb wait 16.6 endwhile
+
+stringvar sss;
+
+option "seedrnd"  0x653967 0xff34324 0xafbdf
+set sss ""
+set i 0
+while < i 8
+ set sss cat$ sss $cstring( | ( << rnd 148 16 ) ( << rnd 84 8 ) ( rnd 212 ) ) " "
+ set i + i 1
+endwhile
+print "'" sss "'" ;
+
+set yyc1 alloc 6 
+set yyc2 alloc 6 
+set yyxm alloc 6
+set yyym alloc 6
+set yyx alloc 6
+set yyy alloc 6
+option "seedrnd"  0x653967 0xff34324 0xafbdf
+set i 0
+while < i 6
+ set Ayyc2(i) | 0x404040 rnd 0xffffff
+ set Ayyc1(i) >> (& 0xfefefe Ayyc2(i)) 1
+ set Ayyc2(i) & 0xd0d0d0 Ayyc2(i)
+ set j 0
+ while < j 20
+  moveyys
+  set j + j 1
+ endwhile
+ set Ayyx(i) << yyr 1
+ set Ayyxm(i) 3.245
+ set Ayyy(i) yyr
+ set Ayyym(i) 0
+ set i + i 1
+endwhile
+
+
+set i 0
+while < i 8
+ #set Acolour_array(i) val$ mid$ sss (* i 9) 9
+ set v val$ mid$ sss (* i 9) 9
+ set Arrcols(i) & 0xff >> v 16
+ set Aggcols(i) & 0xff >> v 8
+ set Abbcols(i) & 0xff v
+ set i + i 1
+endwhile
+
+constant vx >> 640 1
+constant vy >> 512 1
+set vr >> 4000 1
+set p * _pi 7.7
+
+constant res 16
+constant resShiftL1 << res 1;
+constant resShiftR1 >> res 1;
+constant w >> 1280 1;
+constant h >> 1024 1;
+constant _M 4.75
+constant mulMdiv1w * _M / 1 w;
+constant mulMdiv1h * _M / 1 h;
+constant h2 - h << res 1;
+constant pim16 * _pi 16
+constant pim8  * _pi 8
+
+set c -15
+
+set xv 2
+
+refreshmode 1
+
+.mainloopstart
+ # ----- Calculate the new positions of the yin-yangs and the new state of the plasma background -----
+ moveyys
+ set vr + 10000 * 5000 0.5 + sin(* fc 0.0065) sin * fc 0.00455
+ set p + pim16 * pim8 sin * fc 0.01
+ set c * 0.05 + -100 * 50 sin * 0.005 fc
+ set fc + fc 1.1
+ # ----- Draw plasma background -----
+ set x 0
+ while < x w
+  set y 0
+  while < y h2
+   set dx - x vx  set dy - y vy
+   set d sqr + (* dx dx) * dy dy 
+   set a + atan2 dy dx * p / d vr
+   set dd - 1 c
+   set nd - 1 dd
+   set _x + (* 256 sin * y + 0.01 * 0.01 sin * fc 0.011  ) (* x nd ) * dd + x * d 0.25 cos a
+   set _y + (* 256 sin * x + 0.01 * 0.01 sin * fc 0.0076 ) (* y nd ) * dd + y * d 0.25 sin a;
+   colour + (* _x mulMdiv1w cos * fc 0.01 )   * _y mulMdiv1h sin * fc 0.01 
+   rectanglef x y res
+   set y + y res
+  endwhile
+  set x + x res
+ endwhile
+ # ----- Draw yin-yangs and scrollytext -----
+ drawyys
+ textscroller @"        Here's taurine. It's a fairly little molecule that, according to myth, is extracted from bull SEMEN! Well this story is bull, it is actually extracted from bull bile.     " 
+ # ----- Display new frame -----
+ refresh
+ # ----- Wait for vsync -----
+ wait 16.6
+ #;capture
+goto ".mainloopstart"
+
+function cstring in local out i;
+ set out S "0x";
+ set i 0
+ while < i 6
+  set $out cat$ $out chr$ C"0123456789abcdef"( & 15 >> in (* 4 - 5 i) )
+  set i + i 1
+ endwhile
+ option "unclaim" out
+return out
+
+function colour v local c1 c2 r1 g1 b1;
+ set v fmod ( + v * fc 0.05 ) 8
+ if < v 0
+  set v + 8 v
+ endif
+ set c1 floor v
+ set c2 & 7 ceil v
+ set v - v int v
+
+ set r1 A rrcols c1
+ set g1 A ggcols c1
+ set b1 A bbcols c1
+
+ gcol ( + r1 * v -  A rrcols c2  r1 )
+      ( + g1 * v -  A ggcols c2  g1 )
+        + b1 * v -  A bbcols c2  b1  
+endfunction
+
+
+function textscroller  s  local i x p t;
+ set t * temp 0.116
+ set i -128
+ while < i + 1 / winw 32
+  set x + neg (& << temp 2 31) << i 5
+  set p + t * 0.012 x
+  gcol (+ 164.5 * 90.5 sin p)
+       (+ 164.5 * 90.5 sin + p pid2)
+        + 164.5 * 90.5 sin + p pid2 pid2
+  drawscaledtext x
+                 ( + (* winh 0.5) * sin ( + ( * -0.005 & temp 7 ) * 0.04 + temp i) 116 )
+                 4
+                 6
+                 mid$  $s   % (+ i >> temp 3) len$$s 4 
+  set i + i 1
+ endwhile
+ set temp + temp 1 # ! keypressed 33 neg keypressed 32
+endfunction
+
+function yinyang x y r a c1 c2 local i rh xx yy;
+ set a + a pid2
+ gcol c2
+ circlef x y + r 2
+ gcol c1
+ arcf x y r r (+ a _pi) _pi
+ set rh * r 0.5
+ set i 0
+ while < i 2
+  set xx + x * rh cos - a * _pi i
+  set yy + y * rh sin - a * _pi i
+  gcol A@c1 i
+  circlef xx yy rh
+  gcol A@c1 !i
+  circlef xx yy / r 6
+  set i + i 1
+ endwhile
+endfunction
+
+function moveyys local i;
+ set i 0
+ while < i 6
+  set Ayyym(i) + Ayyym(i) 0.26
+  set Ayyx(i) + Ayyx(i) Ayyxm(i)
+  set Ayyy(i) + Ayyy(i) Ayyym(i)
+  if > Ayyx(i) - winw yyr
+   set Ayyx(i) - winw yyr
+   set Ayyxm(i) neg Ayyxm(i)
+  endif
+  if < Ayyx(i) yyr
+   set Ayyx(i) yyr
+   set Ayyxm(i) neg Ayyxm(i)
+  endif
+  if > Ayyy(i)  - winh yyr
+   set Ayyy(i)  - winh yyr
+   set Ayyym(i) neg Ayyym(i)
+  endif
+  set i + i 1
+ endwhile
+endfunction
+
+function drawyys local i;
+ set i 0
+ while < i 6
+  yinyang Ayyx i  Ayyy i  yyr (+ (* 0.523599 i) * fc 0.01)  Ayyc1 i  Ayyc2 i 
+  set i + i 1
+ endwhile
+endfunction
+
+function capture;
+ set capture_v + capture_v 1;
+ wait 32
+ oscli cat$ "scrot -u outpng" str$(+ capture_v 1000) ".png"
+ if > capture_v 6000
+  quit
+ endif
+endfunction
