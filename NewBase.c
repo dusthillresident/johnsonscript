@@ -67,6 +67,8 @@ volatile int exposed=0;
 volatile int wmclosed=0;
 volatile int wmcloseaction=0;
 
+int newbase_allow_fake_vsync=0;
+volatile unsigned int newbase_fake_vsync_request=0;
 
 void DefaultFont();
 
@@ -147,10 +149,18 @@ void BuildDSTchar(unsigned char n){
      } break;
     }
     else if( nsurrounds == 3){ // x split
-     if( surroundings & drawscaledtext_above ) Triangle(xx1,yy2, xc,yc, xx2,yy2);
-     if( surroundings & drawscaledtext_left  ) Triangle(xx1,yy1, xc,yc, xx1,yy2);
+     if( (surroundings & drawscaledtext_above) && (surroundings & drawscaledtext_left) ){ // above+left
+      Triangle(xx1,yy2, xx1,yy1, xx2,yy2);
+     }else{
+      if( surroundings & drawscaledtext_above ) Triangle(xx1,yy2, xc,yc, xx2,yy2);
+      if( surroundings & drawscaledtext_left  ) Triangle(xx1,yy1, xc,yc, xx1,yy2);
+     }
+     if( (surroundings & drawscaledtext_below) && (surroundings & drawscaledtext_right) ){ // below+right
+      Triangle(xx1,yy1, xx2,yy2, xx2,yy1);
+     }else{
      if( surroundings & drawscaledtext_below ) Triangle(xx1,yy1, xc,yc, xx2,yy1);
      if( surroundings & drawscaledtext_right ) Triangle(xx2,yy1, xc,yc, xx2,yy2);
+     }
     }else{
      Triangle(xx1,yy1, xc,yy1, xx1,yc ); // top left
      Triangle(xx1,yy2, xx1,yc, xc,yy2); // bottom left
@@ -1250,6 +1260,7 @@ void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
   //tb();
   XNextEvent(Mydisplay, &Myevent);
  }while( ! (Myevent.type==MapNotify) );
+ newbase_allow_fake_vsync=0;
  newbase_is_running=1;
 }
 
@@ -2301,14 +2312,21 @@ void SetWindowSize(int w, int h){
 // ==============================================================================================================================
 // ==============================================================================================================================
 
+
 void* newbase_eventhandlerloopfunction(void *arg){
+ newbase_allow_fake_vsync=1;
  while(newbase_is_running){
   NewBase_HandleEvents(0);
-  if( CopyPasteRequested || CopyPasteOngoing )	// if a copy paste transfer is going, we want it to go fast
+  if( CopyPasteRequested || CopyPasteOngoing ){	// if a copy paste transfer is going, we want it to go fast
    usleep(2);
-  else						// otherwise we don't need to go fast, save power/cpu resources
-   Wait(1);
-  //usleep(16667);
+  }else {					// otherwise we don't need to go fast, save power/cpu resources
+   if(newbase_fake_vsync_request){
+    newbase_fake_vsync_request=0;
+    usleep(16604);
+   }else{
+    Wait(1);
+   }   
+  }
   XFlush(Mydisplay);
  }
 }

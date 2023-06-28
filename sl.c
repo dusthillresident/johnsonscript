@@ -3497,7 +3497,17 @@ interpreter(int p, program *prog){
  case t_wait:
  {
   p+=1;
+  #ifdef enable_graphics_extension
+  double waitv = getvalue(&p,prog);
+  if( newbase_is_running && newbase_allow_fake_vsync && ((int)waitv==16) ){
+   newbase_fake_vsync_request=1;
+   while( newbase_fake_vsync_request ) usleep(4);
+  }else{
+   usleep((int)( waitv*1000 ));
+  }
+  #else
   usleep((int)( getvalue(&p,prog)*1000 ));
+  #endif
   break;
  }
  case t_endfn:

@@ -1355,9 +1355,18 @@ void translate_command(program *prog, int *p){
  case t_wait:
   {
    *p += 1;
+   #ifdef enable_graphics_extension 
+   PrintMain("{ // 'wait' command\n");
+   PrintMain("double waitv = "); translate_value(prog,p); PrintMain(";\n");
+   PrintMain("if( newbase_is_running && newbase_allow_fake_vsync && ((int)waitv==16) ){\n");
+   PrintMain("newbase_fake_vsync_request=1;\nwhile( newbase_fake_vsync_request ) usleep(4);\n");
+   PrintMain("} else usleep((int)( waitv*1000 ));\n");
+   PrintMain("}\n");
+   #else
    PrintMain("usleep( 1000 * (");
    translate_value(prog,p);
    PrintMain(") );\n");
+   #endif
   } break;
  #ifdef enable_graphics_extension 
  case t_startgraphics: case t_stopgraphics: case t_winsize: case t_pixel: case t_line: case t_circlef: case t_circle: case t_arcf: case t_arc: case t_rectanglef: case t_rectangle: case t_triangle: case t_drawtext: case t_drawscaledtext:
