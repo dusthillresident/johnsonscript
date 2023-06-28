@@ -183,6 +183,8 @@ struct program {
  // ------------
  id_info *ids;
  id_info *external_options;
+ id_info *extensions; // used for external extensions
+ id_info *quit_procs; // used for extensions that need special routines in order to quit gracefully
  stringslist *program_strings;
 };
 typedef struct program program;
@@ -195,10 +197,10 @@ typedef struct program program;
 double getvalue(int *p, program *prog);
 double interpreter(int p, program *prog);
 void free_ids(id_info *ids);
-token* tokenise(stringslist *progstrings, char *text, int *length_return, char *name_of_source_file);
-token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_return);
+token* tokenise( program *prog, char *text, int *length_return, char *name_of_source_file);
+token* loadtokensfromtext(program *prog, char *path,int *length_return);
 void process_function_definitions(program *prog,int startpos);
-void error(char *s);
+void error(program *prog, char *s);
 stringval getstringvalue( program *prog, int *pos );
 int isstringvalue(TOKENTYPE_TYPE type);
 int isvalue(TOKENTYPE_TYPE type);
@@ -206,8 +208,10 @@ int determine_valueorstringvalue(program *prog, int p);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
 void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve);
-void add_id(id_info *ids, id_info *new_id);
+int add_id(id_info *ids, id_info *new_id);
+void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id);
 id_info* make_id(char *id_string, token t);
+id_info* find_id(id_info *ids, char *id_string);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -246,6 +250,8 @@ program* newprog(int maxlen, int vsize, int ssize){
  out->files[2]->open=1; out->files[2]->write_access=1; out->files[2]->fp = stderr; // sterr
  // initialise id list
  out->ids = calloc(1,sizeof(id_info));
+ // initialise stringslist
+ out->program_strings = calloc(1,sizeof(stringslist));
  return out;
 }
 
@@ -260,17 +266,17 @@ int get_free_fileslot(program *prog){
  // if one was not found, create a new one
  prog->max_files += 1;
  prog->files = realloc(prog->files, sizeof(void*) * prog->max_files);
- if(prog->files == NULL) error("get_free_fileslot: realloc failed\n");
+ if(prog->files == NULL) error(prog, "get_free_fileslot: realloc failed\n");
  prog->files[prog->max_files-1] = calloc(1,sizeof(file));
  return prog->max_files-1;
 }
 file* getfile(program *prog, int file_reference_number, int read, int write){
  int fileindex = file_reference_number - 1;
- if( fileindex<0 || fileindex>=prog->max_files ) error("bad file access (filenumber out of range)\n");
+ if( fileindex<0 || fileindex>=prog->max_files ) error(prog, "bad file access (filenumber out of range)\n");
  file *out = prog->files[fileindex];
- if( ! out->open ) error("bad file access (not open)\n");
- if( read  && ! out->read_access  ) error("bad file access (not readable)\n");
- if( write && ! out->write_access ) error("bad file access (not writable)\n");
+ if( ! out->open ) error(prog, "bad file access (not open)\n");
+ if( read  && ! out->read_access  ) error(prog, "bad file access (not readable)\n");
+ if( write && ! out->write_access ) error(prog, "bad file access (not writable)\n");
  return out;
 }
 // -------------------------------------------------------------------------------------------
@@ -331,25 +337,67 @@ token maketoken_extc( void (*external_command)(int*,program*) ){
  return out;
 }
 
-void register_external_function( program *prog, double (*external_function)(int*,program*), char *id ){
- add_id( prog->ids, make_id( id, maketoken_extfun( external_function ) ) );
+token maketoken_extopt( void (*external_option_procedure)(program*,int*) ){
+ token out;
+ out.type = t_extopt;
+ out.data.pointer = external_option_procedure;
+ return out;
 }
 
-void register_external_stringfunction( program *prog, stringval (*external_stringfunction)(program*,int*), char *id ){
- add_id( prog->ids, make_id( id, maketoken_extsfun( external_stringfunction ) ) );
-}
-
-void register_external_command( program *prog, void (*external_command)(int*,program*), char *id ){
- add_id( prog->ids, make_id( id, maketoken_extc( external_command ) ) );
-}
-
-void register_external_option( program *prog, void (*external_option_procedure)(program*,int*), char *option_name){
- if( ! prog->external_options ){
-  prog->external_options = calloc(1,sizeof(id_info));
+void register_external_function( id_info *id_list, double (*external_function)(int*,program*), char *id ){
+ if( ! add_id( id_list, make_id( id, maketoken_extfun( external_function ) ) ) ){
+  printf("id was %s\n",id);
+  error(NULL, "register_external_function: id already exists\n");
  }
- token t; t.type = t_extopt; t.data.pointer = (void*) external_option_procedure;
- int l = strlen(option_name); char *permanent_option_name_ptr = calloc(l+1,sizeof(char)); strcpy( permanent_option_name_ptr, option_name);
- add_id( prog->external_options, make_id( permanent_option_name_ptr, t) );
+}
+
+void register_external_stringfunction( id_info *id_list, stringval (*external_stringfunction)(program*,int*), char *id ){
+ if( ! add_id( id_list, make_id( id, maketoken_extsfun( external_stringfunction ) ) ) ){
+  printf("id was %s\n",id);
+  error(NULL, "register_external_stringfunction: id already exists\n");
+ }
+}
+
+void register_external_command( id_info *id_list, void (*external_command)(int*,program*), char *id ){
+ if( ! add_id( id_list, make_id( id, maketoken_extc( external_command ) ) ) ){
+  printf("id was %s\n",id);
+  error(NULL, "register_external_command: id already exists\n");
+ }
+}
+
+// the string 'char *id' must have the form "OPTION_blah", starting with OPTION_ and then having a name after
+void register_external_option( id_info *id_list, void (*external_option_procedure)(program*,int*), char *id){
+ if( ! add_id( id_list, make_id( id, maketoken_extopt( external_option_procedure ) ) ) ){
+  printf("id was %s\n",id);
+  error(NULL, "register_external_option: id already exists\n");
+ }
+}
+// register a procedure to call when quitting.
+// the string 'char *id' must have the form "QUIT_blah", starting with QUIT_ and then having a unique identifying name after
+void register_quit_procedure( id_info *id_list, void (*quit_procedure)(program*), char *id ){
+ token t; t.type = t_bad; t.data.pointer = (void*) quit_procedure;
+ if( ! add_id( id_list, make_id( id, t ) ) ){
+  printf("id was %s\n",id);
+  error(NULL, "register_external_option: id already exists\n");
+ }
+}
+
+// replace built-in stuff with extensions
+void register_replacement( id_info *id_list, TOKENTYPE_TYPE target, char *replacewith ){
+ id_info *replacewith_idinfo;
+ if( ! (replacewith_idinfo = find_id(id_list,replacewith) ) ){
+  printf("id for replacement was '%s'\n",replacewith);
+  error(NULL, "extension for replacement not found");
+ }
+ token replacement = replacewith_idinfo->t;
+
+ char *replacement_id_string = calloc(15,sizeof(char));
+ strcpy(replacement_id_string, "__REPLACEMENT");
+ *replacement_id_string = target;
+ if( ! add_id( id_list, make_id( replacement_id_string, replacement ) ) ){
+  printf("tokentype number was '%d'\n",target);
+  error(NULL, "register_replacment: a replacement is already registered for this token type\n");
+ }
 }
 
 // ---------------------------------------------------
@@ -358,7 +406,7 @@ void register_external_option( program *prog, void (*external_option_procedure)(
 
 void unloadprog(program *prog){
  int i;
- // free the strings that are part of the program data (string constants, ids, labels, etc)
+ // free the stringslist (strings that are part of the program data (string constants, ids, labels, etc))
  free_stringslist(prog->program_strings);
  // free the tokens, variable+stack array, identifier information
  free(prog->tokens);
@@ -391,31 +439,64 @@ void unloadprog(program *prog){
   free( prog->files[i] );
  }
  free( prog->files );
+ // free extension-related IDs
+ free_ids(prog->external_options);
+ free_ids(prog->extensions);
  // free the program struct itself
  free( prog );
 }
 
 #define DEFAULT_VSIZE 256
 #define DEFAULT_SSIZE 256
-program* init_program( char *str,int str_is_filepath ){
- token *tokens; int tokens_length; stringslist *program_strings = calloc(1,sizeof(stringslist));
- // get the tokens, either from program text in 'str', or by using 'str' as a filepath to load program text from a file.
- // at the same time, we also get the stringslist 
- if( str_is_filepath){
-  tokens = loadtokensfromtext(program_strings,str,&tokens_length);
- }else{
-  tokens = tokenise(program_strings,str,&tokens_length,"[command line input]");
+program* init_program( char *str,int str_is_filepath, id_info *extensions ){
+ token *tokens; int tokens_length; 
+ // create the 'program' structure, with default stack/variable array size
+ program *prog = newprog(0,DEFAULT_VSIZE,DEFAULT_SSIZE);
+ // install the extensions list (pass NULL for no extensions)
+ prog->extensions = extensions;
+ // --------------------------------------------------------
+ // ----- process extension --------------------------------
+ // --------------------------------------------------------
+ while( extensions ){
+  // --------- 'option' extensions ----------------
+  if( extensions->name && !strncmp("OPTION_",extensions->name,7) ){
+   char *extension_option_string_permanent_address = calloc( strlen(extensions->name)+1, sizeof(char));
+   strcpy( extension_option_string_permanent_address, extensions->name+7 );
+   //printf("fuckin fuck %s\n",extension_option_string_permanent_address);//test, remove soon
+   token extension_option_token = extensions->t;
+   if( extension_option_token.type != t_extopt ){
+    error(NULL, "invalid extension configuration, please check\n");
+   }
+   if( ! prog->external_options ){
+    prog->external_options = calloc(1,sizeof(id_info));
+   }
+   if( ! add_id( prog->external_options, make_id( extension_option_string_permanent_address, extension_option_token) ) ){
+    printf("id was %s\n",extension_option_string_permanent_address);
+    error(NULL, "init_program: external option id already exists\n");
+   }
+   stringslist_addstring(prog->program_strings, extension_option_string_permanent_address);
+  }
+  if( extensions->name && !strncmp("QUIT_",extensions->name,5) ){
+   if( ! prog->quit_procs ){
+    prog->quit_procs = calloc(1,sizeof(id_info));
+   }
+   if( ! add_id( prog->quit_procs, make_id( extensions->name, extensions->t) ) ){
+    error(NULL, "there is already a quit procedure with this name\n");
+   }
+  }
+  extensions = extensions->next;
  }
- // check for 'option' commands that set things like stack size, variable array size, etc.
- int vsize = DEFAULT_VSIZE;
- int ssize = DEFAULT_SSIZE;
-  //[put here]
- // optimise the tokens, searching for "D [literal constant]", "P [literal constant]", etc, and replacing them with the fast single token equivalents
-  // [put here]
- // create the 'program' structure, either with default stack/variable array size, or with sizes that were set by option commands
- program *prog = newprog(0,vsize,ssize);
+ // --------------------------------------------------------
+ // --------------------------------------------------------
+ // --------------------------------------------------------
+ // get the tokens, either from program text in 'str', or by using 'str' as a filepath to load program text from a file.
+ // at the same time, we also build the strings list
+ if( str_is_filepath){
+  tokens = loadtokensfromtext(prog,str,&tokens_length);
+ }else{
+  tokens = tokenise(prog,str,&tokens_length,"[command line input]");
+ }
  prog->tokens = tokens; prog->length = tokens_length; prog->maxlen = tokens_length;
- prog->program_strings = program_strings;
  // search for function definitions and process them
  process_function_definitions(prog,0);
  return prog;
@@ -425,8 +506,8 @@ program* init_program( char *str,int str_is_filepath ){
 
 // this returns the allocated area as an index into the variable array
 int allocate_variable_data(program *prog, int amount ){
- if( amount <= 0 ) error("allocate_variable_data: bad allocation request\n");
- if( prog->next_free_var+amount > (prog->vsize - prog->ssize) ) error("allocate_variable_data: run out of space\n");
+ if( amount <= 0 ) error(prog, "allocate_variable_data: bad allocation request\n");
+ if( prog->next_free_var+amount > (prog->vsize - prog->ssize) ) error(prog, "allocate_variable_data: run out of space\n");
  int index = prog->next_free_var; prog->next_free_var += amount;
  return index;
 }
@@ -444,17 +525,28 @@ id_info* find_id(id_info *ids, char *id_string){
  }
 }
 
-void add_id(id_info *ids, id_info *new_id){
+int add_id(id_info *ids, id_info *new_id){
  // check if this id name is already used in this id list
  if( ids->name && !strcmp(new_id->name, ids->name) ){
-  printf("add_id: id was '%s'\n",new_id->name);
-  error("add_id: this id is already used in this id list\n");
+  //printf("add_id: id was '%s'\n",new_id->name);
+  //error(NULL, "add_id: this id is already used in this id list\n");
+  return 0;
  }
  // ----------
  if( ids->next == NULL){
   ids->next = new_id;
+  return 1;
  }else{
-  add_id( ids->next, new_id);
+  return add_id( ids->next, new_id);
+ }
+}
+void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id){
+ if( ! add_id( ids, new_id ) ){
+  if( p > -1 ){
+   print_sourcetext_location( prog, p );
+  }
+  printf("add_id: id was '%s'\n",new_id->name);
+  error(prog, errormessage);
  }
 }
 
@@ -481,7 +573,7 @@ void process_id(program *prog, token *t){
  if(foundid==NULL){
   print_sourcetext_location( prog, (int) (t - prog->tokens) );
   printf("process_id: id was '%s'\n",(char*)t->data.pointer);
-  error("process_id: unknown id\n");
+  error(prog, "process_id: unknown id\n");
  }
  // --- something was found ---
  // overwrite the token with the kind of token in the found id_info
@@ -563,7 +655,8 @@ void process_function_definition(int pos,program *prog){
   //get parameter ids, store them in the function's id list
    int num_ps = 0;
    while( prog->tokens[pos].type == t_id ){
-    add_id( out->ids, make_id( (char*)prog->tokens[pos].data.pointer,  maketoken_stackaccess( num_ps | 0x80000000 ) ) ); // needs to be adjusted later once we know how many locals there are
+    add_id__error_if_fail( prog, pos, "process_function_definition: id for this parameter is already used\n",
+                           out->ids, make_id( (char*)prog->tokens[pos].data.pointer,  maketoken_stackaccess( num_ps | 0x80000000 ) ) ); // needs to be adjusted later once we know how many locals there are
     num_ps +=1;
     pos+=1;
    }
@@ -596,7 +689,8 @@ void process_function_definition(int pos,program *prog){
    //put here: get local ids, store them in the function's id list
    int num_ls = 0;
    while( prog->tokens[pos].type == t_id ){
-    add_id( out->ids, make_id( (char*)prog->tokens[pos].data.pointer,  maketoken_stackaccess( num_ls /* make extra room for _num_params */ +(out->params_type==p_atleast) ) ) ); 
+    add_id__error_if_fail( prog, pos, "process_function_definition: id for this local is already used\n",
+                           out->ids, make_id( (char*)prog->tokens[pos].data.pointer,  maketoken_stackaccess( num_ls /* make extra room for _num_params */ +(out->params_type==p_atleast) ) ) ); 
     num_ls +=1;
     pos+=1;
    }
@@ -642,7 +736,8 @@ void process_function_definition(int pos,program *prog){
  // set function execution start position
  out->start_pos = pos;
  // save id information if this is a named function
- if( func_id ) add_id(prog->ids, make_id( func_id, tok ) );
+ if( func_id ) add_id__error_if_fail( prog, -1, "process_function_definition: the id for this function is already used\n",
+                                      prog->ids, make_id( func_id, tok ) );
  prog->functions[func_number] = out;
  return;
 
@@ -760,10 +855,10 @@ void option( program *prog, int *p ){
  {
   int new_vsize = getvalue(p,prog);
   //printf("new_vsize %d \n",new_vsize);
-  if( new_vsize <= 0 ) error("option: vsize: new vsize is less than or equal to 0\n");
-  if( prog->next_free_var ) error("option: vsize: it's not possible to change the vsize after variables have been allocated\n");
+  if( new_vsize <= 0 ) error(prog, "option: vsize: new vsize is less than or equal to 0\n");
+  if( prog->next_free_var ) error(prog, "option: vsize: it's not possible to change the vsize after variables have been allocated\n");
   double *newvarray = calloc(new_vsize + prog->ssize, sizeof(double));
-  if( newvarray == NULL ) error("option: vsize: failed to allocate memory\n");
+  if( newvarray == NULL ) error(prog, "option: vsize: failed to allocate memory\n");
   size_t oldsize = sizeof(double) * (prog->vsize-prog->ssize);
   size_t newsize = sizeof(double) * new_vsize;
   memcpy( (void*)newvarray, (void*)prog->vars, oldsize < newsize ? oldsize : newsize ); // copy variables
@@ -777,12 +872,12 @@ void option( program *prog, int *p ){
  case opt_ssize: // ssize
  {
   int new_ssize = getvalue(p,prog);
-  if( new_ssize <= 0 ) error("option: ssize: new ssize is less than or equal to 0\n");
-  if( prog->next_free_var ) error("option: ssize: it's not possible to change the ssize after variables have been allocated\n");
-  if( new_ssize <= prog->sp + (prog->current_function->num_locals + (prog->current_function->params_type==p_atleast ? prog->stack[ prog->sp ] : prog->current_function->num_params )) ) error("option: ssize: new stack size is too small to contain the current contents of the stack\n");
+  if( new_ssize <= 0 ) error(prog, "option: ssize: new ssize is less than or equal to 0\n");
+  if( prog->next_free_var ) error(prog, "option: ssize: it's not possible to change the ssize after variables have been allocated\n");
+  if( new_ssize <= prog->sp + (prog->current_function->num_locals + (prog->current_function->params_type==p_atleast ? prog->stack[ prog->sp ] : prog->current_function->num_params )) ) error(prog, "option: ssize: new stack size is too small to contain the current contents of the stack\n");
   prog->vsize -= prog->ssize;  prog->ssize = new_ssize;  prog->vsize += new_ssize; //update size information
   prog->vars = realloc( prog->vars, sizeof(double) * prog->vsize ); // reallocate vars+stack array
-  if( prog->vars == NULL ) error("option: ssize: realloc failed\n");
+  if( prog->vars == NULL ) error(prog, "option: ssize: realloc failed\n");
   prog->stack = prog->vars + (prog->vsize - prog->ssize);
   break;
  }
@@ -793,11 +888,11 @@ void option( program *prog, int *p ){
   filename = getstringvalue(prog,p);
   char holdthis = filename.string[filename.len]; filename.string[filename.len]=0;
   // load text file and process it, getting the tokens (program code data) and program_strings
-  tokens = loadtokensfromtext(prog->program_strings,filename.string,&tokens_length);
+  tokens = loadtokensfromtext(prog,filename.string,&tokens_length);
   filename.string[filename.len]=holdthis;
   if( tokens == NULL ){
    print_sourcetext_location( prog, starting_p );
-   error("import: couldn't open file\n");
+   error(prog, "import: couldn't open file\n");
   }
   // resize array and append new code
   prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length)*sizeof(token));
@@ -828,7 +923,7 @@ void option( program *prog, int *p ){
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
    print_sourcetext_location( prog, starting_p );
    printf("stringvar_num: %d\n",stringvar_num);
-   error("unclaim: bad stringvariable access\n");
+   error(prog, "unclaim: bad stringvariable access\n");
   }
   prog->stringvars[stringvar_num]->unclaimed=1;
   break;
@@ -859,7 +954,7 @@ void option( program *prog, int *p ){
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
    print_sourcetext_location( prog, starting_p );
    printf("stringvar_num: %d\n",stringvar_num);
-   error("pastetext: bad stringvariable access\n");
+   error(prog, "pastetext: bad stringvariable access\n");
   }
   // now we have the stringvar as prog->stringvars[stringvar_num]
   if( ( opt_number == opt_pastetext ) ? NB_PasteText() : NB_PasteBmp() ){
@@ -867,7 +962,7 @@ void option( program *prog, int *p ){
     prog->stringvars[stringvar_num]->string = realloc( prog->stringvars[stringvar_num]->string, PasteBufferContentsSize );
     if( prog->stringvars[stringvar_num]->string == NULL ){
      print_sourcetext_location( prog, starting_p );
-     error("option: memory allocation failuring during Paste\n");
+     error(prog, "option: memory allocation failuring during Paste\n");
     }//endif
     prog->stringvars[stringvar_num]->bufsize = PasteBufferContentsSize;
    }
@@ -914,7 +1009,7 @@ void option( program *prog, int *p ){
   int variable_number = (int)getvalue(p,prog);
   if( variable_number < 0 || variable_number >= prog->vsize+prog->ssize ){
    print_sourcetext_location( prog, starting_p );
-   error("option: hasclip: bad variable access\n");
+   error(prog, "option: hasclip: bad variable access\n");
   }
   prog->vars[ variable_number ] = ( opt_number == opt_hascliptext ? NB_HasClipText() : NB_HasClipBmp() );
  } break;
@@ -935,7 +1030,7 @@ void option( program *prog, int *p ){
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
    print_sourcetext_location( prog, starting_p );
    printf("stringvar_num: %d\n",stringvar_num);
-   error("pastetext: bad stringvariable access\n");
+   error(prog, "pastetext: bad stringvariable access\n");
   }
   stringvar *sv = prog->stringvars[stringvar_num];
   stringval itemname = getstringvalue( prog, p ); unsigned char h1 = itemname.string[itemname.len]; itemname.string[itemname.len]=0;
@@ -965,7 +1060,7 @@ void option( program *prog, int *p ){
  } break;
 #endif
  }
- default: print_sourcetext_location( prog, starting_p ); error("option: unrecognised option\n");
+ default: print_sourcetext_location( prog, starting_p ); error(prog, "option: unrecognised option\n");
  }
 
 }
@@ -985,6 +1080,7 @@ int Ext(FILE *fp){
 }
 #endif
 
+
 int wordmatch(int *pos, unsigned char *word, unsigned char *text){
  int i,l;
  l=strlen(word);
@@ -1002,7 +1098,7 @@ int wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text
  if( result ){
   //tb();
   //printf("fuckin shit %d\n",*pos);
-  if( isspace(text[*pos]) ) return 1;
+  if( isspace(text[*pos]) || ispunct(text[*pos]) || !text[*pos] ) return 1;
   *pos = holdpos;
  }
  return 0;
@@ -1054,7 +1150,7 @@ void _gettoken_skippastcomments(int *pos, unsigned char *text){
  if( wordmatch( pos,"/*", text) ){		
   while( !wordmatch( pos,"*/", text) ){
    *pos += 1;
-   if( !text[*pos] ) error("missing */\n");
+   if( !text[*pos] ) error(NULL, "missing */\n");
   }//endwhile
  }//endif
  // line comment
@@ -1064,8 +1160,9 @@ void _gettoken_skippastcomments(int *pos, unsigned char *text){
   }//endwhile
  }//endif
 }//endproc
-token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *text){
+token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  // if it's a test run, the token will be discarded, so strings must not be allocated
+ stringslist *progstrings = prog->program_strings;
 
  token out;
 
@@ -1080,13 +1177,13 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  int l;
 
 #if allow_debug_commands
- if( wordmatch( pos,"testbeep", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"testbeep", text) ){	//	
   out = maketoken( t_tb ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"printentirestack", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"printentirestack", text) ){	//	
   out = maketoken( t_printentirestack ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"printstackframe", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"printstackframe", text) ){	//	
   out = maketoken( t_printstackframe ); goto gettoken_normalout;
  }
 #endif
@@ -1202,13 +1299,13 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch( pos,"abs", text) ){	//	abs
   out =  maketoken( t_abs ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"int", text) ){	//	int
+ if( wordmatch_plus_whitespace( pos,"int", text) ){	//	int
   out =  maketoken( t_int ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"sgn", text) ){	//	sgn
+ if( wordmatch_plus_whitespace( pos,"sgn", text) ){	//	sgn
   out =  maketoken( t_sgn ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"neg", text) ){	//	neg
+ if( wordmatch_plus_whitespace( pos,"neg", text) ){	//	neg
   out =  maketoken( t_neg ); goto gettoken_normalout;
  }
  if( wordmatch( pos,"<=", text) ){	//	<=
@@ -1262,47 +1359,47 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   out =  maketoken( t_rightb ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"return", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"return", text) ){	//	
   out = maketoken( t_return ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"endwhile", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"endwhile", text) ){	//	
   out = maketoken( t_endwhile ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"while", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"while", text) ){	//	
   out = maketoken( t_while ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"endif", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"endif", text) ){	//	
   out = maketoken( t_endif ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"if", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"if", text) ){	//	
   out = maketoken( t_if ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"else", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"else", text) ){	//	
   out = maketoken( t_else ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"set", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"set", text) ){	//	
   out = maketoken( t_set ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"function", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"function", text) ){	//	
   out = maketoken( t_deffn ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"local", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"local", text) ){	//	
   out = maketoken( t_local ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"variable", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"variable", text) ){	//	
   out = maketoken( t_var ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"constant", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"constant", text) ){	//	
   out = maketoken( t_const ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"stringvar", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"stringvar", text) ){	//	
   out = maketoken( t_stringvar ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"endfunction", text) ){	//	endfunction
+ if( wordmatch_plus_whitespace( pos,"endfunction", text) ){	//	endfunction
   out = maketoken( t_endfn ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"goto", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"goto", text) ){	//	
   out = maketoken( t_goto ); goto gettoken_normalout;
  }
 
@@ -1331,9 +1428,6 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   out = maketoken_num( 3.14159265358979323846264338327950288 ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"getref", text) ){	//	getref
-  out = maketoken( t_getref ); goto gettoken_normalout;
- }
  if( wordmatch( pos,"@", text) ){	//	getref shorthand '@'
   out = maketoken( t_getref ); goto gettoken_normalout;
  }
@@ -1344,8 +1438,8 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   l=0;
   while( text[*pos]!='"' ){
    switch( text[*pos] ){
-   case 0: error("missing \"\n");
-   //case 10: error("missing \" on this line\n");
+   case 0: error(prog, "missing \"\n");
+   //case 10: error(prog, "missing \" on this line\n");
    }//endswitch
    l+=1;
    *pos += 1;
@@ -1356,7 +1450,7 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   goto gettoken_normalout;
  }//endif
 
- if( wordmatch( pos,"print", text) ){		
+ if( wordmatch_plus_whitespace( pos,"print", text) ){		
   out = maketoken( t_print ); goto gettoken_normalout;
  }
 
@@ -1397,17 +1491,17 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   out = maketoken( t_instrS ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"rnd", text) ){	//	rnd
+ if( wordmatch_plus_whitespace( pos,"rnd", text) ){	//	rnd
   out = maketoken( t_rnd ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"wait", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"wait", text) ){	//	
   out = maketoken( t_wait ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"alloc", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"alloc", text) ){	//	
   out = maketoken( t_alloc ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"option", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"option", text) ){	//	
   out = maketoken( t_option ); goto gettoken_normalout;
  }
 
@@ -1416,25 +1510,25 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  // ======= GRAPHICS EXTENSION =================================================================
  // ============================================================================================
  
- if( wordmatch( pos,"startgraphics", text) ){	//	startgraphics
+ if( wordmatch_plus_whitespace( pos,"startgraphics", text) ){	//	startgraphics
   out = maketoken( t_startgraphics ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"stopgraphics", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"stopgraphics", text) ){	//	
   out = maketoken( t_stopgraphics ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"winsize", text) ){	//	winsize
+ if( wordmatch_plus_whitespace( pos,"winsize", text) ){	//	winsize
   out = maketoken( t_winsize ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"pixel", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"pixel", text) ){	//	
   out = maketoken( t_pixel ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"line", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"line", text) ){	//	
   out = maketoken( t_line ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"circlef", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"circlef", text) ){	//	
   out = maketoken( t_circlef ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"circle", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"circle", text) ){	//	
   out = maketoken( t_circle ); goto gettoken_normalout;
  }
  if( wordmatch_plus_whitespace(pos, "arc", text) ){
@@ -1443,74 +1537,74 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  if( wordmatch_plus_whitespace(pos, "arcf", text) ){
   out = maketoken( t_arcf ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"rectanglef", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"rectanglef", text) ){	//	
   out = maketoken( t_rectanglef ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"rectangle", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"rectangle", text) ){	//	
   out = maketoken( t_rectangle ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"triangle", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"triangle", text) ){	//	
   out = maketoken( t_triangle ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"drawtext", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"drawtext", text) ){	//	
   out = maketoken( t_drawtext ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"drawscaledtext", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"drawscaledtext", text) ){	//	
   out = maketoken( t_drawscaledtext ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"refreshmode", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"refreshmode", text) ){	//	
   out = maketoken( t_refreshmode ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"refresh", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"refresh", text) ){	//	
   out = maketoken( t_refresh ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"gcol", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"gcol", text) ){	//	
   out = maketoken( t_gcol ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"bgcol", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"bgcol", text) ){	//	
   out = maketoken( t_bgcol ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"cls", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"cls", text) ){	//	
   out = maketoken( t_cls ); goto gettoken_normalout;
  }
  // -----
- if( wordmatch( pos,"winw", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"winw", text) ){	//	
   out = maketoken( t_winw ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"winh", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"winh", text) ){	//	
   out = maketoken( t_winh ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"mousex", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"mousex", text) ){	//	
   out = maketoken( t_mousex ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"mousey", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"mousey", text) ){	//	
   out = maketoken( t_mousey ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"mouseb", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"mouseb", text) ){	//	
   out = maketoken( t_mouseb ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"mousez", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"mousez", text) ){	//	
   out = maketoken( t_mousez ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"readkey$", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"readkey$", text) ){	//	
   out = maketoken( t_readkeyS ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"readkey", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"readkey", text) ){	//	
   out = maketoken( t_readkey ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"keypressed", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"keypressed", text) ){	//	
   out = maketoken( t_keypressed ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"expose", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"expose", text) ){	//	
   out = maketoken( t_expose ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"wmclose", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"wmclose", text) ){	//	
   out = maketoken( t_wmclose ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"keybuffer", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"keybuffer", text) ){	//	
   out = maketoken( t_keybuffer ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"drawmode", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"drawmode", text) ){	//	
   out = maketoken( t_drawmode ); goto gettoken_normalout;
  }
  // ============================================================================================
@@ -1519,125 +1613,129 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  #endif
 
  // ========= maths ==========
- if( wordmatch( pos,"tanh", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"tanh", text) ){	//	
   out = maketoken( t_tanh ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"tan", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"tan", text) ){	//	
   out = maketoken( t_tan ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"atan2", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"atan2", text) ){	//	
   out = maketoken( t_atan2 ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"atan", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"atan", text) ){	//	
   out = maketoken( t_atan ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"acos", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"acos", text) ){	//	
   out = maketoken( t_acos ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"cosh", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"cosh", text) ){	//	
   out = maketoken( t_cosh ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"cos", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"cos", text) ){	//	
   out = maketoken( t_cos ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"asin", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"asin", text) ){	//	
   out = maketoken( t_asin ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"sinh", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"sinh", text) ){	//	
   out = maketoken( t_sinh ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"sin", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"sin", text) ){	//	
   out = maketoken( t_sin ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"exp", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"exp", text) ){	//	
   out = maketoken( t_exp ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"log10", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"log10", text) ){	//	
   out = maketoken( t_log10 ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"log", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"log", text) ){	//	
   out = maketoken( t_log ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"pow", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"pow", text) ){	//	
   out = maketoken( t_pow ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"sqr", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"sqr", text) ){	//	
   out = maketoken( t_sqr ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"ceil", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"ceil", text) ){	//	
   out = maketoken( t_ceil ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"floor", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"floor", text) ){	//	
   out = maketoken( t_floor ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"fmod", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"fmod", text) ){	//	
   out = maketoken( t_fmod ); goto gettoken_normalout;
  }
  // ========= end of maths ========
 
  // ========= file related keywords ==========
- if( wordmatch( pos,"openin", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"openin", text) ){	//	
   out = maketoken( t_openin ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"openout", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"openout", text) ){	//	
   out = maketoken( t_openout ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"openup", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"openup", text) ){	//	
   out = maketoken( t_openup ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"eof", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"eof", text) ){	//	
   out = maketoken( t_eof ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"bget", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"bget", text) ){	//	
   out = maketoken( t_bget ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"vget", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"vget", text) ){	//	
   out = maketoken( t_vget ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"ptr", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"ptr", text) ){	//	
   out = maketoken( t_ptr ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"ext", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"ext", text) ){	//	
   out = maketoken( t_ext ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"sget", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"sget", text) ){	//	
   out = maketoken( t_sget ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"sptr", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"sptr", text) ){	//	
   out = maketoken( t_sptr ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"bput", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"bput", text) ){	//	
   out = maketoken( t_bput ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"vput", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"vput", text) ){	//	
   out = maketoken( t_vput ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"sput", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"sput", text) ){	//	
   out = maketoken( t_sput ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"close", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"close", text) ){	//	
   out = maketoken( t_close ); goto gettoken_normalout;
  }
  // ====== end of file related keywords ======
 
- if( wordmatch( pos,"caseof", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"caseof", text) ){	//	
   out = maketoken( t_caseof ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"when ", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"when", text) ){	//	
   out = maketoken( t_when ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"otherwise", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"otherwise", text) ){	//	
   out = maketoken( t_otherwise ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"endcase", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"endcase", text) ){	//	
   out = maketoken( t_endcase ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"quit", text) ){	//	
+ if( wordmatch_plus_whitespace( pos,"quit", text) ){	//	
   out = maketoken( t_quit ); goto gettoken_normalout;
  }
+
+ // ----------------------------------------------
+ // ------- IDENTIFIER ---------------------------
+ // ----------------------------------------------
 
  // identifier
  if( text[*pos]=='_' || (text[*pos]>='a' && text[*pos]<='z') ){	
@@ -1645,7 +1743,18 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
   //if(l){
    // put here: allocate memory for identifier string and store it wherever
    out.type = t_id;
+   // ----
    if(!test_run) _gettoken_setstring(progstrings, &out,text+*pos,l+1);
+   // here: we check the list of extensions, and if this id matches one of those, we change the token accordingly
+   //printf("fuck %p\n",prog->extensions);
+   // ----
+   if(prog->extensions && !test_run){
+    id_info *extension_id;
+    //printf("fuckers '%s'\n",(char*)out.data.pointer);
+    if( extension_id = find_id( prog->extensions, (char*)out.data.pointer) ){
+     out = extension_id->t;
+    }
+   }
    *pos += l+1;
    goto gettoken_normalout;
   //}
@@ -1674,13 +1783,24 @@ token gettoken(stringslist *progstrings, int test_run, int *pos, unsigned char *
  while( text[*pos] && isspace(text[*pos]) ){
   *pos+=1;
  }
- return maketoken( 255 );
+ return maketoken( t_bad );
 
  gettoken_normalout:
  while( text[*pos] && isspace(text[*pos]) ){
   *pos+=1;
   _gettoken_skippastcomments(pos,text);
  }
+
+ // -------- replacements by extensions ----------
+ if(prog->extensions && !test_run){
+  char searchstring[] = "__REPLACEMENT";
+  *searchstring = out.type;
+  id_info *check_for_replacement;
+  if( check_for_replacement = find_id(prog->extensions,searchstring) ){
+   out = check_for_replacement->t;
+  }
+ }
+ // ----------------------------------------------
 
  return out;
 }
@@ -1712,9 +1832,10 @@ int* get_line_end_array(unsigned char *text){
 
 typedef struct tokentextpos { int line; int column; char *file; int arraysize; int lastindex; } TTP;
 
-int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned char *text, unsigned char *name_of_source_file ){
+int gettokens(program *prog, token *tokens_return, int len, unsigned char *text, unsigned char *name_of_source_file ){
+ stringslist *progstrings = prog->program_strings;
  int *line_end_array=NULL; TTP *TextPosses = NULL; int linep=0;
- if(progstrings && tokens_return){
+ if(tokens_return){
   //tb();
   line_end_array = get_line_end_array(text);
   TextPosses = (TTP*)progstrings->string;
@@ -1742,7 +1863,7 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
   }
   //if(TextPosses){ tb(); printf("test this shit: line %d, col %d, '%s'\n",TextPosses[count].line,TextPosses[count].column,tokenstring(t)); }
   // the token itself
-  t = gettoken(progstrings,!tokens_return,&pos,text); if(tokens_return)tokens_return[count]=t;
+  t = gettoken(prog,!tokens_return,&pos,text); if(tokens_return)tokens_return[count]=t;
   count +=1;
  }
  if(line_end_array) free( (line_end_array-1) );
@@ -1762,12 +1883,12 @@ int gettokens(stringslist *progstrings, token *tokens_return, int len, unsigned 
  return count;
 }
 
-token* tokenise(stringslist *progstrings, char *text, int *length_return, char *name_of_source_file){
+token* tokenise(program *prog, char *text, int *length_return, char *name_of_source_file){
+ stringslist *progstrings = prog->program_strings;
  int len = strlen(text);
- int count = gettokens(NULL,NULL,len,text,NULL);
+ int count = gettokens(prog,NULL,len,text,NULL);
  // about 'count+1': allocate 1 space for one extra token that goes unused (set to 0) so that there's less likely to be trouble with segmentation faults
  token *out = calloc(count+1,sizeof(token)); 
- // stringslist_addstring(progstrings,(char*) calloc( count,sizeof(TTP) ) );
  if( ! progstrings->string ){
   progstrings->string = (char*) calloc( count+1,sizeof(TTP) );
   ((TTP*)progstrings->string)->arraysize = count+1;
@@ -1778,19 +1899,19 @@ token* tokenise(stringslist *progstrings, char *text, int *length_return, char *
   strcpy( name_of_source_file_permanent_address, name_of_source_file );
   stringslist_addstring( progstrings, name_of_source_file_permanent_address );
  }
- gettokens(progstrings,out,len,text,name_of_source_file_permanent_address);
+ gettokens(prog,out,len,text,name_of_source_file_permanent_address);
  if(length_return)*length_return = count;
  return out;
 }
 
-token* loadtokensfromtext(stringslist *progstrings, char *path,int *length_return){
+token* loadtokensfromtext(program *prog, char *path,int *length_return){
  FILE *f = fopen(path,"rb");
  if(f==NULL) return NULL;
  int ext = Ext(f);
  unsigned char *text = calloc( ext+1, sizeof(unsigned char));
  size_t ReturnValue;
  ReturnValue = fread((void*)text, sizeof(char), ext, f);
- token *out = tokenise(progstrings, text,length_return,path);
+ token *out = tokenise(prog, text,length_return,path);
  fclose(f); free(text);
  return out;
 }
@@ -2073,10 +2194,10 @@ void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int pr
   return;
  }
  int new_bufsize = bufsize_required+(256-bufsize_required % 256);
- //if( new_bufsize <= bufsize_required ) error("still happening");
+ //if( new_bufsize <= bufsize_required ) error(NULL, "still happening");
  if(preserve){
   sv->string = realloc(sv->string, new_bufsize);
-  if(sv->string == NULL) error("stringvar_adjustsize: realloc failed\n");
+  if(sv->string == NULL) error(NULL, "stringvar_adjustsize: realloc failed\n");
   sv->bufsize = new_bufsize;
   sv->string[sv->len]=0;
  }else{
@@ -2120,7 +2241,7 @@ getstringvalue( program *prog, int *pos ){
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
    print_sourcetext_location( prog, *pos - 1);
    printf("stringvar_num: %d\n",stringvar_num);
-   error("getstringvalue: bad stringvariable access\n");
+   error(prog, "getstringvalue: bad stringvariable access\n");
   }
   stringvar *in = prog->stringvars[stringvar_num];
   stringval out;
@@ -2277,7 +2398,7 @@ getstringvalue( program *prog, int *pos ){
   stringval out = getstringvalue( prog,pos );
   if( prog->tokens[ *pos ].type != t_rightb ){
    print_sourcetext_location( prog, *pos - 1);
-   error("getstringvalue: expected closing bracket\n");
+   error(prog, "getstringvalue: expected closing bracket\n");
   }
   *pos += 1;
   return out;
@@ -2301,7 +2422,7 @@ getstringvalue( program *prog, int *pos ){
      //printf("fuck1 %d, %d\n",accumulator->len, accumulator->bufsize);
      stringvar_adjustsizeifnecessary(accumulator, accumulator->bufsize + 1, 1);
      //printf("fuck2 %d, %d\n",accumulator->len, accumulator->bufsize);
-     //if( accumulator->len >= accumulator->bufsize ) error("FUCK PENIS FUCK\n"); //remove later
+     //if( accumulator->len >= accumulator->bufsize ) error(NULL,"FUCK PENIS FUCK\n"); //remove later
     }
    }
    // ==========================================================
@@ -2309,7 +2430,7 @@ getstringvalue( program *prog, int *pos ){
    // ======= reading a specific number of bytes ===============
    if( accumulator->bufsize <= num_bytes_to_read ){
     stringvar_adjustsizeifnecessary(accumulator, num_bytes_to_read, 1);
-    //if( accumulator->bufsize <= num_bytes_to_read ) error("FUCK ###########################################\n"); //remove later
+    //if( accumulator->bufsize <= num_bytes_to_read ) error(NULL,"FUCK ###########################################\n"); //remove later
    }//endif bufsize
    accumulator->len = fread( (void*)accumulator->string, sizeof(char), num_bytes_to_read, f->fp );
    // ==========================================================
@@ -2338,12 +2459,12 @@ getstringvalue( program *prog, int *pos ){
  default:
   print_sourcetext_location( prog, *pos - 1);
   printf("getstringvalue: token is %s\n",tokenstring(t));
-  error("getstringvalue: didn't find a stringvalue\n");
+  error(prog, "getstringvalue: didn't find a stringvalue\n");
  }//endswitch
 }//endproc
 
 stringvar* create_new_stringvar(program *prog,int bufsize){
- if( bufsize <= 0 ) error("create_new_stringvar: requested buffer size is less than or equal to 0\n");
+ if( bufsize <= 0 ) error(prog, "create_new_stringvar: requested buffer size is less than or equal to 0\n");
  int svnum = prog->max_stringvars;
  prog->stringvars = realloc(prog->stringvars, sizeof(void*)*(svnum+1));
  prog->stringvars[svnum] = newstringvar(bufsize);
@@ -2356,7 +2477,19 @@ stringvar* create_new_stringvar(program *prog,int bufsize){
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
-void error(char *s){
+// this will be run whenever the application exits for whatever reason
+void quit_cleanup(program *prog){
+ id_info *quit_procs = prog->quit_procs;
+ while( quit_procs ){
+  if( quit_procs->t.data.pointer != 0 ){
+   void (*quit_procedure)(program*) = (void*)quit_procs->t.data.pointer;
+   quit_procedure(prog);
+  }
+  quit_procs = quit_procs->next;
+ }
+}
+
+void error(program *prog, char *s){
  #ifdef enable_graphics_extension
  if(newbase_is_running){
   Wait(1);
@@ -2364,6 +2497,7 @@ void error(char *s){
  }
  #endif
  printf("%s",s);
+ if( prog ) quit_cleanup(prog);
  exit(0); 
 }
 
@@ -2377,7 +2511,7 @@ char* C_CharacterAccess(int *p, program *prog){
  index = getvalue(p,prog);
  if(index<0 || index > svl.len ){
   print_sourcetext_location( prog, *p - 1);
-  error("C (characteraccess): index out of range\n");
+  error(prog, "C (characteraccess): index out of range\n");
  }//endif
  return svl.string + index;
 }//endproc
@@ -2577,7 +2711,7 @@ getvalue(int *p, program *prog){
   double out = getvalue(p, prog);
   if( prog->tokens[*p].type != t_rightb ){
    print_sourcetext_location( prog, *p - 1);
-   error("expected closing bracket\n");
+   error(prog, "expected closing bracket\n");
   }
   *p += 1;
   return out;
@@ -2588,7 +2722,7 @@ getvalue(int *p, program *prog){
   int index = getvalue(p, prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
   print_sourcetext_location( prog, *p - 1);
-  error("getvalue: bad variable access\n");
+  error(prog, "getvalue: bad variable access\n");
   break;
  }
  case t_Df:
@@ -2600,7 +2734,7 @@ getvalue(int *p, program *prog){
   int index = (int)getvalue(p,prog) + (int)getvalue(p,prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
   print_sourcetext_location( prog, *p - 1);
-  error("getvalue: bad array access\n");
+  error(prog, "getvalue: bad array access\n");
   break;
  }
  case t_Af:
@@ -2608,7 +2742,7 @@ getvalue(int *p, program *prog){
   int index = t.data.i + (int)getvalue(p,prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
   print_sourcetext_location( prog, *p - 1);
-  error("getvalue: bad array access\n");
+  error(prog, "getvalue: bad array access\n");
   break; 
  }
  case t_C:
@@ -2619,20 +2753,20 @@ getvalue(int *p, program *prog){
  case t_P:
  {
   int index = prog->sp + prog->current_function->num_locals + (int)getvalue(p,prog);
-  if(index<0 || index>=prog->ssize) error("getvalue: bad parameter access\n");
+  if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad parameter access\n");
   return prog->stack[index];
  }
  case t_L:
  {
   int index = prog->sp + (int)getvalue(p,prog);
-  if(index<0 || index>=prog->ssize) error("getvalue: bad local variable access\n");
+  if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad local variable access\n");
   return prog->stack[index];
  }
  case t_stackaccess:
  {
   int index = prog->sp + t.data.i;
   //printf("FUCK %d\n",index);
-  if(index<0 || index>=prog->ssize) error("getvalue: bad stack access\n");
+  if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad stack access\n");
   return prog->stack[index];
  }
 
@@ -2898,7 +3032,7 @@ getvalue(int *p, program *prog){
     // return the reference number of the new string variable
     return referred_string_constant->string_variable_number;
    }
-  default: error("getvalue: bad use of getref\n");
+  default: error(prog, "getvalue: bad use of @\n");
   }
   break;
  }
@@ -2921,7 +3055,7 @@ getvalue(int *p, program *prog){
   {
    case t_F:
    finfo_cur = prog->current_function;
-   fnum = getvalue(p,prog); if( (fnum<0 || fnum>(MAX_FUNCS-1)) || !prog->functions[fnum] ) error("getvalue: bad function call\n");
+   fnum = getvalue(p,prog); if( (fnum<0 || fnum>(MAX_FUNCS-1)) || !prog->functions[fnum] ) error(prog, "getvalue: bad function call\n");
    func_info *finfo_new = prog->functions[fnum];
    goto getvalue_functioncall;
    
@@ -2938,7 +3072,7 @@ getvalue(int *p, program *prog){
 
    // check if there's space on the stack for the new stack frame (new number of locals + new number of params) and if not, error
    minimum_stack_required = finfo_new->num_locals + finfo_new->num_params;
-   if( newsp + minimum_stack_required > prog->ssize ) error("interpreter: stack overflow\n");
+   if( newsp + minimum_stack_required > prog->ssize ) error(prog, "interpreter stack overflow\n");
    // make space for local variables
    spp = newsp + finfo_new->num_locals;
    prog->spo += finfo_new->num_locals;
@@ -2954,7 +3088,7 @@ getvalue(int *p, program *prog){
    //  store number of params in local variable 0 (_num_params)
    if( finfo_new->params_type == p_atleast ){
     while( isvalue( prog->tokens[*p].type ) ){
-     if( spp >= prog->ssize ) error("interpreter: stack overflow\n");
+     if( spp >= prog->ssize ) error(prog, "interpreter stack overflow\n");
      prog->stack[ spp ] = getvalue(p, prog);
      spp+=1;
      prog->spo += 1;
@@ -3036,7 +3170,7 @@ getvalue(int *p, program *prog){
  default:
   print_sourcetext_location( prog, *p - 1);
   printf("getvalue: t.type == %d '%s'\n", t.type, tokenstring(t) );
-  error("getvalue: expected a value\n");
+  error(prog, "getvalue: expected a value\n");
  }//endswitch t.type
 }//endproc getvalue
 
@@ -3047,7 +3181,7 @@ getvalue(int *p, program *prog){
 int _interpreter_ifsearch(int p, program *prog){
  int levelcount=1;
  while(levelcount){
-  if(p>=prog->length) error("interpreter: missing endif or otherwise bad ifs\n");
+  if(p>=prog->length) error(prog, "interpreter: missing endif or otherwise bad ifs\n");
   switch(prog->tokens[p].type){
   case t_else:
    if(levelcount==1){
@@ -3070,7 +3204,7 @@ int _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen
   }//endif
  }//next
  printf("_interpreter_labelsearch: label was %s\n",labelstring);
- error("interpreter: goto: couldn't find label\n");
+ error(prog, "interpreter: goto: couldn't find label\n");
  return 0;
 }//endproc
 
@@ -3091,7 +3225,7 @@ int caseof_skippast(program *prog, int p){ // p must point to the starting 'case
   case t_endcase: level -= 1; break;
   }
  }
- if(i == prog->length) error("caseof_skippast: missing endcase\n");
+ if(i == prog->length) error(prog, "caseof_skippast: missing endcase\n");
  return i;
 }
 int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the starting 'caseof'
@@ -3100,7 +3234,7 @@ int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to 
  while( i < prog->length ){
   switch( prog->tokens[i].type ){
   case 0:
-   error("caseof_numwhens: missing endcase\n");
+   error(prog, "caseof_numwhens: missing endcase\n");
    break;
   case t_caseof:
    i = caseof_skippast( prog, i);
@@ -3109,7 +3243,7 @@ int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to 
    if(co){
     co->whens[out] = i;
     if( out>0 && !co->whens_[out-1] ){
-     error("caseof_numwhens:1: 'when' list not terminated by ';'\n"); // this can't always be caught but at least in some cases it'll be nice to be notified by this error message
+     error(prog, "caseof_numwhens:1: 'when' list not terminated by ';'\n"); // this can't always be caught but at least in some cases it'll be nice to be notified by this error message
     }
    }
    out += 1;
@@ -3123,7 +3257,7 @@ int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to 
    if(co){
     co->otherwise = i;
     if( out>0 && !co->whens_[out-1] ){
-     error("caseof_numwhens:2: 'when' list not terminated by ';'\n");
+     error(prog, "caseof_numwhens:2: 'when' list not terminated by ';'\n");
     }
    }
    break;
@@ -3132,14 +3266,14 @@ int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to 
   }
   i+=1;
  }
- error("caseof_numwhens: this should never happen\n");
+ error(prog, "caseof_numwhens: this should never happen\n");
 }
 int determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes an error if neither is found
  int i; i=p; while( prog->tokens[i].type == t_leftb ){ i+=1; } // skip past any left brackets
  if( prog->tokens[i].type == t_id ) process_id(prog, &prog->tokens[i]); // process it if it's an id
  if( isstringvalue(prog->tokens[i].type) ) return 1; // return 1 if it's a stringvalue
  if( isvalue(prog->tokens[i].type) ) return 0; // return 0 if it's a value
- error("expected a value or a stringvalue\n"); // cause an error because we expected a value or a stringvalue
+ error(prog, "expected a value or a stringvalue\n"); // cause an error because we expected a value or a stringvalue
 }
 #define PROCESSCASEOF_RUBBISH 0
 void _interpreter_processcaseof(program *prog, int p){ int i;
@@ -3262,7 +3396,7 @@ interpreter(int p, program *prog){
   // search for matching endwhile
   int levelcount=1;
   while(levelcount){
-   if(p>=prog->length) error("interpreter: missing endwhile\n");
+   if(p>=prog->length) error(prog, "interpreter: missing endwhile\n");
    switch( prog->tokens[p].type ){
    case t_while: levelcount+=1; break;
    case t_endwhile: levelcount-=1; break;
@@ -3284,7 +3418,7 @@ interpreter(int p, program *prog){
   int levelcount=1;
   while(levelcount){
    p-=1;
-   if(p<0) error("interpreter: can't find while for this endwhile\n");
+   if(p<0) error(prog, "interpreter: can't find while for this endwhile\n");
    switch( prog->tokens[p].type ){
    case t_while: levelcount-=1; break;
    case t_endwhile: levelcount+=1; break;
@@ -3308,9 +3442,9 @@ interpreter(int p, program *prog){
   }else{
    endifpos = _interpreter_ifsearch(elsepos+1, prog);
   }
-  //if( prog->tokens[ifpos].type != t_if ) error("blah1\n"); 
-  //if( elsepos>=0 && prog->tokens[elsepos].type != t_else ) error("blah2\n"); 
-  //if( prog->tokens[endifpos].type != t_endif ) error("blah3\n"); 
+  //if( prog->tokens[ifpos].type != t_if ) error(NULL,"blah1\n"); 
+  //if( elsepos>=0 && prog->tokens[elsepos].type != t_else ) error(NULL,"blah2\n"); 
+  //if( prog->tokens[endifpos].type != t_endif ) error(NULL,"blah3\n"); 
   // fix if
   prog->tokens[ifpos].type = t_iff;
   prog->tokens[ifpos].data.i = ( elsepos==-1 ? endifpos+1 : elsepos+1 );
@@ -3340,7 +3474,7 @@ interpreter(int p, program *prog){
   {
    index = (int)getvalue(&p, prog);
    //printf("  set index: %d\n",index);
-   if(index<0 || index>=prog->vsize) error("interpreter: set: bad variable access\n");
+   if(index<0 || index>=prog->vsize) error(prog, "interpreter: set: bad variable access\n");
    prog->vars[index] = getvalue(&p, prog);
    break;
   }
@@ -3351,7 +3485,7 @@ interpreter(int p, program *prog){
   }
   case t_A:
    index = (int)getvalue(&p,prog) + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->vsize) error("interpreter: set: bad array access\n");
+   if(index<0 || index>=prog->vsize) error(prog, "interpreter: set: bad array access\n");
    prog->vars[index] = getvalue(&p, prog);
    break;
   case t_C:
@@ -3362,17 +3496,17 @@ interpreter(int p, program *prog){
    break;
   case t_P:
    index = prog->sp + prog->current_function->num_locals + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->ssize) error("interpreter: set: bad parameter access\n");
+   if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad parameter access\n");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_L:
    index = prog->sp + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->ssize) error("interpreter: set: bad parameter access\n");
+   if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad parameter access\n");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_stackaccess:
    index = prog->sp + t.data.i;
-   if(index<0 || index>=prog->ssize) error("interpreter: set: bad stack access\n");
+   if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad stack access\n");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_id:
@@ -3382,7 +3516,7 @@ interpreter(int p, program *prog){
   case t_S:
   {
    int string_number = getvalue(&p,prog);
-   if(string_number<0 || string_number>=prog->max_stringvars) error("interpreter: set: bad stringvar access\n");
+   if(string_number<0 || string_number>=prog->max_stringvars) error(prog, "interpreter: set: bad stringvar access\n");
    stringvar *svr = prog->stringvars[string_number];
    copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
    break;
@@ -3395,7 +3529,7 @@ interpreter(int p, program *prog){
   }
   default:
    print_sourcetext_location( prog, p-2 );
-   error("interpreter: set: bad use of 'set' command\n");
+   error(prog, "interpreter: set: bad use of 'set' command\n");
   }
   break; // Sat 14 Sep 12:35 - is this break necessary?
  }
@@ -3405,10 +3539,11 @@ interpreter(int p, program *prog){
   while( prog->tokens[p].type != t_endstatement ){
    if( prog->tokens[p].type != t_id ){ 
     print_sourcetext_location( prog, p );
-    error("interpreter: bad 'variable' command\n");
+    error(prog, "interpreter: bad 'variable' command\n");
    }
-   //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error("interpreter: variable: this identifier is already used\n");
-   add_id(prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
+   //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error(prog, "interpreter: variable: this identifier is already used\n");
+   add_id__error_if_fail( prog, p, "variable: the id for this variable is already used\n",
+                          prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
    p+=1;
   }
   break;
@@ -3418,12 +3553,13 @@ interpreter(int p, program *prog){
   p+=1;
   if( prog->tokens[p].type != t_id ){
    print_sourcetext_location( prog, p );
-   error("interpreter: bad 'constant' command\n");
+   error(prog, "interpreter: bad 'constant' command\n");
   }
   char *idstring = (char*)prog->tokens[p].data.pointer;
-  //if( find_id(prog->ids, idstring) ) error("interpreter: constant: this identifier is already used\n");
+  //if( find_id(prog->ids, idstring) ) error(prog, "interpreter: constant: this identifier is already used\n");
   p+=1;
-  add_id(prog->ids, make_id( idstring, maketoken_num( getvalue(&p, prog) ) ) );
+  add_id__error_if_fail( prog, p, "constant: the id for this constant is already used\n",
+          prog->ids, make_id( idstring, maketoken_num( getvalue(&p, prog) ) ) );
   break;
  }
  case t_stringvar: // create a string variable
@@ -3436,7 +3572,7 @@ interpreter(int p, program *prog){
   idt = prog->tokens[p]; 
   if( idt.type != t_id ){
    print_sourcetext_location( prog, p );
-   error("interpreter: bad 'stringvar' command\n");
+   error(prog, "interpreter: bad 'stringvar' command\n");
   }
   p+=1;
   // if the optional bufsize parameter is present, then get it
@@ -3444,7 +3580,8 @@ interpreter(int p, program *prog){
    bufsize = getvalue(&p,prog);
   }
   // create id for new string variable
-  add_id(prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( create_new_stringvar(prog,bufsize) ) ) );
+  add_id__error_if_fail( prog, p, "stringvar: the id for this stringvar is already used\n",
+          prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( create_new_stringvar(prog,bufsize) ) ) );
   if( prog->tokens[p].type != t_endstatement ) goto t_stringvar_start;
   p+=1;
   break;
@@ -3531,7 +3668,7 @@ interpreter(int p, program *prog){
  {
   void *fn = t.data.pointer;
   p+=2;
-  ( (void(*)(int*,program*)) fn )(&p,prog);
+  ( (void(*)(program*,int*)) fn )(prog,&p);
   break;
  }
  case t_oscli:
@@ -3660,6 +3797,7 @@ interpreter(int p, program *prog){
     //printf("this is happening\n"); tb(); // test
     ret_val = getvalue(&p,prog);
    }
+   quit_cleanup(prog);
    exit( (int) ret_val );
    break;
   }
@@ -3878,7 +4016,7 @@ interpreter(int p, program *prog){
  default:
   print_sourcetext_location( prog, p );
   printf("interpreter: token is %s\n",tokenstring(t));
-  error("interpreter: unexpected token\n");
+  error(prog, "interpreter: unexpected token\n");
  }
  goto interpreter_start;
 }
@@ -3887,27 +4025,46 @@ interpreter(int p, program *prog){
 // ---- MAIN FUNCTION ---------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
+void sl_c__parse_argc_argv(program *prg, int argc, char **argv){
+ add_id__error_if_fail( prg, -1, "main: failed to create _argc constant, this should never happen\n",
+                        prg->ids, make_id( "_argc", maketoken_num( argc-2 ) ) );
+ int i;
+ for(i=2; i<argc; i++){
+  copy_stringval_to_stringvar(   create_new_stringvar(prg,strlen( argv[i] ) ), (stringval) { argv[i], strlen(argv[i]) } );
+ }
+
+ char errormessage[] = "main: failed to create _argv0 constant, this should never happen\n";
+ char varname[] = "_argv0";
+ for(i=0; i<2; i++){
+  varname[5]='0'+i;
+  errormessage[28]='0'+i;
+  char *varname_permanent_address = calloc(8,sizeof(char));
+  strcpy(varname_permanent_address, varname);
+  stringvar *svr = create_new_stringvar(prg,256);
+  copy_stringval_to_stringvar( svr, (stringval) { argv[i], strlen(argv[i])} );
+  add_id__error_if_fail( prg, -1, errormessage,
+                         prg->ids, make_id( varname_permanent_address, maketoken_Sf( svr ) ) );
+  stringslist_addstring(prg->program_strings, varname_permanent_address);
+ }
+}
+
 #define main_printstuff 0
-#ifndef disable_sl_c_main
-int main (int argc, char **argv){
+int sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info){
  SeedRng();
  //printf("sz %d\n",sizeof(token)); return 0;
  program *prg = NULL;
 
  if(argc>1){
-  prg = init_program( argv[1], Exists(argv[1]) ); 
+  prg = init_program( argv[1], Exists(argv[1]), extensions ); 
  }else{
   printf("Johnsonscript interpreter, built on %s, %s\nhttps://github.com/dusthillresident/JohnsonScript/\n", __DATE__, __TIME__);
+  if( extra_version_info ) printf("%s",extra_version_info);
   printf("Usage:\n%s [program text or path to a file containing program text]\n",argv[0]);
   return 0;
  }
 
 #if 1
- add_id(prg->ids, make_id( "_argc", maketoken_num( argc-2 ) ) );
- int i;
- for(i=2; i<argc; i++){
-  copy_stringval_to_stringvar(   create_new_stringvar(prg,strlen( argv[i] ) ), (stringval) { argv[i], strlen(argv[i]) } );
- }
+ sl_c__parse_argc_argv(prg, argc, argv);
 #endif
 
 #if main_printstuff
@@ -3933,10 +4090,26 @@ int main (int argc, char **argv){
  printf("result: %f\n",result);
 #endif
 
+#if main_printstuff
+ printf("----\n");
+ detokenise(prg,-1);
+ printf("----\n");
+#endif
+
  unloadprog(prg);
 #if main_printstuff
  printf("ended\n");
 #endif
+ quit_cleanup(prg);
  return (int)result;
+}
+
+#ifndef disable_sl_c_main
+int main(int argc, char **argv){
+ char extra_version_info[100] = {0};
+ #ifdef enable_graphics_extension
+ strcat(extra_version_info, "Xlib graphics extension\n");
+ #endif
+ return sl_c__main(argc,argv,NULL, *extra_version_info ? extra_version_info : NULL );
 }
 #endif

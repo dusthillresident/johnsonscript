@@ -1,6 +1,21 @@
 #define disable_sl_c_main
 #include "sl.c"
 
+void trans_add_id(id_info *ids, id_info *new_id){
+ // check if this id name is already used in this id list
+ if( ids->name && !strcmp(new_id->name, ids->name) ){
+  printf("add_id: id was '%s'\n",new_id->name);
+  fprintf(stderr,"add_id: this id is already used in this id list\n");
+  exit(0);
+ }
+ // ----------
+ if( ids->next == NULL){
+  ids->next = new_id;
+ }else{
+  add_id( ids->next, new_id);
+ }
+}
+
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
@@ -64,7 +79,7 @@ Declaration* MakeDecl(int gpos, int lpos, char *desc){ // desc means 'descriptio
 }
 
 void AddDecl(Declaration *d, char *idstring){
- add_id(trans_global_ids, make_id( idstring, maketoken_Df( (double*)d ) ) );
+ trans_add_id(trans_global_ids, make_id( idstring, maketoken_Df( (double*)d ) ) );
 }
 
 Declaration* FindDecl(char *idstring){
@@ -2039,7 +2054,7 @@ void translate_command(program *prog, int *p){
 
     TransTable *ttab = MakeTransTable(1,value_s, 1,getref_s, 1,set_s, NULL);
 
-    add_id(prog->ids, make_id( idstring, maketoken_Sf( (stringvar*)ttab ) ) );
+    trans_add_id(prog->ids, make_id( idstring, maketoken_Sf( (stringvar*)ttab ) ) );
     
     *p += 1;
    }
@@ -2073,7 +2088,7 @@ void translate_command(program *prog, int *p){
 
     TransTable *ttab = MakeTransTable(1,value_s, 1,getref_s, 1,value_s, NULL);
 
-    add_id(prog->ids, make_id( idstring, maketoken_Df( (double*)ttab ) ) );
+    trans_add_id(prog->ids, make_id( idstring, maketoken_Df( (double*)ttab ) ) );
     *p += 1;
     trans_var_n += 1;
    }
@@ -2113,13 +2128,13 @@ void translate_command(program *prog, int *p){
    AddDecl( maked, idstring );
 
    if( prog->tokens[ *p ].type == t_number ){ // if it's just a simple constant
-    add_id(prog->ids, make_id( idstring, prog->tokens[ *p ] ));
+    trans_add_id(prog->ids, make_id( idstring, prog->tokens[ *p ] ));
     *p += 1;
     break;
    }
    if( expression_is_simple( prog, *p ) ){ // if it looks like a very simple expression
     double value = getvalue(p,prog);
-    add_id(prog->ids, make_id( idstring, maketoken_num(value) ) );
+    trans_add_id(prog->ids, make_id( idstring, maketoken_num(value) ) );
     break;
    }
    // otherwise we have to do this: 
@@ -2135,7 +2150,7 @@ void translate_command(program *prog, int *p){
 			NULL };
    sprintf(ttab->value_s,"CON_%s",idstring);
 
-   add_id(prog->ids, make_id( idstring, maketoken_Df( (double*)ttab ) ) );
+   trans_add_id(prog->ids, make_id( idstring, maketoken_Df( (double*)ttab ) ) );
 
   } break;
  case 200:
@@ -2378,7 +2393,7 @@ void translate_preprocess_OptionImport(program *prog){
      // get filename
      filename = (char*)prog->tokens[i].data.pointer;
      // load text file and process it, getting the tokens (program code data) and program_strings
-     tokens = loadtokensfromtext(prog->program_strings, filename, &tokens_length);
+     tokens = loadtokensfromtext(prog, filename, &tokens_length);
      if( tokens == NULL ){
       ErrorOut("translate_preprocess_OptionImport: couldn't open file '%s'\n",filename);
      }
@@ -2720,7 +2735,7 @@ void translate_program(program *prog){
  
  { // prepare Argc id
   TransTable *ttab = MakeTransTable(1,"(double)Johnson_Argc", 0,"Can't ref _argc", 0,"_argc cannot be set", NULL);
-  add_id(prog->ids, make_id( "_argc", maketoken_Df( (double*)ttab ) ) );
+  trans_add_id(prog->ids, make_id( "_argc", maketoken_Df( (double*)ttab ) ) );
  }
 
  p=0; trans_functions_start_p = -1;
@@ -2817,7 +2832,7 @@ int main(int argc, char **argv){
  program *prg = NULL;
 
  if(argc>1){
-  prg = init_program( argv[1], Exists(argv[1]) ); 
+  prg = init_program( argv[1], Exists(argv[1]), NULL ); 
   if( Exists(argv[1]) && strstr(argv[1],"/") ) trans_file_input_path = argv[1];
  }else{
   printf("%s [program text or path to a file containing program text]\nThis will write the translated C program to stdout.\n",argv[0]);
