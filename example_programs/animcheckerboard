@@ -1,0 +1,40 @@
+startgraphics 500 500
+variable x y w h offset a r;
+constant squareSize 96
+bgcol 0x60608f
+set r 50
+.mainloopstart
+set offset + offset 1
+.redraw
+drawmode 3
+gcol  0x8f8faf
+set w / winw squareSize
+set h / winh squareSize
+cls
+set x -1
+while < x w
+ set y -1
+ while < y h
+  if expose goto ".redraw" endif
+  rectanglef	( + (% offset squareSize) * squareSize + x & y 1 )
+		( + (% offset squareSize) * squareSize y )
+		squareSize
+  set y + y 1
+ endwhile
+ set x + x 2
+endwhile
+drawmode 7
+gcol 0x2020ff
+set x >>winw 1
+set y >>winh 1
+arc x y x y 0 6.283182
+set a * _pi 2 / offset squareSize
+circlef (+ x * (- x r) cos a ) (+ y * (- y r) sin a ) r
+set a * _pi 2 / offset << squareSize 1
+gcol 0x206020
+circlef (+ x * (- x * r 3) cos a ) (+ y * (- y * r 3) sin a ) r
+gcol 0x4f0000
+set a + 0.55 * 0.45 sin * _pi 2 / offset << squareSize 2
+arcf x y (* x a) (* y a) 0 6.283182
+wait 16.6
+goto ".mainloopstart"

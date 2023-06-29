@@ -112,11 +112,10 @@ refreshmode 1
  # ----- Draw yin-yangs and scrollytext -----
  drawyys
  textscroller @"        Here's taurine. It's a fairly little molecule that, according to myth, is extracted from bull SEMEN! Well this story is bull, it is actually extracted from bull bile.     " 
- # ----- Display new frame -----
- refresh
  # ----- Wait for vsync -----
  wait 16.6
- #;capture
+ # ----- Display new frame -----
+ refresh
 goto ".mainloopstart"
 
 function cstring in local out i;
