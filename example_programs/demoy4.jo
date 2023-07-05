@@ -111,7 +111,7 @@ refreshmode 1
  endwhile
  # ----- Draw yin-yangs and scrollytext -----
  drawyys
- textscroller @"        I spent some stupid number of hours spread out across about 4 years writing this crap that nobody will ever care about at all.  " 
+ textscroller @"        One two three four! Denver, the last dinosaur. He's my friend and a whole lot more. Denver, the last dinosaur. Shows me a world I never saw before. From a hot hot jungle a long time ago, comes a cool cool friend my pal dino (oh!). Denver, the last dinosaur. He's my friend and a whole lot more. Denver, the last dinosaur. Shows me a world I never saw before. Everywhere we go, we don't really care, if people stop and stare at our pal dino. From prehistory through the rock & roll spotlight, we got the friend who helps us make it through alright - that's Denver, the last dinosaur. He's my friend and a whole lot more. Denver, the last dinosaur. Shows me a world I never saw before.  " 
  # ----- Wait for vsync -----
  wait 16.6
  # ----- Display new frame -----
