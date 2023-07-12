@@ -1,0 +1,45 @@
+
+stringvar vec;
+
+
+initVector @vec 11 22 33 44;
+
+print vlen$ vec;
+
+variable i;
+while < i vlen$ vec
+ print "Vvec("i")	:	" Vvec(i);
+ set i + i 1
+endwhile
+
+print vectorDotProduct
+        (initVector S  36  23   6   3  3253  565 34)
+        (initVector S  76  34  57  45    56   34 65) ;
+
+return 0;
+
+function initVector v ... local i;
+ set $v string$ <<(- _num_params 1)3 chr$0
+ set i 1
+ while < i _num_params
+  set V$v(- i 1) P(i)
+  set i + i 1
+ endwhile
+return v
+
+function errorOut msg;
+sput _stderr $msg chr$10;
+quit 1
+
+function vectorDotProduct a b local l i result;
+ set l vlen$$a
+ if ! = l vlen$$b
+  errorOut @"vectorDotProduct: vector lengths don't match"
+ endif
+ set result 0
+ set i 0
+ while < i l
+  set result + result * V$a(i) V$b(i)
+  set i + i 1
+ endwhile
+return result
