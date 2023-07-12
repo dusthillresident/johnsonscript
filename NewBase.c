@@ -149,18 +149,10 @@ void BuildDSTchar(unsigned char n){
      } break;
     }
     else if( nsurrounds == 3){ // x split
-     if( (surroundings & drawscaledtext_above) && (surroundings & drawscaledtext_left) ){ // above+left
-      Triangle(xx1,yy2, xx1,yy1, xx2,yy2);
-     }else{
-      if( surroundings & drawscaledtext_above ) Triangle(xx1,yy2, xc,yc, xx2,yy2);
-      if( surroundings & drawscaledtext_left  ) Triangle(xx1,yy1, xc,yc, xx1,yy2);
-     }
-     if( (surroundings & drawscaledtext_below) && (surroundings & drawscaledtext_right) ){ // below+right
-      Triangle(xx1,yy1, xx2,yy2, xx2,yy1);
-     }else{
+     if( surroundings & drawscaledtext_above ) Triangle(xx1,yy2, xc,yc, xx2,yy2);
+     if( surroundings & drawscaledtext_left  ) Triangle(xx1,yy1, xc,yc, xx1,yy2);
      if( surroundings & drawscaledtext_below ) Triangle(xx1,yy1, xc,yc, xx2,yy1);
      if( surroundings & drawscaledtext_right ) Triangle(xx2,yy1, xc,yc, xx2,yy2);
-     }
     }else{
      Triangle(xx1,yy1, xc,yy1, xx1,yc ); // top left
      Triangle(xx1,yy2, xx1,yc, xc,yy2); // bottom left

@@ -18,7 +18,7 @@
 
 #ifndef DISABLE_ALIGN_STUFF
  // this is for testing. I discovered that messing with __attribute__((aligned(x))) can make a difference to how fast things run
- #define ALIGN_ATTRIB_CONSTANT 16
+ #define ALIGN_ATTRIB_CONSTANT 8
 #endif
 
 // memory problem debugging stuff
@@ -216,7 +216,11 @@ id_info* find_id(id_info *ids, char *id_string);
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
 
-program* newprog(int maxlen, int vsize, int ssize){
+program* 
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+newprog(int maxlen, int vsize, int ssize){
  program *out = calloc(1,sizeof(program));
  // allocate memory for tokens
  if(maxlen){
@@ -256,7 +260,11 @@ program* newprog(int maxlen, int vsize, int ssize){
 }
 
 // -------------------------------------------------------------------------------------------
-int get_free_fileslot(program *prog){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+get_free_fileslot(program *prog){
  int i;
  // look for the next free fileslot.
  // start at 3 because 0,1,2 are reserved for stdin, stdout, stderr
@@ -281,31 +289,51 @@ file* getfile(program *prog, int file_reference_number, int read, int write){
 }
 // -------------------------------------------------------------------------------------------
 
-token maketoken( TOKENTYPE_TYPE type ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken( TOKENTYPE_TYPE type ){
  token out;
  out.type=type;
  out.data.pointer = NULL;
  return out;
 }
-token maketoken_num( double n ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_num( double n ){
  token out;
  out.type = t_number;
  out.data.number = n;
  return out;
 }
-token maketoken_stackaccess( int sp_offset ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_stackaccess( int sp_offset ){
  token out;
  out.type = t_stackaccess;
  out.data.i = sp_offset;
  return out; 
 }
-token maketoken_Df( double *pointer ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_Df( double *pointer ){
  token out;
  out.type = t_Df;
  out.data.pointer = (void*)pointer;
  return out;
 }
-token maketoken_Sf( stringvar *pointer ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_Sf( stringvar *pointer ){
  token out;
  out.type = t_Sf;
  out.data.pointer = (void*)pointer;
@@ -316,49 +344,77 @@ token maketoken_Sf( stringvar *pointer ){
 // ---- External function/command routines ----
 // --------------------------------------------
 
-token maketoken_extfun( double (*external_function)(int*,program*) ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_extfun( double (*external_function)(int*,program*) ){
  token out;
  out.type = t_extfun;
  out.data.pointer = external_function; 
  return out;
 }
 
-token maketoken_extsfun( stringval (*external_stringfunction)(program*,int*) ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_extsfun( stringval (*external_stringfunction)(program*,int*) ){
  token out;
  out.type = t_extsfun;
  out.data.pointer = external_stringfunction;
  return out;
 }
 
-token maketoken_extc( void (*external_command)(int*,program*) ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_extc( void (*external_command)(int*,program*) ){
  token out;
  out.type = t_extcom;
  out.data.pointer = external_command;
  return out;
 }
 
-token maketoken_extopt( void (*external_option_procedure)(program*,int*) ){
+token
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+maketoken_extopt( void (*external_option_procedure)(program*,int*) ){
  token out;
  out.type = t_extopt;
  out.data.pointer = external_option_procedure;
  return out;
 }
 
-void register_external_function( id_info *id_list, double (*external_function)(int*,program*), char *id ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+register_external_function( id_info *id_list, double (*external_function)(int*,program*), char *id ){
  if( ! add_id( id_list, make_id( id, maketoken_extfun( external_function ) ) ) ){
   printf("id was %s\n",id);
   error(NULL, "register_external_function: id already exists\n");
  }
 }
 
-void register_external_stringfunction( id_info *id_list, stringval (*external_stringfunction)(program*,int*), char *id ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+register_external_stringfunction( id_info *id_list, stringval (*external_stringfunction)(program*,int*), char *id ){
  if( ! add_id( id_list, make_id( id, maketoken_extsfun( external_stringfunction ) ) ) ){
   printf("id was %s\n",id);
   error(NULL, "register_external_stringfunction: id already exists\n");
  }
 }
 
-void register_external_command( id_info *id_list, void (*external_command)(int*,program*), char *id ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+register_external_command( id_info *id_list, void (*external_command)(int*,program*), char *id ){
  if( ! add_id( id_list, make_id( id, maketoken_extc( external_command ) ) ) ){
   printf("id was %s\n",id);
   error(NULL, "register_external_command: id already exists\n");
@@ -366,7 +422,11 @@ void register_external_command( id_info *id_list, void (*external_command)(int*,
 }
 
 // the string 'char *id' must have the form "OPTION_blah", starting with OPTION_ and then having a name after
-void register_external_option( id_info *id_list, void (*external_option_procedure)(program*,int*), char *id){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+register_external_option( id_info *id_list, void (*external_option_procedure)(program*,int*), char *id){
  if( ! add_id( id_list, make_id( id, maketoken_extopt( external_option_procedure ) ) ) ){
   printf("id was %s\n",id);
   error(NULL, "register_external_option: id already exists\n");
@@ -374,7 +434,11 @@ void register_external_option( id_info *id_list, void (*external_option_procedur
 }
 // register a procedure to call when quitting.
 // the string 'char *id' must have the form "QUIT_blah", starting with QUIT_ and then having a unique identifying name after
-void register_quit_procedure( id_info *id_list, void (*quit_procedure)(program*), char *id ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+register_quit_procedure( id_info *id_list, void (*quit_procedure)(program*), char *id ){
  token t; t.type = t_bad; t.data.pointer = (void*) quit_procedure;
  if( ! add_id( id_list, make_id( id, t ) ) ){
   printf("id was %s\n",id);
@@ -383,7 +447,11 @@ void register_quit_procedure( id_info *id_list, void (*quit_procedure)(program*)
 }
 
 // replace built-in stuff with extensions
-void register_replacement( id_info *id_list, TOKENTYPE_TYPE target, char *replacewith ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+register_replacement( id_info *id_list, TOKENTYPE_TYPE target, char *replacewith ){
  id_info *replacewith_idinfo;
  if( ! (replacewith_idinfo = find_id(id_list,replacewith) ) ){
   printf("id for replacement was '%s'\n",replacewith);
@@ -404,7 +472,11 @@ void register_replacement( id_info *id_list, TOKENTYPE_TYPE target, char *replac
 // ---- End of external function/command routines ----
 // ---------------------------------------------------
 
-void unloadprog(program *prog){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+unloadprog(program *prog){
  int i;
  // free the stringslist (strings that are part of the program data (string constants, ids, labels, etc))
  free_stringslist(prog->program_strings);
@@ -448,7 +520,11 @@ void unloadprog(program *prog){
 
 #define DEFAULT_VSIZE 256
 #define DEFAULT_SSIZE 256
-program* init_program( char *str,int str_is_filepath, id_info *extensions ){
+program*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+init_program( char *str,int str_is_filepath, id_info *extensions ){
  token *tokens; int tokens_length; 
  // create the 'program' structure, with default stack/variable array size
  program *prog = newprog(0,DEFAULT_VSIZE,DEFAULT_SSIZE);
@@ -505,7 +581,11 @@ program* init_program( char *str,int str_is_filepath, id_info *extensions ){
 // ----------------------------------------------------------------------------------------------------------------
 
 // this returns the allocated area as an index into the variable array
-int allocate_variable_data(program *prog, int amount ){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+allocate_variable_data(program *prog, int amount ){
  if( amount <= 0 ) error(prog, "allocate_variable_data: bad allocation request\n");
  if( prog->next_free_var+amount > (prog->vsize - prog->ssize) ) error(prog, "allocate_variable_data: run out of space\n");
  int index = prog->next_free_var; prog->next_free_var += amount;
@@ -525,7 +605,11 @@ id_info* find_id(id_info *ids, char *id_string){
  }
 }
 
-int add_id(id_info *ids, id_info *new_id){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+add_id(id_info *ids, id_info *new_id){
  // check if this id name is already used in this id list
  if( ids->name && !strcmp(new_id->name, ids->name) ){
   //printf("add_id: id was '%s'\n",new_id->name);
@@ -540,7 +624,11 @@ int add_id(id_info *ids, id_info *new_id){
   return add_id( ids->next, new_id);
  }
 }
-void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id){
  if( ! add_id( ids, new_id ) ){
   if( p > -1 ){
    print_sourcetext_location( prog, p );
@@ -550,20 +638,32 @@ void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info 
  }
 }
 
-id_info* make_id(char *id_string, token t){
+id_info*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+make_id(char *id_string, token t){
  id_info *out = calloc(1, sizeof(id_info));
  out->t = t;
  out->name = id_string;
  return out;
 }
 
-void free_ids(id_info *ids){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+free_ids(id_info *ids){
  if(ids == NULL ) return;
  free_ids(ids->next);
  free(ids);
 }
 
-void process_id(program *prog, token *t){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+process_id(program *prog, token *t){
  id_info *foundid=NULL;
  // first, check current function's id list
  foundid = find_id( prog->current_function->ids, (char*)t->data.pointer );
@@ -580,13 +680,21 @@ void process_id(program *prog, token *t){
  *t = foundid->t;
 }
 
-void list_ids(id_info *ids){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+list_ids(id_info *ids){
  if(ids == NULL ) return;
  if(ids->name)printf(" id: '%s'\n",ids->name);
  list_ids(ids->next);
 }
 
-char* getfuncname(program *prog,func_info *f){
+char*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+getfuncname(program *prog,func_info *f){
  id_info *id = prog->ids;
  while(1){
   if( id->t.type == t_Ff && id->t.data.pointer == f ) return id->name;
@@ -594,7 +702,11 @@ char* getfuncname(program *prog,func_info *f){
   if( id == NULL ) return NULL;
  }
 }
-void list_all_ids(program *prog){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+list_all_ids(program *prog){
  printf("Global IDs\n");
  list_ids(prog->ids);
  int i;
@@ -618,7 +730,11 @@ void list_all_ids(program *prog){
 //  function F1 [P2['...']] [L3] ;
 // the kind with named parameters or locals:
 //  function myfunction [param_a param_b etc] ['...'] [[local] [localvariable_a localvariable_b etc]] ;
-void process_function_definition(int pos,program *prog){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+process_function_definition(int pos,program *prog){
  int func_number=-1;
  func_info *out = calloc(1,sizeof(func_info));
  out->ids = calloc(1,sizeof(id_info));
@@ -791,7 +907,11 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_xupdate	115	// process x events and update display etc
 #endif
 
-void option( program *prog, int *p ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+option( program *prog, int *p ){
  int starting_p = *p;
  *p += 1; // advance p out of the way of the 'option' command itself
  int id_stringconst_pos = *p;
@@ -1081,7 +1201,11 @@ int Ext(FILE *fp){
 #endif
 
 
-int wordmatch(int *pos, unsigned char *word, unsigned char *text){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+wordmatch(int *pos, unsigned char *word, unsigned char *text){
  int i,l;
  l=strlen(word);
  for(i=0; i<l; i++){
@@ -1092,7 +1216,11 @@ int wordmatch(int *pos, unsigned char *word, unsigned char *text){
 }
 
 // do wordmatch but only return true if the word has whitespace after it
-int wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text){
  int holdpos = *pos;
  int result = wordmatch(pos, word, text);
  if( result ){
@@ -1104,7 +1232,11 @@ int wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text
  return 0;
 }
 
-int patternmatch(int pos, unsigned char *chars, unsigned char *text){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+patternmatch(int pos, unsigned char *chars, unsigned char *text){
  int i,l,L,p, check;
  p=pos;
  l=strlen(chars);
@@ -1121,7 +1253,11 @@ int patternmatch(int pos, unsigned char *chars, unsigned char *text){
  }//endwhile
 }//endproc
 
-int patterncontains(int pos, unsigned char *chars, unsigned char *text){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+patterncontains(int pos, unsigned char *chars, unsigned char *text){
  int i,l,L,p, check;
  p=pos;
  l=strlen(chars);
@@ -1136,7 +1272,11 @@ int patterncontains(int pos, unsigned char *chars, unsigned char *text){
  return 0;
 }//endproc
 
-void _gettoken_setstring(stringslist *progstrings, token *t, unsigned char *text, int l){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+_gettoken_setstring(stringslist *progstrings, token *t, unsigned char *text, int l){
  //printf("FUCK PENIS FUCK\n");
  // allocate memory for string and copy string to it
  t->data.pointer = calloc(l+1,sizeof(char));
@@ -1144,7 +1284,11 @@ void _gettoken_setstring(stringslist *progstrings, token *t, unsigned char *text
  // keep track of this string so it can be freed later when the program is unloaded
  if(progstrings != NULL)stringslist_addstring(progstrings,(char*)t->data.pointer);
 }
-void _gettoken_skippastcomments(int *pos, unsigned char *text){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+_gettoken_skippastcomments(int *pos, unsigned char *text){
  if( isspace(text[*pos]) ) return;
  // block comment
  if( wordmatch( pos,"/*", text) ){		
@@ -1332,6 +1476,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  if( wordmatch( pos,"C", text) ){	//	C ('character' - byte array access with strings)
   out =  maketoken( t_C ); goto gettoken_normalout;
  }
+ if( wordmatch( pos,"V", text) ){	//	V ('value' - value array access with strings)
+  out =  maketoken( t_V ); goto gettoken_normalout;
+ }
 
  if( wordmatch( pos,"L", text) ){	//	L ('local' - indexed local variable access)
   out =  maketoken( t_L ); goto gettoken_normalout;
@@ -1483,6 +1630,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
  if( wordmatch( pos,"len$", text) ){	//	len$
   out = maketoken( t_lenS ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"vlen$", text) ){	//	vlen$
+  out = maketoken( t_vlenS ); goto gettoken_normalout;
  }
  if( wordmatch( pos,"cmp$", text) ){	//	cmp$ (strcmp)
   out = maketoken( t_cmpS ); goto gettoken_normalout;
@@ -1805,7 +1955,11 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  return out;
 }
 
-int* get_line_end_array(unsigned char *text){
+int*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+get_line_end_array(unsigned char *text){
  int *out = NULL;
  unsigned char *p = text;
  int nlines=1;
@@ -1832,7 +1986,11 @@ int* get_line_end_array(unsigned char *text){
 
 typedef struct tokentextpos { int line; int column; char *file; int arraysize; int lastindex; } TTP;
 
-int gettokens(program *prog, token *tokens_return, int len, unsigned char *text, unsigned char *name_of_source_file ){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+gettokens(program *prog, token *tokens_return, int len, unsigned char *text, unsigned char *name_of_source_file ){
  stringslist *progstrings = prog->program_strings;
  int *line_end_array=NULL; TTP *TextPosses = NULL; int linep=0;
  if(tokens_return){
@@ -1883,7 +2041,11 @@ int gettokens(program *prog, token *tokens_return, int len, unsigned char *text,
  return count;
 }
 
-token* tokenise(program *prog, char *text, int *length_return, char *name_of_source_file){
+token*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+tokenise(program *prog, char *text, int *length_return, char *name_of_source_file){
  stringslist *progstrings = prog->program_strings;
  int len = strlen(text);
  int count = gettokens(prog,NULL,len,text,NULL);
@@ -1904,7 +2066,11 @@ token* tokenise(program *prog, char *text, int *length_return, char *name_of_sou
  return out;
 }
 
-token* loadtokensfromtext(program *prog, char *path,int *length_return){
+token*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+loadtokensfromtext(program *prog, char *path,int *length_return){
  FILE *f = fopen(path,"rb");
  if(f==NULL) return NULL;
  int ext = Ext(f);
@@ -1916,7 +2082,11 @@ token* loadtokensfromtext(program *prog, char *path,int *length_return){
  return out;
 }
 
-void print_sourcetext_location( program *prog, int token_p){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+print_sourcetext_location( program *prog, int token_p){
  if( prog->program_strings->string == NULL ) return;
  TTP *ttp = (TTP*)prog->program_strings->string;
  //printf("hmm, ttp==%p\n",ttp); printf("ttp->arraysize==%d, ttp->lastindex==%d\n",ttp->arraysize,ttp->lastindex); //test
@@ -1931,7 +2101,11 @@ void print_sourcetext_location( program *prog, int token_p){
 
 char tokenstringbuf[256];
 
-char* tokenstring(token t){
+char*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+tokenstring(token t){
  switch(t.type){
  //case 0 : return "NUL";
  case t_plus:		return "+";
@@ -1960,6 +2134,7 @@ char* tokenstring(token t){
  case t_D:		return "D";
  case t_A:		return "A";
  case t_C:		return "C";
+ case t_V:		return "V";
  case t_L:		return "L";
  case t_P:		return "P";
  case t_F:		return "F";
@@ -2011,6 +2186,7 @@ char* tokenstring(token t){
  case t_ascS:		return "asc$";
  case t_valS:		return "val$";
  case t_lenS:		return "len$";
+ case t_vlenS:		return "vlen$";
  case t_cmpS:		return "cmp$";
  case t_instrS:		return "instr$";
 
@@ -2167,7 +2343,11 @@ char* tokenstring(token t){
  }
 }
 
-void detokenise(program *prog, int mark_position){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+detokenise(program *prog, int mark_position){
  int i;
  for( i=0; i<prog->length; i++){
   if(i==mark_position) printf("\nREM: here\n");
@@ -2179,7 +2359,11 @@ void detokenise(program *prog, int mark_position){
 // -------------------- STRING HANDLING ---------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
-void mystrncpy(char *dest, char *src, size_t n){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+mystrncpy(char *dest, char *src, size_t n){
  //strncpy(dest,src,n); return;
  size_t i;
  for(i=0; i<n /*&& src[i]*/; i++){
@@ -2188,7 +2372,11 @@ void mystrncpy(char *dest, char *src, size_t n){
  dest[i]=0;
 }
 
-void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve){
  if(bufsize_required<sv->bufsize){
   //tb();
   return;
@@ -2208,13 +2396,21 @@ void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int pr
  }
 }
 
-void copy_stringval_to_stringvar(stringvar *dest, stringval src){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+copy_stringval_to_stringvar(stringvar *dest, stringval src){
  if( src.len+1 >= dest->bufsize ) stringvar_adjustsizeifnecessary(dest, src.len+1, 0);
  mystrncpy(dest->string, src.string, src.len);
  dest->len = src.len;
 }
 
-int isstringvalue(TOKENTYPE_TYPE type){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+isstringvalue(TOKENTYPE_TYPE type){
  return (type==t_leftb || type==t_id || (type>=STRINGVALS_START && type<=STRINGVALS_END)) ;
 }
 
@@ -2463,7 +2659,11 @@ getstringvalue( program *prog, int *pos ){
  }//endswitch
 }//endproc
 
-stringvar* create_new_stringvar(program *prog,int bufsize){
+stringvar*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+create_new_stringvar(program *prog,int bufsize){
  if( bufsize <= 0 ) error(prog, "create_new_stringvar: requested buffer size is less than or equal to 0\n");
  int svnum = prog->max_stringvars;
  prog->stringvars = realloc(prog->stringvars, sizeof(void*)*(svnum+1));
@@ -2478,7 +2678,11 @@ stringvar* create_new_stringvar(program *prog,int bufsize){
 // ----------------------------------------------------------------------------------------------------------------
 
 // this will be run whenever the application exits for whatever reason
-void quit_cleanup(program *prog){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+quit_cleanup(program *prog){
  id_info *quit_procs = prog->quit_procs;
  while( quit_procs ){
   if( quit_procs->t.data.pointer != 0 ){
@@ -2489,7 +2693,11 @@ void quit_cleanup(program *prog){
  }
 }
 
-void error(program *prog, char *s){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+error(program *prog, char *s){
  #ifdef enable_graphics_extension
  if(newbase_is_running){
   Wait(1);
@@ -2501,11 +2709,19 @@ void error(program *prog, char *s){
  exit(0); 
 }
 
-int isvalue(TOKENTYPE_TYPE type){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+isvalue(TOKENTYPE_TYPE type){
  return ( type && (type <= VALUES_END) ) ;
 }
 
-char* C_CharacterAccess(int *p, program *prog){
+char*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+C_CharacterAccess(int *p, program *prog){
  stringval svl; int index;
  svl = getstringvalue(prog,p);
  index = getvalue(p,prog);
@@ -2515,6 +2731,21 @@ char* C_CharacterAccess(int *p, program *prog){
  }//endif
  return svl.string + index;
 }//endproc
+
+double*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+V_ValueAccess(int *p, program *prog){
+ stringval svl; int index;
+ svl = getstringvalue(prog,p);
+ index = getvalue(p,prog);
+ if(index<0 || index >= (svl.len>>3)){
+  print_sourcetext_location( prog, *p - 1);
+  error(prog, "V (valueaccess): index out of range\n");
+ }
+ return ((double*)svl.string) + index;
+}
 
 // ========================================================
 // =========  GETVALUE  ===================================
@@ -2750,6 +2981,11 @@ getvalue(int *p, program *prog){
   return (double)(unsigned char)*C_CharacterAccess(p, prog);
   break;
  }
+ case t_V:
+ {
+  return *V_ValueAccess(p, prog);
+  break;
+ }
  case t_P:
  {
   int index = prog->sp + prog->current_function->num_locals + (int)getvalue(p,prog);
@@ -2766,7 +3002,7 @@ getvalue(int *p, program *prog){
  {
   int index = prog->sp + t.data.i;
   //printf("FUCK %d\n",index);
-  if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad stack access\n");
+  //if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad stack access\n");
   return prog->stack[index];
  }
 
@@ -2795,6 +3031,11 @@ getvalue(int *p, program *prog){
  {
   stringval sv = getstringvalue(prog,p);
   return (double)sv.len;
+ }
+ case t_vlenS:
+ {
+  stringval sv = getstringvalue(prog,p);
+  return (double)(sv.len>>3);
  }
  case t_cmpS:
  {
@@ -3055,7 +3296,12 @@ getvalue(int *p, program *prog){
   {
    case t_F:
    finfo_cur = prog->current_function;
-   fnum = getvalue(p,prog); if( (fnum<0 || fnum>(MAX_FUNCS-1)) || !prog->functions[fnum] ) error(prog, "getvalue: bad function call\n");
+   fnum = getvalue(p,prog);
+   if( (fnum<0 || fnum>(MAX_FUNCS-1)) || !prog->functions[fnum] ){
+    print_sourcetext_location( prog, *p);
+    printf("F: function number was %d\n",fnum);
+    error(prog, "getvalue: bad function call\n");
+   }
    func_info *finfo_new = prog->functions[fnum];
    goto getvalue_functioncall;
    
@@ -3178,7 +3424,11 @@ getvalue(int *p, program *prog){
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
-int _interpreter_ifsearch(int p, program *prog){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+_interpreter_ifsearch(int p, program *prog){
  int levelcount=1;
  while(levelcount){
   if(p>=prog->length) error(prog, "interpreter: missing endif or otherwise bad ifs\n");
@@ -3196,7 +3446,11 @@ int _interpreter_ifsearch(int p, program *prog){
  return p-1;
 }//endproc
 
-int _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+_interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen){
  int i;
  for(i=0; i<prog->length; i++){
   if( prog->tokens[i].type == t_label && !strncmp((char*)prog->tokens[i].data.pointer, labelstring, labelstringlen) ){
@@ -3215,7 +3469,11 @@ struct caseof {
  int otherwise; //position of otherwise (this will point to the 'endcase' if there was no otherwise'
 };
 
-int caseof_skippast(program *prog, int p){ // p must point to the starting 'caseof'
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+caseof_skippast(program *prog, int p){ // p must point to the starting 'caseof'
  int i = p;
  int level = 1; // 'level'
  while( (i < prog->length) && level){
@@ -3228,7 +3486,11 @@ int caseof_skippast(program *prog, int p){ // p must point to the starting 'case
  if(i == prog->length) error(prog, "caseof_skippast: missing endcase\n");
  return i;
 }
-int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the starting 'caseof'
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the starting 'caseof'
  int out=0;
  int i = p+1;
  while( i < prog->length ){
@@ -3268,7 +3530,11 @@ int caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to 
  }
  error(prog, "caseof_numwhens: this should never happen\n");
 }
-int determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes an error if neither is found
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes an error if neither is found
  int i; i=p; while( prog->tokens[i].type == t_leftb ){ i+=1; } // skip past any left brackets
  if( prog->tokens[i].type == t_id ) process_id(prog, &prog->tokens[i]); // process it if it's an id
  if( isstringvalue(prog->tokens[i].type) ) return 1; // return 1 if it's a stringvalue
@@ -3276,7 +3542,11 @@ int determine_valueorstringvalue(program *prog, int p){// this returns 0 for a v
  error(prog, "expected a value or a stringvalue\n"); // cause an error because we expected a value or a stringvalue
 }
 #define PROCESSCASEOF_RUBBISH 0
-void _interpreter_processcaseof(program *prog, int p){ int i;
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+_interpreter_processcaseof(program *prog, int p){ int i;
 //  create caseof struct.
  struct caseof *co = calloc(1, sizeof(struct caseof));
  int caseofpos = p;
@@ -3490,8 +3760,14 @@ interpreter(int p, program *prog){
    break;
   case t_C:
    {
-   char *characterpointer = C_CharacterAccess( &p, prog );
-   *characterpointer = (char) getvalue(&p,prog);
+    char *characterpointer = C_CharacterAccess( &p, prog );
+    *characterpointer = (char) getvalue(&p,prog);
+   }
+   break;
+  case t_V:
+   {
+    double *valuepointer = V_ValueAccess( &p, prog);
+    *valuepointer = getvalue(&p,prog);
    }
    break;
   case t_P:
@@ -3506,7 +3782,7 @@ interpreter(int p, program *prog){
    break;
   case t_stackaccess:
    index = prog->sp + t.data.i;
-   if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad stack access\n");
+   //if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad stack access\n");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_id:
@@ -4025,7 +4301,11 @@ interpreter(int p, program *prog){
 // ---- MAIN FUNCTION ---------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
-void sl_c__parse_argc_argv(program *prg, int argc, char **argv){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+sl_c__parse_argc_argv(program *prg, int argc, char **argv){
  add_id__error_if_fail( prg, -1, "main: failed to create _argc constant, this should never happen\n",
                         prg->ids, make_id( "_argc", maketoken_num( argc-2 ) ) );
  int i;
@@ -4049,7 +4329,11 @@ void sl_c__parse_argc_argv(program *prg, int argc, char **argv){
 }
 
 #define main_printstuff 0
-int sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info){
  SeedRng();
  //printf("sz %d\n",sizeof(token)); return 0;
  program *prg = NULL;
@@ -4105,7 +4389,11 @@ int sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_i
 }
 
 #ifndef disable_sl_c_main
-int main(int argc, char **argv){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+main(int argc, char **argv){
  char extra_version_info[100] = {0};
  #ifdef enable_graphics_extension
  strcat(extra_version_info, "Xlib graphics extension\n");

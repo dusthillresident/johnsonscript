@@ -36,6 +36,7 @@
 #define t_F		COCKSPENIS	//	F		function call
 #define t_SS		COCKSPENIS	//	S		create new unnamed stringvar (or find first unclaimed one)
 #define t_C		COCKSPENIS	//	C		character access (work with strings as byte arrays) takes two parameters, a stringvalue and a value
+#define t_V		COCKSPENIS	//	V		value access (use strings as arrays of values) takes two parameters, a stringvalue and a value
 
 #define t_Df		COCKSPENIS	//			fast variable access (basically D but with a direct pointer to the variable in token.data.pointer)
 #define t_Af		COCKSPENIS	//			fast array access (basically A but with the array start index in token.data.i)
@@ -51,6 +52,7 @@
 #define t_ascS		COCKSPENIS	//	asc$ [string]			NUM		return number for first character of string
 #define t_valS		COCKSPENIS	//	val$ [string]			NUM		return value of number in string
 #define t_lenS		COCKSPENIS	//	len$ [string]			NUM		return length of string
+#define t_vlenS		COCKSPENIS	//	vlen$ [string]			NUM		return length of string div 8, for use with V (value access)
 #define t_cmpS		COCKSPENIS	//	cmp$ [string] [string]		NUM		strcmp 
 #define t_instrS	COCKSPENIS	//	instr$ [stringa] [stringb]	NUM		return the position of stringb in stringa or -1 if not found
 // =========================================================
