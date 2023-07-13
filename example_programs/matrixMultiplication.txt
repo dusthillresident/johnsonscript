@@ -1,0 +1,169 @@
+
+print "--------------------------------";
+print "-- Matrix multiplication demo --";
+print "--------------------------------";
+print;
+
+variable m1 m2;
+
+if ! = _argc 2
+
+ print "This demo will perform matrix multiplication on two matrices entered as command line arguments.";
+ print;
+ print "For example, try this command:";
+ print _argv0 " " _argv1 "  "chr$34 "-1 -2, -2 -1" chr$34 "  " chr$34 "2 0, 2 -1" chr$34;
+ quit;
+endif
+
+set m1 stringToMatrix @$0
+set m2 stringToMatrix @$1
+
+
+print "  Matrix A:";
+printMatrix m1;
+print;
+
+print "  Matrix B:";
+printMatrix m2;
+print;
+
+print "  Result:";
+printMatrix matrixMultiply m1 m2
+print;
+
+return 0;
+
+function stringToMatrix s local p numStr w h l matrixOut currentRow x;
+ set l len$$s
+ set matrixOut S ""
+ set numStr S ""
+ set w 0
+ set p 0
+ set currentRow S ""
+
+ set x 0
+ while < p l
+
+  while &&   < p l   (||   = C$s(p) asc$"-"   && >= C$s(p)   asc$"0"   <= C$s(p) asc$"9")
+   append$ $numStr mid$ $s p 1
+   set p + p 1
+  endwhile
+
+  if len$ $numStr
+   #print "$numStr is '" $numStr "'"; wait 500;
+   append$ $currentRow value$ val$ $numStr
+   set $numStr ""
+   set x + x 1
+  endif
+
+  if || = C$s(p) asc$"," >= p - l 1
+   if w
+    if ! = w vlen$ $currentRow;
+     errorOut "stringToMatrix: all rows of a matrix must be the same length"
+    endif
+   else
+    set w vlen$ $currentRow
+   endif
+   #print "appended:";
+   #printVector currentRow;
+   append$ $matrixOut value$ currentRow;
+   set currentRow S ""
+  endif
+
+  set p + p 1
+ endwhile
+ 
+ option "unclaim" numStr
+ option "unclaim" currentRow
+
+return matrixOut
+
+function initVector v ... local i;
+ set $v string$ <<(- _num_params 1)3 chr$0
+ set i 1
+ while < i _num_params
+  set V$v(- i 1) P(i)
+  set i + i 1
+ endwhile
+return v
+
+function errorOut msg;
+sput _stderr $msg chr$10;
+quit 1
+
+function printVector v local i;
+ set i 0
+ while < i vlen$ $v
+  sput _stdout str$ V$v(i) " "
+  set i + i 1
+ endwhile
+ print;
+endfunction
+
+function vectorDotProduct a b local l i result;
+ set l vlen$$a
+ if ! = l vlen$$b
+  errorOut @"vectorDotProduct: vector lengths don't match"
+ endif
+ set result 0
+ set i 0
+ while < i l
+  set result + result * V$a(i) V$b(i)
+  set i + i 1
+ endwhile
+return result
+
+function freeMatrix m local i l;
+ set l vlen$$m
+ set i 0
+ while < i l
+  option "unclaim" V$m(i)
+  set i + i 1
+ endwhile
+endfunction
+
+function printMatrix m local x y w h;
+ set h vlen$$m
+ set w vlen$ $ V$m(0)
+ set y 0
+ while < y h
+  set x 0
+  while < x w
+   sput _stdout cat$ " " str$ V$V$m(y)(x)
+   set x + x 1
+  endwhile
+  sput _stdout chr$10
+  set y + y 1
+ endwhile
+endfunction
+
+function matrixMultiply a b local y1 x2 j y  i m n c tempVec;
+ set i vlen$ $ a
+ set m vlen$ $ V$a(0)
+ if ! = m vlen$ $ b
+  errorOut @"width of A must equal height of B"
+ endif
+ set n vlen$ $ V$b(0)
+ set c S string$ (<< i 3) chr$0
+ set tempVec S string$ (<< m 3) chr$0
+ set y 0
+ while < y i
+  set V$c(y) S string$ (<< n 3) chr$0
+  set y + y 1
+ endwhile
+ set y1 0
+ while < y1 i 
+  set x2 0
+  while < x2 n
+   set j 0
+   while < j m
+    set V$tempVec(j) V$(V$b(j))(x2)
+    set j + j 1
+   endwhile
+   set V$(V$c(y1))(x2)  vectorDotProduct (V$a(y1)) tempVec
+   set x2 + x2 1
+  endwhile
+  set y1 + y1 1
+ endwhile
+ option "unclaim" tempVec
+return c
