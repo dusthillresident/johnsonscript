@@ -132,7 +132,7 @@ function printMatrix m local x y w h;
  while < y h
   set x 0
   while < x w
-   sput _stdout cat$ " " str$ V$V$m(y)(x)
+   sput _stdout cat$ "	" str$ V$V$m(y)(x)
    set x + x 1
   endwhile
   sput _stdout chr$10
