@@ -82,7 +82,7 @@ function stringToMatrix s local p numStr w h l matrixOut currentRow x;
 return matrixOut
 
 function initVector v ... local i;
- set $v string$ <<(- _num_params 1)3 chr$0
+ set $v string$ (- _num_params 1) vector$ 0
  set i 1
  while < i _num_params
   set V$v(- i 1) P(i)
@@ -147,11 +147,11 @@ function matrixMultiply a b local y1 x2 j y  i m n c tempVec;
   errorOut @"width of A must equal height of B"
  endif
  set n vlen$ $ V$b(0)
- set c S string$ (<< i 3) chr$0
- set tempVec S string$ (<< m 3) chr$0
+ set c S string$ i vector$ 0
+ set tempVec S string$ m vector$ 0
  set y 0
  while < y i
-  set V$c(y) S string$ (<< n 3) chr$0
+  set V$c(y) S string$ n vector$ 0
   set y + y 1
  endwhile
  set y1 0
