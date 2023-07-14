@@ -41,6 +41,8 @@ function stringToMatrix s local p numStr w h l matrixOut currentRow x;
  set p 0
  set currentRow S ""
 
+ set s S cat$ $s ","
+
  set x 0
  while < p l
 
@@ -51,22 +53,22 @@ function stringToMatrix s local p numStr w h l matrixOut currentRow x;
 
   if len$ $numStr
    #print "$numStr is '" $numStr "'"; wait 500;
-   append$ $currentRow value$ val$ $numStr
+   append$ $currentRow vector$ val$ $numStr
    set $numStr ""
    set x + x 1
   endif
 
-  if || = C$s(p) asc$"," >= p - l 1
+  if ||  >= p (- l 1)  = C$s(p) asc$","
    if w
     if ! = w vlen$ $currentRow;
-     errorOut "stringToMatrix: all rows of a matrix must be the same length"
+     errorOut @"stringToMatrix: all rows of a matrix must be the same length"
     endif
    else
     set w vlen$ $currentRow
    endif
    #print "appended:";
    #printVector currentRow;
-   append$ $matrixOut value$ currentRow;
+   append$ $matrixOut vector$ currentRow;
    set currentRow S ""
   endif
 
@@ -75,6 +77,7 @@ function stringToMatrix s local p numStr w h l matrixOut currentRow x;
  
  option "unclaim" numStr
  option "unclaim" currentRow
+ option "unclaim" s
 
 return matrixOut
 
