@@ -152,6 +152,21 @@ Johnson_C_CharacterAccess( SVL svl, int index )
  return svl.buf + index;
 }
 
+double*
+#ifdef JOHNSON_PARAMETERS_REVERSED
+Johnson_V_ValueAccess( int index, SVL svl )
+#else
+Johnson_V_ValueAccess( SVL svl, int index )
+#endif
+{
+ int l = svl.len >> 3;
+ if( index<0 || index>=l ){
+  printf("Johnsonscript error: C (characteraccess): index out of range\n");
+  exit(0);
+ }
+ return ((double*)svl.buf) + index;
+}
+
 SVR **StringAcc;
 int max_stringacc = 32;
 
@@ -220,6 +235,20 @@ void AppendSVLtoSVR( SVR *svr, SVL a){
 
 void ClearSVR( SVR *svr ){
  svr->len=0;
+}
+
+void AppendS( SVR *svr, SVL svl){
+ if( svr->len + svl.len + 1 >= svr->bufsize ){
+  if( svl.buf >= svr->buf && svl.buf < svr->buf+svr->len ){
+   size_t ptr_offset = svl.buf - svr->buf;
+   ExpandSVR( svr, svr->len + svl.len + 1);
+   svl.buf = svr->buf + ptr_offset;
+  }else{
+   ExpandSVR( svr, svr->len + svl.len + 1);
+  }
+ }
+ memcpy( svr->buf + svr->len, svl.buf, svl.len );
+ svr->len += svl.len;
 }
 
 
@@ -380,6 +409,27 @@ SVL ChrS( int sa_l, char c )
  SVR *Acc = NewStrAccLevel( sa_l );
  // ----------
  SetSVR( Acc, (SVL){ 1, &c } );
+ // ----------
+ if( sa_l == 0 ){
+  SAL=-1;
+ }
+ return SVRtoSVL( Acc );
+}
+
+#ifdef JOHNSON_PARAMETERS_REVERSED
+SVL VectorS( double v[], int n, int sa_l )
+#else
+SVL VectorS( int sa_l, double v[], int n )
+#endif
+{
+ SVR *Acc = NewStrAccLevel( sa_l );
+ // ----------
+ size_t vector_size = n*8;
+ if( vector_size >= Acc->bufsize ){
+  ExpandSVR(Acc, vector_size);
+ }
+ Acc->len = vector_size;
+ memcpy(Acc->buf, v, vector_size);
  // ----------
  if( sa_l == 0 ){
   SAL=-1;
@@ -808,6 +858,8 @@ void Johnson_Seedrnd(int v[3]){
 // ----------------------------------------------------------------------------------------------
 
 int Johnson_Argc = 0;
+SVR *Johnson_Argv0 = NULL;
+SVR *Johnson_Argv1 = NULL;
 
 void Johnsonlib_init(int argc, char **argv){
  int i;
@@ -843,6 +895,8 @@ void Johnsonlib_init(int argc, char **argv){
   SetSVR( NewStringvar_svrp(), ToSVL( argv[i] ) );
  }
  Johnson_Argc = argc-1;
+ Johnson_Argv0 = NewStringvar_svrp(); SetSVR( Johnson_Argv0, ToSVL(argv[0]));
+ Johnson_Argv1 = NewStringvar_svrp(); SetSVR( Johnson_Argv1, ToSVL(""));
  // seed random number generator
  SeedRng();
 }
@@ -853,6 +907,22 @@ int main(int argc,char **argv){
  // ----- init ------------
  Johnsonlib_init(argc,argv);
  // -----------------------
+
+ int n = NewStringvar();
+ SVR *svr = StringVars[n];
+ SetSVR(svr, ToSVL( "magic penis" ));
+ AppendS(svr, ToSVL( ", penis magic "));
+ AppendS(svr, MidS( SVRtoSVL(svr), 6, 5));
+ AppendS(svr, ToSVL("\n"));
+ PrintSVL( SVRtoSVL(svr) );
+ int i;
+ SVL penismagic = ToSVL("penismagic");
+ for(i=0; i<10000000; i++){
+  //AppendS(svr, penismagic);
+  AppendS(svr, MidS( SVRtoSVL(svr), 6, 5));
+ }
+
+
  #if 0
  int filehandle = Johnson_OpenFile( LeftS( ToSVL((char[]){"filewritetest.txtFUCK"}), 17 ) , J_OPENOUT);
  if( filehandle ){
@@ -862,10 +932,10 @@ int main(int argc,char **argv){
  }
  //printf("%s\n", (char[]){"what happens if I do this?"} );
  #else
- int filehandle = Johnson_OpenFile( LeftS( ToSVL((char[]){"filewritetest.txtFUCK"}), 17 ) , J_OPENIN);
- PrintSVL( Johnson_Sget( filehandle, -1, ++SAL ) );
+ //int filehandle = Johnson_OpenFile( LeftS( ToSVL((char[]){"filewritetest.txtFUCK"}), 17 ) , J_OPENIN);
+ //PrintSVL( Johnson_Sget( filehandle, -1, ++SAL ) );
+ //Johnson_Close(filehandle);
  #endif
- Johnson_Close(filehandle);
  //Johnson_Sput(2, ToSVL("should be stdout\n"));
  return 0;
 }

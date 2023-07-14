@@ -453,6 +453,28 @@ void translate_stringvalue(program *prog, int *p){
     PrintMain(")");
    }
    break;
+  case t_vectorS:
+   {
+    if(trans_reverse_function_params){
+     PrintMain("VectorS( (double[]){ ");
+    }else{
+     PrintMain("VectorS( ++SAL, (double[]){ ");
+    }
+    int n = 1;
+    *p += 1;
+    translate_value(prog, p);
+    while( isvalue( CurTok.type) ){
+     PrintMain(", ");
+     translate_value(prog, p);
+     n += 1;
+    }
+    if(trans_reverse_function_params){
+     PrintMain("}, %d, ++SAL)", n);
+    }else{
+     PrintMain("}, %d )", n);
+    }
+   }
+   break;
   case t_strS:
    if( trans_reverse_function_params ){
     PrintMain("StrS(");
@@ -729,6 +751,16 @@ void translate_value(program *prog, int *p){
    PrintMain(").len");
    PrintMain(")");
   } break;
+ case t_vlenS:
+  {
+   *p += 1;
+   PrintMain("(double)");
+   PrintMain("(");
+   PrintMain("(");
+   translate_stringvalue(prog, p);
+   PrintMain(").len>>3");
+   PrintMain(")");
+  } break;
  case t_valS:
   {
    // if val$ has a constant as input, we can just evaluate that right now and make the translated program simpler
@@ -853,6 +885,18 @@ void translate_value(program *prog, int *p){
     PrintMain( "*Johnson_C_CharacterAccess( %s, %s )", index, s );
    }else{
     PrintMain( "*Johnson_C_CharacterAccess( %s, %s )", s, index );
+   }
+   free(s); free(index);
+  } break;
+ case t_V:
+  {
+   *p += 1;
+   char *s     = trans__transstringval_into_tempbuf( prog, p );
+   char *index =       trans__transval_into_tempbuf( prog, p );
+   if( trans_reverse_function_params ){
+    PrintMain( "*Johnson_V_ValueAccess( %s, %s )", index, s );
+   }else{
+    PrintMain( "*Johnson_V_ValueAccess( %s, %s )", s, index );
    }
    free(s); free(index);
   } break;
@@ -1370,13 +1414,19 @@ void translate_command(program *prog, int *p){
  case t_wait:
   {
    *p += 1;
-   #ifdef enable_graphics_extension 
-   PrintMain("{ // 'wait' command\n");
-   PrintMain("double waitv = "); translate_value(prog,p); PrintMain(";\n");
-   PrintMain("if( newbase_is_running && newbase_allow_fake_vsync && ((int)waitv==16) ){\n");
-   PrintMain("newbase_fake_vsync_request=1;\nwhile( newbase_fake_vsync_request ) usleep(4);\n");
-   PrintMain("} else usleep((int)( waitv*1000 ));\n");
-   PrintMain("}\n");
+   #ifdef enable_graphics_extension
+   if( trans_program_uses_gfx ){
+    PrintMain("{ // 'wait' command\n");
+    PrintMain("double waitv = "); translate_value(prog,p); PrintMain(";\n");
+    PrintMain("if( newbase_is_running && newbase_allow_fake_vsync && ((int)waitv==16) ){\n");
+    PrintMain("newbase_fake_vsync_request=1;\nwhile( newbase_fake_vsync_request ) usleep(4);\n");
+    PrintMain("} else usleep((int)( waitv*1000 ));\n");
+    PrintMain("}\n");
+   }else{
+    PrintMain("usleep( 1000 * (");
+    translate_value(prog,p);
+    PrintMain(") );\n");
+   }
    #else
    PrintMain("usleep( 1000 * (");
    translate_value(prog,p);
@@ -1922,6 +1972,33 @@ void translate_command(program *prog, int *p){
    PrintMain("}else{\n");
    *p += 1;
   } break;
+ case t_appendS:
+  {
+   *p += 1;
+   if( CurTok.type == t_id ) translate_processid(prog, p);
+   PrintMain("{ // append$\nSVR *appendTo = ");
+   if( CurTok.type == t_Sf ){
+    TransTable *ttab = (TransTable*)prog->tokens[ *p ].data.pointer;
+    if(!ttab->set){
+     ErrorOut("append$: error: '%s'\n", ttab->set_s);
+    }
+    PrintMain("%s ;\n",ttab->set_s);
+    *p += 1;
+   }else if(CurTok.type == t_S){
+    *p += 1;
+    PrintMain("Johnson_stringvar_deref( ");   
+    translate_value(prog, p);
+    PrintMain(");\n");   
+   }else{
+    ErrorOut( "bad use of append$" );
+   }
+   do{
+    PrintMain("AppendS( appendTo, ");
+    translate_stringvalue(prog, p);
+    PrintMain(");\n");
+   }while( isstringvalue(CurTok.type) );
+   PrintMain("}\n");
+  } break;
  case t_set: 
   {
    // ==================================
@@ -1982,6 +2059,14 @@ void translate_command(program *prog, int *p){
      PrintMain(" *(&");
      translate_value(prog, p);
      PrintMain(") = (char)(int) ");
+     translate_value(prog, p);
+     PrintMain(";\n");
+    } break;
+   case t_V:
+    {
+     PrintMain(" *(&");
+     translate_value(prog, p);
+     PrintMain(") = ");
      translate_value(prog, p);
      PrintMain(";\n");
     } break;
@@ -2736,6 +2821,24 @@ void translate_program(program *prog){
  { // prepare Argc id
   TransTable *ttab = MakeTransTable(1,"(double)Johnson_Argc", 0,"Can't ref _argc", 0,"_argc cannot be set", NULL);
   trans_add_id(prog->ids, make_id( "_argc", maketoken_Df( (double*)ttab ) ) );
+  // prepare _argv0 and _argv1
+  TransTable *tt_argv0
+   =
+   MakeTransTable(
+    1, "SVRtoSVL(Johnson_Argv0)",
+    1, "(Johnson_Argv0->string_variable_number)",
+    1, "Johnson_Argv0",
+    NULL);
+  trans_add_id(prog->ids, make_id( "_argv0", maketoken_Sf( (stringvar*)tt_argv0 ) ) );
+  // argv 1
+  TransTable *tt_argv1
+   =
+   MakeTransTable(
+    1, "SVRtoSVL(Johnson_Argv1)",
+    1, "(Johnson_Argv1->string_variable_number)",
+    1, "Johnson_Argv1",
+    NULL);
+  trans_add_id(prog->ids, make_id( "_argv1", maketoken_Sf( (stringvar*)tt_argv1 ) ) );
  }
 
  p=0; trans_functions_start_p = -1;

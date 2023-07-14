@@ -18,7 +18,7 @@
 
 #ifndef DISABLE_ALIGN_STUFF
  // this is for testing. I discovered that messing with __attribute__((aligned(x))) can make a difference to how fast things run
- #define ALIGN_ATTRIB_CONSTANT 8
+ #define ALIGN_ATTRIB_CONSTANT 16
 #endif
 
 // memory problem debugging stuff
@@ -1527,6 +1527,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  if( wordmatch_plus_whitespace( pos,"set", text) ){	//	
   out = maketoken( t_set ); goto gettoken_normalout;
  }
+ if( wordmatch_plus_whitespace( pos,"append$", text) ){	//	
+  out = maketoken( t_appendS ); goto gettoken_normalout;
+ }
  if( wordmatch_plus_whitespace( pos,"function", text) ){	//	
   out = maketoken( t_deffn ); goto gettoken_normalout;
  }
@@ -1633,6 +1636,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
  if( wordmatch( pos,"vlen$", text) ){	//	vlen$
   out = maketoken( t_vlenS ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"vector$", text) ){	//	vlen$
+  out = maketoken( t_vectorS ); goto gettoken_normalout;
  }
  if( wordmatch( pos,"cmp$", text) ){	//	cmp$ (strcmp)
   out = maketoken( t_cmpS ); goto gettoken_normalout;
@@ -2165,8 +2171,9 @@ tokenstring(token t){
  case t_endif: case t_endiff:		return "endif";
 
  case t_set:		return "set";
+ case t_appendS:	return "append$";
 
- case t_land:		return "&&";
+ case t_land: case t_landf: return "&&";
  case t_lor:		return "||";
  case t_lnot:		return "!";
 
@@ -2189,6 +2196,7 @@ tokenstring(token t){
  case t_vlenS:		return "vlen$";
  case t_cmpS:		return "cmp$";
  case t_instrS:		return "instr$";
+ case t_vectorS:		return "vector$";
 
  // ------ file stuff ------------------
  case t_openin:		return "openin";
@@ -2430,7 +2438,7 @@ getstringvalue( program *prog, int *pos ){
  token t;
  getstringvalue_start:
  t = prog->tokens[ *pos ]; *pos += 1;
- switch( t.type){
+ switch( t.type ){
  case t_S:
  {
   int stringvar_num = (int)getvalue(pos,prog);
@@ -2599,6 +2607,25 @@ getstringvalue( program *prog, int *pos ){
   *pos += 1;
   return out;
  }
+ case t_vectorS:
+ {
+  double *vectorp = (double*)accumulator->string;
+  accumulator->len = 8;
+  *vectorp++ = getvalue(pos, prog);
+  while( isvalue( prog->tokens[*pos].type ) ){
+   *vectorp++ = getvalue(pos, prog);
+   accumulator->len += 8;
+   if( accumulator->bufsize - accumulator->len < 32 ){
+    size_t ptr_offset = (void*)vectorp - (void*)accumulator->string;
+    stringvar_adjustsizeifnecessary(accumulator, accumulator->bufsize+32, 1);
+    vectorp = (double*)(accumulator->string + ptr_offset);
+   }
+  }
+  stringval out;
+  out.len=accumulator->len;
+  out.string=accumulator->string;
+  return out;
+ }
  case t_sget: // sget [fp] ([optional parameter n])
  {            // If n is greater than 0, it represents the number of bytes to be read. Else, it represents a specific string terminating value. (n <= -256) will read until EOF
   file *f = getfile(prog, getvalue(pos,prog), 1,0);
@@ -2725,7 +2752,7 @@ C_CharacterAccess(int *p, program *prog){
  stringval svl; int index;
  svl = getstringvalue(prog,p);
  index = getvalue(p,prog);
- if(index<0 || index > svl.len ){
+ if(index<0 || index >= svl.len ){
   print_sourcetext_location( prog, *p - 1);
   error(prog, "C (characteraccess): index out of range\n");
  }//endif
@@ -2905,25 +2932,53 @@ getvalue(int *p, program *prog){
   b=getvalue(p,prog);
   return a==b;
  }
-
+ case t_landf:
+ {
+  int jumpindex = t.data.i;
+  while( isvalue( prog->tokens[*p].type ) ){
+   if( !(int)getvalue(p,prog) ){
+    *p = jumpindex;
+    return 0;
+   }
+  }
+  return 1;
+ }
  case t_land:
  {
-  int out=getvalue(p, prog);
+  int oldp = *p - 1;
+  int out = (int)getvalue(p, prog); out = (int)getvalue(p, prog) && out; // '&&' takes at least two parameters
   double v;
   while( isvalue( prog->tokens[*p].type ) ){
-   v = getvalue(p, prog);
+   v=getvalue(p, prog);
    out = out && (int)v;
   }
+  prog->tokens[oldp].type = t_landf;
+  prog->tokens[oldp].data.i = *p;
   return (double)out;
+ }
+ case t_lorf:
+ {
+  int jumpindex = t.data.i;
+  double v;
+  while( isvalue( prog->tokens[*p].type ) ){
+   if( (int)getvalue(p,prog) ){
+    *p = jumpindex;
+    return 1;
+   }
+  }
+  return 0;
  }
  case t_lor:
  {
-  int out=getvalue(p, prog);
+  int oldp = *p - 1;
+  int out = (int)getvalue(p, prog); out = (int)getvalue(p, prog) || out; // '||' takes at least two parameters
   double v;
   while( isvalue( prog->tokens[*p].type ) ){
-   v = getvalue(p, prog);
+   v=getvalue(p, prog);
    out = out || (int)v;
   }
+  prog->tokens[oldp].type = t_lorf;
+  prog->tokens[oldp].data.i = *p;
   return (double)out;
  }
  case t_lnot:
@@ -3860,6 +3915,47 @@ interpreter(int p, program *prog){
           prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( create_new_stringvar(prog,bufsize) ) ) );
   if( prog->tokens[p].type != t_endstatement ) goto t_stringvar_start;
   p+=1;
+  break;
+ }
+ case t_appendS:
+ {
+  p+=1;
+  stringvar *appendTo; stringval appendString;
+  TOKENTYPE_TYPE type = prog->tokens[p].type;
+  if(type==t_id){
+   process_id(prog, &prog->tokens[p]);
+   type = prog->tokens[p].type;
+  }
+  if(type==t_Sf){
+   appendTo = prog->tokens[p].data.pointer;
+   p+=1;
+  }else if(type==t_S){
+   p+=1;
+   int svrNum = getvalue(&p,prog);
+   if(svrNum<0 || svrNum>= prog->max_stringvars){
+    print_sourcetext_location( prog, p );
+    error(prog, "append$: bad stringvariable access\n");
+   }
+   appendTo = prog->stringvars[svrNum];
+  }else{
+   print_sourcetext_location( prog, p );
+   error(prog, "append$: not given a string variable\n");
+  }
+  do{
+   appendString = getstringvalue(prog,&p);
+   size_t len = appendString.len;
+   if( appendTo->bufsize + len + 1 >= appendTo->bufsize ){
+    if( appendString.string >= appendTo->string && appendString.string < (appendTo->string + appendTo->len) ){ // Äkta dig för Rövar-Albin
+     size_t ptr_offset = appendString.string - appendTo->string;
+     stringvar_adjustsizeifnecessary(appendTo, appendTo->bufsize + len + 1, 1);
+     appendString.string = appendTo->string + ptr_offset;
+    }else{
+     stringvar_adjustsizeifnecessary(appendTo, appendTo->bufsize + len + 1, 1);
+    }
+   }
+   memcpy( appendTo->string + appendTo->len, appendString.string, len);
+   appendTo->len += len;
+  }while( isstringvalue( prog->tokens[ p ].type ) );
   break;
  }
  case t_print: // print

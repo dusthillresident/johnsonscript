@@ -26,7 +26,9 @@
 #define t_equal		COCKSPENIS	//	=		built in function: equal		takes 2 parameters
 
 #define t_land		COCKSPENIS	//	&&		built in function: logical and		takes at least 2 parameters
+#define t_landf		COCKSPENIS	//	&&		fast version of logical and with index to stop position in token.data.i
 #define t_lor		COCKSPENIS	//	||		built in function: logical or		takes at least 2 parameters
+#define t_lorf		COCKSPENIS	//	||		fast version of logical or with index to stop position in token.data.i
 #define t_lnot		COCKSPENIS	//	!		built in function: logical not		takes 1 parameter
 
 #define t_D		COCKSPENIS	//	D		variable access (access the vars array)		takes 1 parameter
@@ -36,7 +38,7 @@
 #define t_F		COCKSPENIS	//	F		function call
 #define t_SS		COCKSPENIS	//	S		create new unnamed stringvar (or find first unclaimed one)
 #define t_C		COCKSPENIS	//	C		character access (work with strings as byte arrays) takes two parameters, a stringvalue and a value
-#define t_V		COCKSPENIS	//	V		value access (use strings as arrays of values) takes two parameters, a stringvalue and a value
+#define t_V		COCKSPENIS	//	V		value access (use strings as vectors, aka arrays of values) takes two parameters, a stringvalue and a value
 
 #define t_Df		COCKSPENIS	//			fast variable access (basically D but with a direct pointer to the variable in token.data.pointer)
 #define t_Af		COCKSPENIS	//			fast array access (basically A but with the array start index in token.data.i)
@@ -52,7 +54,7 @@
 #define t_ascS		COCKSPENIS	//	asc$ [string]			NUM		return number for first character of string
 #define t_valS		COCKSPENIS	//	val$ [string]			NUM		return value of number in string
 #define t_lenS		COCKSPENIS	//	len$ [string]			NUM		return length of string
-#define t_vlenS		COCKSPENIS	//	vlen$ [string]			NUM		return length of string div 8, for use with V (value access)
+#define t_vlenS		COCKSPENIS	//	vlen$ [string]			NUM		return length of string div 8, for use with vectors aka V (value access)
 #define t_cmpS		COCKSPENIS	//	cmp$ [string] [string]		NUM		strcmp 
 #define t_instrS	COCKSPENIS	//	instr$ [stringa] [stringb]	NUM		return the position of stringb in stringa or -1 if not found
 // =========================================================
@@ -170,6 +172,7 @@
 #define t_oscli			COCKSPENIS	//	oscli [stringvalue];	system("string");
 #define t_quit			COCKSPENIS	//	quit ([value]);		exit(value);
 // ---------------------------------------------
+#define t_appendS		COCKSPENIS	//	append$ [stringvar] [stringvalue]		append to string variables
 #define t_extcom		COCKSPENIS	//	external command, used for extensions
 // ----- commands related to file handling -----
 #define t_sptr			COCKSPENIS	//	sptr [filenumber] [value] ;			set position in file to [value]
@@ -203,6 +206,7 @@
 #define t_S			COCKSPENIS	//	$		string variable dereference
 #define t_Sf			COCKSPENIS	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
 #define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
+#define t_vectorS		COCKSPENIS	//	vector$ [num] [...]		STR		return string containing vector string, meant for use with 'V' (vectors)
 #define t_extsfun		COCKSPENIS	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_extsfun
