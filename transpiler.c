@@ -123,6 +123,12 @@ void LoadTM(TransBuf buf){
 
 void SetTM(char *s, int p){trans_main=s;trans_main_p=p;}
 
+char* trans__double_into_tempbuf( double v ){
+ char *out = malloc(32768);
+ sprintf(out,"%a",v);
+ return out;
+}
+
 char* trans__transval_into_tempbuf( program *prog, int *p ){
  char *out = calloc(1*1024*32,sizeof(char)); 
  TransBuf tmhold = SaveTM();
@@ -231,7 +237,7 @@ void translate__process_id(program *prog, token *t){
   }
   #endif
   // ----
-  int gpos = (prog->current_function == &initial_function) ? lpos : trans_function_gposses[ prog->current_function->function_number ] ;
+  int gpos = (prog->current_function == &prog->initial_function) ? lpos : trans_function_gposses[ prog->current_function->function_number ] ;
   if( findd->gpos > gpos || (findd->gpos == gpos && findd->lpos > lpos ) ){
    trans_print_sourcetext_location( prog, (int) (t - prog->tokens) );
    fprintf(stderr,"it looks like this id '%s' of type '%s' is being referenced before its declaration\n", (char*)t->data.pointer, findd->desc);
@@ -1215,6 +1221,8 @@ void translate_value(program *prog, int *p){
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
+/*
+// obsolete
 int expression_is_simple(program *prog, int p){
  if( prog->tokens[ p ].type == t_number ){ 
   return 1;
@@ -1240,6 +1248,7 @@ int expression_is_simple(program *prog, int p){
  }
  return 1;
 }
+*/
 
 int trans_caseof_num = 0;
 
@@ -1402,6 +1411,74 @@ void translate_command(program *prog, int *p){
  #endif
  trans_com_start:
  switch( prog->tokens[ *p ].type ){
+ case t_for:
+  {
+   *p += 1;
+   if( CurTok.type != t_id ){
+    ErrorOut("for: not given an id for a loop variable\n");
+   }
+   translate_processid(prog, p);
+   switch( CurTok.type ){
+    case t_Df: case t_stackaccess: break;
+    default: {
+     ErrorOut("for: not given a loop variable\n");
+    }
+   }
+   char *loopvar = trans__transval_into_tempbuf( prog, p );
+   char *fromval = NULL;
+   char *toval = NULL;
+   char *stepval = NULL;
+   // from val
+   if( expressionIsSimple( prog, *p ) ){
+    fromval = trans__double_into_tempbuf(getvalue(p,prog));
+   }else{
+    fromval = trans__transval_into_tempbuf( prog, p );
+   }
+   // to val
+   int to_is_constant = 0;
+   if( expressionIsSimple( prog, *p ) ){
+    to_is_constant=1;
+    toval = trans__double_into_tempbuf(getvalue(p,prog));
+   }else{
+    toval = trans__transval_into_tempbuf( prog, p );
+   }
+   // step val
+   int step_is_constant = 0;
+   if( CurTok.type != t_endstatement ){
+    if( expressionIsSimple( prog, *p ) ){ 
+     step_is_constant=1;
+     stepval = trans__double_into_tempbuf(getvalue(p,prog));
+    }else{
+     stepval = trans__transval_into_tempbuf( prog, p );
+    }
+   }else{
+    step_is_constant = 1;
+    stepval = trans__double_into_tempbuf( 1.0 );
+   }
+   // ok
+   PrintMain( "{\ndouble fromval = %s; double toval = %s; double stepval = %s; %s = fromval;\n", fromval, toval, stepval, loopvar );
+   PrintMain( "if(stepval==0){ fprintf(stderr,\"for step can't be 0\\n\"); exit(1); }\n" );
+   PrintMain( "while( stepval>0 ? %s<=toval : %s>=toval ){\n",loopvar,loopvar  );
+   while( CurTok.type != t_endfor ){
+    translate_command(prog,p);
+   }
+   {
+    PrintMain("{\n%s += %s;\n",loopvar,stepval);
+    if(!step_is_constant) PrintMain("stepval = %s;\n",stepval);
+    if(!to_is_constant)   PrintMain("toval = %s;\n",toval);
+    PrintMain("}\n");
+   }
+   PrintMain("} // endfor\n}\n");
+   *p += 1;
+   free(loopvar);
+   free(fromval);
+   free(toval);
+   free(stepval);
+  } break;
+ case t_endfor:
+  {
+   ErrorOut("'endfor' encountered, this is not supposed to happen. likely a broken 'for' loop structure\n");
+  } break;
  case t_oscli:
   {
    *p += 1;
@@ -1723,7 +1800,7 @@ void translate_command(program *prog, int *p){
     translate_value(prog, p);
     PrintMain("]->claimed = 0;\n");
    }else if( TheseStringsMatch(opstr, "vsize") ){
-    if( expression_is_simple( prog, *p ) ){
+    if( expressionIsSimple( prog, *p ) ){
      trans_vsize = 1+(int)getvalue(p,prog);
     }else{
      trans_print_sourcetext_location( prog, *p);
@@ -2217,7 +2294,7 @@ void translate_command(program *prog, int *p){
     *p += 1;
     break;
    }
-   if( expression_is_simple( prog, *p ) ){ // if it looks like a very simple expression
+   if( expressionIsSimple( prog, *p ) ){ // if it looks like a very simple expression
     double value = getvalue(p,prog);
     trans_add_id(prog->ids, make_id( idstring, maketoken_num(value) ) );
     break;
@@ -2266,20 +2343,21 @@ void translate_command(program *prog, int *p){
  case t_print:
   {
    *p += 1;
-   while( prog->tokens[ *p ].type != t_endstatement ){
+   while( isvalue(CurTok.type) || isstringvalue(CurTok.type) ){
+    //tb(); printf("printing: %s\n",tokenstring(CurTok));
     if( translate_determine_valueorstringvalue(prog, *p) ){ //stringvalue
      PrintMain("PrintSVL(");
      translate_stringvalue(prog, p);
      PrintMain(");");
     }else{ //value
-    PrintMain("{ double value =");
-    translate_value(prog, p);
-    PrintMain(";\n");
-    PrintMain("if( !Johnson_isnan(value) && value == (double)(int)value ){ printf(\"%%d\",(int)value); }else{ printf(\"%%f\",value); }\n");
-    PrintMain("}\n");
-    }
-   }
-   *p += 1;
+     PrintMain("{ double value =");
+     translate_value(prog, p);
+     PrintMain(";\n");
+     PrintMain("if( !Johnson_isnan(value) && value == (double)(int)value ){ printf(\"%%d\",(int)value); }else{ printf(\"%%f\",value); }\n");
+     PrintMain("}\n");
+    }//endif value or string value
+   }//endwhile values and stringvalues
+   *p += (CurTok.type == t_endstatement);
    PrintMain("printf(\"\\n\");\n");
   } break;
  case t_deffn:
@@ -2292,7 +2370,7 @@ void translate_command(program *prog, int *p){
    }
 
    { // let's do this now instead
-    prog->current_function = &initial_function;
+    prog->current_function = &prog->initial_function;
     token t = trans_peek_id(prog,&prog->tokens[*p]);
     if( t.type != t_Ff ){
      trans_print_sourcetext_location( prog, *p);
@@ -2670,7 +2748,7 @@ int _translate_preprocess_declarations(program *prog,func_info *f, int *already,
  int loop_level=0;
  while(p<prog->length){
 #if DISABLE_THIS_GPOS_THING
-  if( f == &initial_function ){ _translate_preprocess_declarations_gposval = p; }
+  if( f == &prog->initial_function ){ _translate_preprocess_declarations_gposval = p; }
 #endif
   switch(prog->tokens[p].type){
   case t_while:
@@ -2725,7 +2803,7 @@ int _translate_preprocess_declarations(program *prog,func_info *f, int *already,
 
 void translate_preprocess_declarations(program *prog){
  int *already; already = calloc(MAX_FUNCS,sizeof(int));
- _translate_preprocess_declarations(prog,&initial_function, already, 0);
+ _translate_preprocess_declarations(prog,&prog->initial_function, already, 0);
  free(already);
 }
 
@@ -2804,6 +2882,7 @@ void translate_program(program *prog){
  BlockValidityCheck(prog, t_if, t_endif);
  BlockValidityCheck(prog, t_while, t_endwhile);
  BlockValidityCheck(prog, t_caseof, t_endcase);
+ BlockValidityCheck(prog, t_for, t_endfor);
  trans_reverse_function_params = does_this_arch_use_reverse_order_evaluation_of_function_params();
  //trans_reverse_function_params=1;
  #if TRANS_CRASHDEBUG 

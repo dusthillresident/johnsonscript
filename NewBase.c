@@ -1129,6 +1129,12 @@ void NB_CopyBmpN(char *s, size_t n){
 
 
 void NewBase_MyInit(int winwidth,int winheight,int enablethreading){
+ if(winwidth<1){
+  winwidth = 1;
+ }
+ if(winheight<1){
+  winheight = 1;
+ }
  if(newbase_is_running) return;
  if(enablethreading){
   if( !XInitThreads() ){
@@ -2296,8 +2302,8 @@ int NewBase_HandleEvents(int EnableBlocking){
 void SetWindowSize(int w, int h){
  if(!newbase_is_running)return;
  XWindowChanges xwc;
- xwc.width = w;
- xwc.height = h;
+ xwc.width = w<1 ? 1 : w;
+ xwc.height = h<1 ? 1 : h;
  XConfigureWindow(Mydisplay,Mywindow, CWWidth | CWHeight, &xwc);
 }
 

@@ -158,6 +158,8 @@
 #define t_if			COCKSPENIS	//	if
 #define t_else			COCKSPENIS	//	else
 #define t_endif			COCKSPENIS	//	endif
+#define t_for			COCKSPENIS	//	for [variable_name] [start_value] [end_value] [step_value]
+#define t_endfor		COCKSPENIS	//	endfor
 #define t_set			COCKSPENIS	//	set
 #define t_var			COCKSPENIS	//	variable [identifier] ([identifier]) ... ;		declare variables	
 #define t_arr			COCKSPENIS	//	array [identifier] value;	declare an array
@@ -190,6 +192,8 @@
 #define t_iff			COCKSPENIS	//	position of matching else/endif in token.i
 #define t_elsef			COCKSPENIS	//	position of matching endif in token.i
 #define t_endiff		COCKSPENIS	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
+#define t_forf			COCKSPENIS	//	processed 'for' with pointer to forinfo in token.data.pointer
+#define t_endforf		COCKSPENIS	//	processed 'endfor' with pointer to forinfo in token.data.pointer
 // ===================================
 
 // ===== string functions & stuff that's a 'string value' ======

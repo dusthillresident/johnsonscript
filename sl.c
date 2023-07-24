@@ -91,7 +91,7 @@ struct func_info {
  int start_pos; // starting position in the tokens array
  id_info *ids; // the names of the parameters & local variables
 };
-func_info initial_function = { -1, p_exact, 0, 0, 0, NULL };
+#define INITIAL_FUNCTION_DEFINITION (func_info){ -1, p_exact, 0, 0, 0, NULL };
 //--------------------------
 
 //--------------------------
@@ -170,6 +170,7 @@ struct program {
  // ------------
  func_info *functions[MAX_FUNCS];
  func_info *current_function;
+ func_info initial_function;
  // ------------
  int getstringvalue_level;
  int max_string_accumulator_levels;
@@ -235,7 +236,8 @@ newprog(int maxlen, int vsize, int ssize){
   out->ssize=ssize;
  }
  // initialise function context
- out->current_function = &initial_function;
+ out->initial_function = INITIAL_FUNCTION_DEFINITION;
+ out->current_function = &out->initial_function;
  // initialise string accumulator 
  out->max_string_accumulator_levels = DEFAULT_STRING_ACCUMULATOR_LEVELS;
  out->string_accumulator = calloc(DEFAULT_STRING_ACCUMULATOR_LEVELS,sizeof(void*));
@@ -1549,6 +1551,13 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   out = maketoken( t_endfn ); goto gettoken_normalout;
  }
 
+ if( wordmatch_plus_whitespace( pos,"for", text) ){	//	for
+  out = maketoken( t_for ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"endfor", text) ){	//	endfor
+  out = maketoken( t_endfor ); goto gettoken_normalout;
+ }
+
  if( wordmatch_plus_whitespace( pos,"goto", text) ){	//	
   out = maketoken( t_goto ); goto gettoken_normalout;
  }
@@ -2197,6 +2206,8 @@ tokenstring(token t){
  case t_cmpS:		return "cmp$";
  case t_instrS:		return "instr$";
  case t_vectorS:		return "vector$";
+ case t_for: case t_forf: return "for";
+ case t_endfor: case t_endforf: return "endfor";
 
  // ------ file stuff ------------------
  case t_openin:		return "openin";
@@ -3508,7 +3519,9 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen){
  int i;
  for(i=0; i<prog->length; i++){
-  if( prog->tokens[i].type == t_label && !strncmp((char*)prog->tokens[i].data.pointer, labelstring, labelstringlen) ){
+  if( prog->tokens[i].type == t_label && !strncmp((char*)prog->tokens[i].data.pointer, labelstring, labelstringlen)
+       && !( ((char*)prog->tokens[i].data.pointer)[labelstringlen] ) // Äkta dig för Rövar-Albin
+    ){
    return i+1;
   }//endif
  }//next
@@ -3665,6 +3678,231 @@ _interpreter_processcaseof(program *prog, int p){ int i;
  return;
 }
 
+// FOR
+
+int expressionIsSimple(program *prog, int p){
+ if( prog->tokens[ p ].type == t_number ){ 
+  return 1;
+ }
+ int parenLevel = 0;
+ while( isvalue( prog->tokens[p].type ) || (prog->tokens[p].type==t_rightb && (parenLevel>0))  ){ 
+  switch( prog->tokens[ p ].type ){
+  case t_leftb:  parenLevel++; break;
+  case t_rightb: parenLevel--; break;
+  case t_D: case t_A: case t_L: case t_P: case t_F: case t_Ff: case t_Df: case t_SS: case t_Af: case t_stackaccess: case t_getref: case t_S: case t_Sf: case t_C: case t_V:
+  case t_ascS: case t_valS: case t_lenS: case t_cmpS: case t_instrS: case t_rnd: case t_alloc:
+  case t_openin: case t_openout: case t_openup: case t_eof: case t_bget: case t_vget: case t_ptr: case t_ext:
+  case t_extfun:
+  #ifdef enable_graphics_extension
+  case t_winw: case t_winh: case t_mousex: case t_mousey: case t_mousez: case t_readkey: case t_keypressed: case t_expose: case t_wmclose: case t_keybuffer:
+  #endif
+   return 0;
+  case t_id:
+   // peek the id, if it's just a number constant then that's okay, otherwise return 0
+   {
+    id_info *thisIdInfo = find_id(prog->ids, prog->tokens[p].data.pointer);
+    if( ! thisIdInfo ) return 0;
+    token t = thisIdInfo->t;
+    if( t.type != t_number ){
+     return 0;
+    }
+   }
+   break;
+  }
+  p += 1;
+ }
+ return 1;
+}
+
+typedef struct {
+ int type; // 0: t_Df   1: t_stackaccess
+ double *v; int stackOffset; // either the pointer to the variable (for t_Df) or offset for the variable on the stack (for t_stackaccess)
+ int fromValIsConstant; double fromVal; int fromValExpressionP; // from value
+ int toValIsConstant;   double toVal;   int toValExpressionP;   // to value
+ int stepValIsConstant; double stepVal; int stepValExpressionP; // step value
+ int start_p, end_p; // start and end positions of the loop body
+} forinfo;
+
+#if 0
+void debugforinfo( program *prog, forinfo *thisfor ){
+ printf("thisfor:\n type:%d\n v:%p\n stackOffset:%d\n fromValIsConstant:%d\n fromVal:%f\n fromValExpressionP:%d\n toValIsConstant:%d\n toVal:%f\n toValExpressionP:%d\n stepValIsConstant:%d\n stepVal:%f\n stepValExpressionP:%d\n start_p:%d\n end_p:%d\n",
+thisfor->type,
+thisfor->v,
+thisfor->stackOffset,
+thisfor->fromValIsConstant,
+thisfor->fromVal,
+thisfor->fromValExpressionP,
+thisfor->toValIsConstant,
+thisfor->toVal,
+thisfor->toValExpressionP,
+thisfor->stepValIsConstant,
+thisfor->stepVal,
+thisfor->stepValExpressionP,
+thisfor->start_p,
+thisfor->end_p
+);
+}
+#endif
+
+void _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, double *stepVal ){
+ // johnsonscript implementation of the classic 'for' loop.
+ /*
+  variable i; # the loop variable must already exist, either as a global variable made with the 'variable' command or as a local variable in a function
+  # example of a 'for' without explicit step (in which case it defaults to 1)
+  # this will print the numbers 1 2 3 4 
+  for i 1 4;
+   print "test one: " i;
+  endfor
+  print
+  # example of a 'for' with step specified
+  # this will print the numbers 1 3 5 7
+  for i 1 7 2;
+   print "test two: " i;
+  endfor
+  quit
+ */
+ 
+ forinfo *thisfor = calloc(1,sizeof(forinfo));
+ stringslist_addstring(prog->program_strings, (char *) thisfor );
+ 
+ int for_p = p; // location of the 'for' token itself
+ int endfor_p=0; // location of the 'endfor' corresponding to this 'for'
+
+ if( prog->tokens[p+1].type != t_id ){
+  error(prog,"for: not given an ID for a loop variable\n");
+ }
+ p += 1;
+ process_id(prog, &prog->tokens[p] );
+ switch( prog->tokens[p].type ){
+  case t_Df: {
+   thisfor->type = 0;
+   thisfor->v = (double*)prog->tokens[p].data.pointer;
+  }
+  break;
+  case t_stackaccess: {
+   thisfor->type = 1;
+   thisfor->stackOffset = prog->tokens[p].data.i;
+  }
+  break;
+  default: error(prog,"for: not given a loop variable\n");
+ }
+ p += 1;
+ 
+ int start_p=0,end_p=0;
+
+ int forlevel=0;
+ while(!endfor_p){
+  p+=1;
+  switch(prog->tokens[p].type){
+   case 0: {
+    error(prog, "no matching 'endfor' for this 'for'\n");
+   } break;
+   case t_endfor: {
+    if( !forlevel ){
+     endfor_p = p; 
+    }else{
+     forlevel -= 1;
+    }
+   } break;
+   case t_for: {
+    forlevel += 1;
+   } break;
+  }
+ }
+
+ end_p = endfor_p+1;
+
+ p = for_p + 2;
+
+ double for_processParam( int *constflag, int *exp_p, double *val ){
+  double result;
+  if( expressionIsSimple(prog,p) ){
+   *constflag = 1;
+   result = getvalue(&p,prog); 
+   *val = result;
+  }else{
+   *constflag = 0;
+   *exp_p = p;
+   result = getvalue(&p,prog);
+  }
+  return result;
+ } 
+
+ // ---- FROM -------
+ *fromVal = for_processParam( &thisfor->fromValIsConstant, &thisfor->fromValExpressionP, &thisfor->fromVal );
+ // ---- TO ---------
+ *toVal = for_processParam( &thisfor->toValIsConstant, &thisfor->toValExpressionP, &thisfor->toVal );
+ // ---- STEP -------
+ if( prog->tokens[p].type == t_endstatement ){
+  thisfor->stepValIsConstant = 1;
+  thisfor->stepVal = 1;
+  *stepVal = 1;
+  start_p = p+1;
+ }else{
+ 
+  *stepVal = for_processParam( &thisfor->stepValIsConstant, &thisfor->stepValExpressionP, &thisfor->stepVal );
+
+  if( prog->tokens[p].type != t_endstatement ){
+   error(prog, "for parameters list must be terminated with ';'\n");
+  }
+
+  start_p = p+1;
+
+ }
+ 
+ thisfor->start_p = start_p;
+ thisfor->end_p = end_p;
+
+ prog->tokens[for_p].type = t_forf;
+ prog->tokens[for_p].data.pointer = (void*)thisfor;
+ prog->tokens[endfor_p].type = t_endforf;
+ prog->tokens[endfor_p].data.pointer = (void*)thisfor;
+ 
+ p = for_p;
+
+ //debugforinfo(prog, thisfor);
+}
+
+double* interpreter_for_getLoopVarPtr(program *prog, forinfo *thisfor){
+ // get a pointer to the loop variable
+ double *v; 
+ if( thisfor->type ){
+  v = &prog->stack[prog->sp + thisfor->stackOffset];
+ }else{
+  v = thisfor->v;
+ }
+ return v;
+}
+
+double interpreter_for_getToVal(program *prog, forinfo *thisfor){
+ // check the "to value".
+ double toVal;
+ if( thisfor->toValIsConstant ){
+  toVal = thisfor->toVal;
+ }else{
+  int pp = thisfor->toValExpressionP;
+  toVal = getvalue(&pp, prog);
+ }
+ return toVal;
+}
+
+double interpreter_for_getStepVal(program *prog, forinfo *thisfor){
+ // check the "step value"
+ double stepVal;
+ if( thisfor->stepValIsConstant ){
+  stepVal = thisfor->stepVal;
+ }else{
+  int pp = thisfor->stepValExpressionP;
+  //debugforinfo(prog, thisfor);
+  stepVal = getvalue(&pp, prog);
+  if( stepVal == 0 ){
+   error(prog, "for: step can't be 0\n");
+  }
+ }
+ return stepVal;
+}
+
+
 // ========================================================
 // =========  INTERPRETER  ================================
 // ========================================================
@@ -3685,7 +3923,12 @@ interpreter(int p, program *prog){
  }
  case t_endwhilef:
  {
-  p=t.data.i; goto interpreter_start;
+  int pp = t.data.i;
+  if( getvalue(&pp,prog) ){
+   p = pp; goto interpreter_start;
+  }
+  p+=1;
+  break;
  } 
  case t_whilef:
  { // fast while/endwhile
@@ -3733,9 +3976,24 @@ interpreter(int p, program *prog){
   prog->tokens[s_pos].type = t_whilef;
   prog->tokens[s_pos].data.i = e_pos+1;
   prog->tokens[e_pos].type = t_endwhilef;
-  prog->tokens[e_pos].data.i = s_pos+0;
+  prog->tokens[e_pos].data.i = s_pos+1;
   //go back to the position of the while so it can be executed as normal
   p=s_pos;
+  // if this is while loop is something similar to 'while 1' or 'while 0',
+  // then we can just turn it into a 't_gotof' that doesn't waste time checking a constant value very loop
+  if( prog->tokens[s_pos+1].type == t_id ) process_id(prog,&prog->tokens[s_pos+1]);
+  if( prog->tokens[s_pos+1].type == t_number ){
+   if( prog->tokens[s_pos+1].data.number ){ // true
+    prog->tokens[s_pos].type = t_endstatement;
+    prog->tokens[s_pos+1].type = t_endstatement;
+    prog->tokens[e_pos].type = t_gotof;
+    prog->tokens[e_pos].data.i = s_pos+2+(prog->tokens[s_pos+2].type==t_endstatement);
+   }else{ // false
+    prog->tokens[s_pos].type = t_gotof;
+    prog->tokens[s_pos].data.i = e_pos+1;
+    prog->tokens[e_pos].type = t_endstatement;
+   }
+  }
   break;
  }
  case t_endwhile:
@@ -3787,6 +4045,90 @@ interpreter(int p, program *prog){
   p = _interpreter_ifsearch(p+1, prog);
   break;
  }
+ // ========================================================
+ // =========  FOR  ========================================
+ // ========================================================
+ // t_for: encountering a new for
+ case t_for: {
+  double fromVal, toVal, stepVal, *v;
+  _interpreter_processfor(prog, p, &fromVal, &toVal, &stepVal );
+  forinfo *thisfor = (forinfo*)prog->tokens[p].data.pointer;
+  v = interpreter_for_getLoopVarPtr(prog, thisfor);
+  //printf("%p\n",v);
+  *v = fromVal;
+  if( stepVal>0 ? (*v>toVal) : (*v<toVal) ){
+   // condition already met, skip past the loop body
+   p = thisfor->end_p;
+  }else{
+   p = thisfor->start_p;
+  }
+ } break;
+ // t_forf: working on a fully processed for
+ case t_forf: { // entering a for loop.
+  forinfo *thisfor = (forinfo*)t.data.pointer;
+  // get a pointer to the loop variable
+  double *v = interpreter_for_getLoopVarPtr(prog, thisfor);
+  // initialise the loop variable
+  if( thisfor->fromValIsConstant ){
+   *v = thisfor->fromVal;
+  }else{
+   int pp = thisfor->fromValExpressionP;
+   *v = getvalue(&pp, prog);
+  }
+  // check the "to value".
+  double toVal = interpreter_for_getToVal(prog, thisfor);
+  // check the "step value"
+  double stepVal = interpreter_for_getStepVal(prog, thisfor);
+  // Check the condition. We won't execute the loop body at all if the stop condition is already met
+  if( stepVal>0 ? (*v>toVal) : (*v<toVal) ){
+   // condition already met, skip past the loop body
+   p = thisfor->end_p;
+  }else{
+   p = thisfor->start_p;
+  }
+ } break;
+ // t_endforf: working on a fully processed for
+ case t_endforf: { // encountering the end of the for loop, advancing the counter variable, checking the condition, and either continuing or exiting
+  forinfo *thisfor = (forinfo*)t.data.pointer;
+  // get a pointer to the loop variable
+  double *v = interpreter_for_getLoopVarPtr(prog, thisfor);
+  // check the "to value".
+  double toVal = interpreter_for_getToVal(prog, thisfor);
+  // check the "step value"
+  double stepVal = interpreter_for_getStepVal(prog, thisfor);
+  // Advance
+  *v += stepVal;
+  // Check the condition
+  if( stepVal>0 ? (*v>toVal) : (*v<toVal) ){
+   // condition met, skip past the 'endfor'
+   p+=1;
+  }else{
+   p = thisfor->start_p;
+  }
+ } break;
+ // t_endfor: encountering an unprocessed 'endfor'
+ case t_endfor: {
+  int forlevel=0;
+  while(p){
+   switch( prog->tokens[p].type ){
+    case t_endfor: {
+     forlevel += 1;
+    } break;
+    case t_for: {
+     if( !forlevel ){
+      goto backwards_for_search_out;
+     }else{
+      forlevel -= 1;
+     }
+    } break;
+   }
+   p-=1;
+  }
+  error(prog,"no 'for' for this 'endfor'\n");
+  //backwards_for_search_out:
+ }
+ backwards_for_search_out:
+ break;
  // ========================================================
  // =========  SET  ========================================
  // ========================================================
@@ -3963,8 +4305,8 @@ interpreter(int p, program *prog){
   double value; stringval stringvalue; int i;
   p+=1;
   t_print_start: // =========================================================================
-  if( prog->tokens[p].type == t_endstatement ){
-   p+=1;
+  if( ! (isvalue(prog->tokens[p].type) || isstringvalue(prog->tokens[p].type)) ){
+   p += (prog->tokens[p].type == t_endstatement);
    printf("\n");
    break;
   }
@@ -4382,6 +4724,12 @@ interpreter(int p, program *prog){
  } break;
  case t_tb: tb();
 #endif
+ case t_nul: {
+  if( prog->current_function != &prog->initial_function ){
+   error(prog,"unexpected end of program\n");
+  }
+  return 0;
+ }
  case t_label: case t_endif: case t_endiff: case t_endstatement:
   p+=1;
   goto interpreter_start;
