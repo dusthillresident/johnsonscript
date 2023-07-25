@@ -1,7 +1,7 @@
 
 variable x y;
 constant res 8;
-startgraphics 100 100
+startgraphics 192 192;
 
 while 1
 
