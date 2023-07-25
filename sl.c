@@ -1558,6 +1558,15 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   out = maketoken( t_endfor ); goto gettoken_normalout;
  }
 
+ if( wordmatch_plus_whitespace( pos,"endloop", text) ){	 //	endloop
+  out = maketoken( t_endloop ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"continue", text) ){ //	continue
+  out = maketoken( t_continue ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"restart", text) ){	//	restart
+  out = maketoken( t_restart ); goto gettoken_normalout;
+ }
  if( wordmatch_plus_whitespace( pos,"goto", text) ){	//	
   out = maketoken( t_goto ); goto gettoken_normalout;
  }
@@ -2172,9 +2181,13 @@ tokenstring(token t){
  case t_goto: return "goto";
  case t_gotof: return "gotoF";
 
+ case t_endloop: return "endloop";
+ case t_continue: return "continue";
+ case t_restart: return "restart";
+
  case t_return:		return "return";
- case t_while: case t_whilef:		return "while";
- case t_endwhile: case t_endwhilef:	return "endwhile";
+ case t_while: case t_whilef: case t_whileff:		return "while";
+ case t_endwhile: case t_endwhilef: case t_endwhileff:	return "endwhile";
  case t_if: case t_iff:			return "if";
  case t_else: case t_elsef:		return "else";
  case t_endif: case t_endiff:		return "endif";
@@ -3680,7 +3693,11 @@ _interpreter_processcaseof(program *prog, int p){ int i;
 
 // FOR
 
-int expressionIsSimple(program *prog, int p){
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+expressionIsSimple(program *prog, int p){
  if( prog->tokens[ p ].type == t_number ){ 
   return 1;
  }
@@ -3744,7 +3761,11 @@ thisfor->end_p
 }
 #endif
 
-void _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, double *stepVal ){
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+_interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, double *stepVal ){
  // johnsonscript implementation of the classic 'for' loop.
  /*
   variable i; # the loop variable must already exist, either as a global variable made with the 'variable' command or as a local variable in a function
@@ -3863,7 +3884,11 @@ void _interpreter_processfor(program *prog, int p,  double *fromVal, double *toV
  //debugforinfo(prog, thisfor);
 }
 
-double* interpreter_for_getLoopVarPtr(program *prog, forinfo *thisfor){
+double*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+interpreter_for_getLoopVarPtr(program *prog, forinfo *thisfor){
  // get a pointer to the loop variable
  double *v; 
  if( thisfor->type ){
@@ -3874,7 +3899,11 @@ double* interpreter_for_getLoopVarPtr(program *prog, forinfo *thisfor){
  return v;
 }
 
-double interpreter_for_getToVal(program *prog, forinfo *thisfor){
+double
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+interpreter_for_getToVal(program *prog, forinfo *thisfor){
  // check the "to value".
  double toVal;
  if( thisfor->toValIsConstant ){
@@ -3886,7 +3915,11 @@ double interpreter_for_getToVal(program *prog, forinfo *thisfor){
  return toVal;
 }
 
-double interpreter_for_getStepVal(program *prog, forinfo *thisfor){
+double
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+interpreter_for_getStepVal(program *prog, forinfo *thisfor){
  // check the "step value"
  double stepVal;
  if( thisfor->stepValIsConstant ){
@@ -3902,6 +3935,32 @@ double interpreter_for_getStepVal(program *prog, forinfo *thisfor){
  return stepVal;
 }
 
+// direction >= 0 will find the end of the loop, direction < 0 will find the start.
+// returns -1 if no start or end of a loop was found
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+__attribute__ ((noinline))
+findStartOrEndOfCurrentLoop(program *prog, int p, int direction){
+ direction = direction<0 ? -1 : 1;
+ int level = 1;
+ while( level ){
+  p += direction;
+  if( p<0 || p>=prog->length ) return -1;
+  switch( prog->tokens[p].type ){
+   case t_deffn:
+    return -1;
+   case t_while: case t_whilef: case t_whileff: case t_for: case t_forf: {
+    level += direction;
+   } break;
+   case t_endwhile: case t_endwhilef: case t_endwhileff: case t_endfor: case t_endforf: {
+    level -= direction;
+   } break;
+  }
+ }
+ return p;
+}
 
 // ========================================================
 // =========  INTERPRETER  ================================
@@ -3938,7 +3997,7 @@ interpreter(int p, program *prog){
   }
   break;
  }
- case t_gotof:
+ case t_gotof: case t_whileff: case t_endwhileff:
  {
   p=t.data.i;
   goto interpreter_start;
@@ -3980,18 +4039,21 @@ interpreter(int p, program *prog){
   //go back to the position of the while so it can be executed as normal
   p=s_pos;
   // if this is while loop is something similar to 'while 1' or 'while 0',
-  // then we can just turn it into a 't_gotof' that doesn't waste time checking a constant value very loop
+  // then we can just turn it into a jump that doesn't waste time checking a constant value very loop
   if( prog->tokens[s_pos+1].type == t_id ) process_id(prog,&prog->tokens[s_pos+1]);
   if( prog->tokens[s_pos+1].type == t_number ){
    if( prog->tokens[s_pos+1].data.number ){ // true
-    prog->tokens[s_pos].type = t_endstatement;
-    prog->tokens[s_pos+1].type = t_endstatement;
-    prog->tokens[e_pos].type = t_gotof;
-    prog->tokens[e_pos].data.i = s_pos+2+(prog->tokens[s_pos+2].type==t_endstatement);
+    int loopBodyStart = s_pos+2+(prog->tokens[s_pos+2].type==t_endstatement);
+    prog->tokens[s_pos].type = t_whileff;   // fix 'while'
+    prog->tokens[s_pos].data.i = loopBodyStart; // make it jump straight to the start of the loop body
+    //prog->tokens[s_pos+1].type = t_endstatement; // blank out the value (unnecessary)
+    prog->tokens[e_pos].type = t_endwhileff; // fix 'endwhile'
+    prog->tokens[e_pos].data.i = loopBodyStart; // make it jump straight to the start of the loop body too
    }else{ // false
-    prog->tokens[s_pos].type = t_gotof;
-    prog->tokens[s_pos].data.i = e_pos+1;
-    prog->tokens[e_pos].type = t_endstatement;
+    prog->tokens[s_pos].type = t_whileff;  // fix 'while'
+    prog->tokens[s_pos].data.i = e_pos+1; // make it jump past the loop
+    prog->tokens[e_pos].type = t_endwhileff;   // fix 'endwhile'
+    prog->tokens[e_pos].data.i = e_pos+1; // make it jump past the loop too
    }
   }
   break;
@@ -4108,27 +4170,47 @@ interpreter(int p, program *prog){
  } break;
  // t_endfor: encountering an unprocessed 'endfor'
  case t_endfor: {
-  int forlevel=0;
-  while(p){
-   switch( prog->tokens[p].type ){
-    case t_endfor: {
-     forlevel += 1;
-    } break;
-    case t_for: {
-     if( !forlevel ){
-      goto backwards_for_search_out;
-     }else{
-      forlevel -= 1;
-     }
-    } break;
-   }
-   p-=1;
-  }
-  error(prog,"no 'for' for this 'endfor'\n");
-  //backwards_for_search_out:
+  int pp = findStartOrEndOfCurrentLoop(prog, p, -1);
+  if(pp==-1) error(prog,"no 'for' for this 'endfor'\n");
+  double blah1,blah2,blah3;
+  _interpreter_processfor(prog, pp, &blah1, &blah2, &blah3);
  }
- backwards_for_search_out:
  break;
+ // ========================================================
+ // =========  ENDLOOP, CONTINUE, RESTART  =================
+ // ========================================================
+ // Commands managing loop control flow, similar in concept to 'break' and 'continue' in C
+ //findStartOrEndOfCurrentLoop(program *prog, int p, int direction)
+ case t_endloop: case t_continue: case t_restart: {
+  int op = p;
+  int direction = t.type==t_restart ? -1 : 1;
+  p+=1;
+  int levelIsGiven = isvalue( prog->tokens[p].type );
+  int levelIsConstant = expressionIsSimple( prog, p );
+  int level = levelIsGiven ? getvalue(&p,prog) : 1;
+  int i,p;
+  p = op;
+  for(i=0; i<level; i++){
+   p = findStartOrEndOfCurrentLoop(prog, p, direction);
+  }
+  if(p==-1){
+   char *msg=NULL;
+   switch( t.type ){
+    case t_endloop:
+     msg = (level==1 ? "endloop: not in a loop\n" : "endloop: couldn't find loop level specified\n"); break;
+    case t_continue:
+     msg = (level==1 ? "continue: not in a loop\n" : "continue: couldn't find loop level specified\n"); break;
+    case t_restart:
+     msg = (level==1 ? "restart: not in a loop\n" : "restart: couldn't find loop level specified\n"); break;
+   }
+   error(prog, msg);
+  }
+  if(t.type == t_endloop) p+=1;
+  if(levelIsConstant){
+   prog->tokens[op].type = t_gotof;
+   prog->tokens[op].data.i = p;
+  }
+ } break;
  // ========================================================
  // =========  SET  ========================================
  // ========================================================

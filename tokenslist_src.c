@@ -160,6 +160,9 @@
 #define t_endif			COCKSPENIS	//	endif
 #define t_for			COCKSPENIS	//	for [variable_name] [start_value] [end_value] [step_value]
 #define t_endfor		COCKSPENIS	//	endfor
+#define t_endloop		COCKSPENIS	//	endloop ([level])	break out of loops
+#define t_continue		COCKSPENIS	//	continue ([level])	skip to the next iteration of a loop
+#define t_restart		COCKSPENIS	//	restart ([level])	return to the beginning of a loop
 #define t_set			COCKSPENIS	//	set
 #define t_var			COCKSPENIS	//	variable [identifier] ([identifier]) ... ;		declare variables	
 #define t_arr			COCKSPENIS	//	array [identifier] value;	declare an array
@@ -189,6 +192,8 @@
 #define t_gotof			COCKSPENIS	//      jump to position in token.i
 #define t_whilef		COCKSPENIS	//	position of matching 'endwhile' in token.i
 #define t_endwhilef		COCKSPENIS	//	position of matching 'while'+1 in token.i
+#define t_whileff		COCKSPENIS	//	 while loops that were like "while 0" or "while 1" that have been optimised into simple jumps, they are essentially the same as t_gotof
+#define t_endwhileff		COCKSPENIS	//	 but they preserve the symbolic info that they represent the start & end of a loop, used by 'endloop' and 'continue'
 #define t_iff			COCKSPENIS	//	position of matching else/endif in token.i
 #define t_elsef			COCKSPENIS	//	position of matching endif in token.i
 #define t_endiff		COCKSPENIS	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
