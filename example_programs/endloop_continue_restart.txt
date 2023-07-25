@@ -1,0 +1,39 @@
+
+variable x y;
+constant res 8;
+startgraphics 100 100
+
+while 1
+
+ for y 0 (- winh 1) res; 
+  for x 0 (- winw 1) res;
+   gcol (^ x y) (<<(^ x y)1) (<<(^ x y)2)
+   rectanglef x y res
+   if expose
+    /*
+     'restart' searches backwards and jumps to the start a loop.
+    */
+    restart 2
+   endif
+  endfor
+ endfor
+
+ while 1
+  wait 16.6
+  if expose
+   /*
+    'continue' searches forwards and jumps onto the end of a loop,
+    which skips onto the loop's next iteration.
+   */
+   continue 2
+  endif
+  if mouseb
+   /*
+    'endloop' searches forwards and jumps past the end of a loop,
+    which exits the loop.
+   */
+   endloop 2
+  endif
+ endwhile
+
+endwhile
