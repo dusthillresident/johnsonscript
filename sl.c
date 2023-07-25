@@ -4188,7 +4188,7 @@ interpreter(int p, program *prog){
   int levelIsGiven = isvalue( prog->tokens[p].type );
   int levelIsConstant = expressionIsSimple( prog, p );
   int level = levelIsGiven ? getvalue(&p,prog) : 1;
-  int i,p;
+  int i;
   p = op;
   for(i=0; i<level; i++){
    p = findStartOrEndOfCurrentLoop(prog, p, direction);
@@ -4804,7 +4804,7 @@ interpreter(int p, program *prog){
   }
   printf("------------------\n\n");
  } break;
- case t_tb: tb();
+ case t_tb: tb(); p+=1; break;
 #endif
  case t_nul: {
   if( prog->current_function != &prog->initial_function ){
