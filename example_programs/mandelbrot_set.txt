@@ -1,0 +1,186 @@
+REM 
+/*
+  --------------------
+  -- Mandelbrot set --
+  --------------------
+  Adapted from https://www.rosettacode.org/wiki/Mandelbrot_set#BBC_BASIC
+*/
+
+constant maxiter 128;
+
+constant dwh 800;
+startgraphics dwh dwh;
+option "wintitle" "Mandelbrot Set"
+variable i;
+
+while ! mouseb
+ wait 17
+ if expose;
+  cls
+  gcol -1
+  drawscaledtext 10 10 4 4 "Mandelbrot Set"
+  drawtext 16 55 1 "Click and drag on any part of the image to zoom in."
+  drawtext 16 75 1 "Right-click on an area to centre the view on that point."
+  drawtext 16 95 1 "Middle-click to zoom out."
+  gcol 0xff7f40
+  drawtext 16 135 1 "Click mouse to begin"
+ endif;
+endwhile;
+while mouseb
+endwhile
+cls
+
+variable _X _Y _I xi yi x y xt;
+variable currentColour lastY thisY;
+variable zoomlevel viewxoffset viewyoffset w h d1zoomlevel lastzoomlevel oldwinw oldwinh;
+
+set zoomlevel 1
+
+set viewyoffset neg >> winh 1
+
+set oldwinw winw
+set oldwinh winh
+
+constant whm / 1 * 800 0.6666666666666666;
+.start
+
+if ! && = winw oldwinw = winh oldwinh
+ set zoomlevel * zoomlevel 0.5 + (/ winw oldwinw) / winh oldwinh
+ set oldwinw winw
+ set oldwinh winh
+endif
+
+set d1zoomlevel / 1 zoomlevel
+
+# =================
+# === Main loop ===
+# =================
+
+for _X 0 - winw 1;
+
+ set xi + -2 * whm + viewxoffset * _X d1zoomlevel
+ set lastY >> winh 1
+ set currentColour 0
+
+ for _Y 0 winh;
+
+  set yi * whm + viewyoffset * _Y d1zoomlevel
+  set x 0
+  set y 0
+
+  for _I 1 maxiter;
+
+   if < 5 + (* x x) * y y
+    goto ".endloop"
+   endif
+
+   set xt  + xi (* x x) neg * y y
+   set y  + yi * 2 x y
+   set x  xt
+
+  endfor
+  .endloop
+
+  if > _I maxiter
+   set _I 0
+  endif
+
+  if ||  ! = _I currentColour  = _Y winh  
+   gcol (* currentColour 15) (* 8 currentColour) * currentColour 4
+   set currentColour _I
+   set thisY _Y
+   line _X lastY _X thisY
+   set lastY thisY
+  endif
+
+ endfor # _Y
+
+ if expose
+  wait 100
+  cls
+  goto ".start"
+ endif
+
+ if mouseb
+  goto ".skipahead"
+ endif
+ 
+endfor # _X
+
+# ==========================
+# === User mouse control ===
+# ==========================
+
+.skipahead
+
+while 1
+
+ # LEFT MOUSE BTN - ZOOM RECTANGLE 
+ if & mouseb 1
+
+  set x mousex
+  set y mousey
+  gcol -1
+  drawmode 10
+
+  while mouseb
+   set w - mousex x
+   set h - mousey y
+   if > abs w abs h
+    set h * sgn h winh / abs w winw
+   else
+    set w * sgn w winw / abs h winh
+   endif
+   rectangle x y w h
+   wait 34
+   rectangle x y w h
+  endwhile
+  if < w 0
+   set x + x w
+   set w neg w
+  endif
+  if < h 0
+   set y + y h
+   set h neg h
+  endif
+
+  drawmode 3
+
+  set viewxoffset  (+ viewxoffset * x / 1 zoomlevel) 
+  set viewyoffset  (+ viewyoffset * y / 1 zoomlevel)   
+  set zoomlevel * zoomlevel (/ winw w )
+ 
+  cls
+  goto ".start"
+ endif
+
+ # RIGHT MOUSE BTN - SET POSITION
+ if & mouseb 4
+  set viewxoffset - (+ viewxoffset * mousex / 1 zoomlevel) (*(>>winw 1)/ 1 zoomlevel)
+  set viewyoffset - (+ viewyoffset * mousey / 1 zoomlevel) (*(>>winh 1)/ 1 zoomlevel)
+  while mouseb
+  endwhile
+  cls
+  goto ".start"
+ endif
+
+ # MIDDLE MOUSE BTN - ZOOM OUT
+ if & mouseb 2
+  set lastzoomlevel zoomlevel
+  set zoomlevel * zoomlevel 0.9
+  set viewxoffset - (+ viewxoffset * (* winw 0.5 0.9) / 1 lastzoomlevel) (* winw 0.5 / 1 lastzoomlevel)
+  set viewyoffset - (+ viewyoffset * (* winh 0.5 0.9) / 1 lastzoomlevel) (* winh 0.5 / 1 lastzoomlevel)
+  #set viewxoffset + viewxoffset * viewxoffset 0.25
+  while mouseb
+  endwhile
+  cls goto ".start"
+ endif
+
+ if expose
+  cls
+  goto ".start"
+ endif
+
+ wait 32;
+endwhile;
+goto ".start"
