@@ -8,8 +8,7 @@ REM
 
 constant maxiter 128;
 
-constant dwh 800;
-startgraphics dwh dwh;
+startgraphics 800 800;
 option "wintitle" "Mandelbrot Set"
 variable i;
 
@@ -71,7 +70,7 @@ for _X 0 - winw 1;
   for _I 1 maxiter;
 
    if < 5 + (* x x) * y y
-    goto ".endloop"
+    endloop
    endif
 
    set xt  + xi (* x x) neg * y y
@@ -79,7 +78,6 @@ for _X 0 - winw 1;
    set x  xt
 
   endfor
-  .endloop
 
   if > _I maxiter
    set _I 0
@@ -102,7 +100,8 @@ for _X 0 - winw 1;
  endif
 
  if mouseb
-  goto ".skipahead"
+  endloop
+  .keepgoing
  endif
  
 endfor # _X
@@ -110,8 +109,6 @@ endfor # _X
 # ==========================
 # === User mouse control ===
 # ==========================
-
-.skipahead
 
 while 1
 
@@ -145,6 +142,10 @@ while 1
   endif
 
   drawmode 3
+ 
+  if || < w 2 < h 2
+   goto ".keepgoing"
+  endif
 
   set viewxoffset  (+ viewxoffset * x / 1 zoomlevel) 
   set viewyoffset  (+ viewyoffset * y / 1 zoomlevel)   
@@ -173,7 +174,8 @@ while 1
   #set viewxoffset + viewxoffset * viewxoffset 0.25
   while mouseb
   endwhile
-  cls goto ".start"
+  cls
+  goto ".start"
  endif
 
  if expose
