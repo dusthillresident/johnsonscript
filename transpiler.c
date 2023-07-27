@@ -1405,14 +1405,83 @@ int TheseStringsMatch(char *a, char *b){
  return (*a == *b);
 }
 
+
+char* trans__endloopRestartContinue_typeString( TOKENTYPE_TYPE type ){
+ switch( type ){
+  case t_endloop:	return "post_end";
+  case t_continue:	return "pre_end";
+  case t_restart:	return "start";
+  default: fprintf(stderr,"oh no\n"); exit(1);
+ }
+}
+
+void trans__endloopRestartContinue_PrintGotoString(program *prog, int pp, TOKENTYPE_TYPE type){
+ //fprintf(stderr,"oh god fuck %s\n", tokenstring(prog->tokens[pp]));
+ char *target = tokenstring( prog->tokens[pp] );
+ PrintMain("goto %s_p%d_%s;\n",
+  target,
+  pp,
+  trans__endloopRestartContinue_typeString(type)
+ );
+}
+
 void translate_command(program *prog, int *p){
  #if TRANS_CRASHDEBUG
  fprintf(stderr,"translate_command: %s\n",tokenstring(prog->tokens[ *p ]));
  #endif
  trans_com_start:
  switch( prog->tokens[ *p ].type ){
+ case t_endloop: case t_restart: case t_continue: {
+  TOKENTYPE_TYPE type = CurTok.type;
+  int direction = type==t_restart ? -1 : 1;
+  char *thisTokenString = tokenstring(CurTok);
+  if( isvalue( prog->tokens[ *p + 1].type) && !expressionIsSimple( prog, *p+1 ) ){ // variable parameter given
+   PrintMain("{ // %s with variable loop level parameter given\n", thisTokenString );
+   int pp = *p;
+   *p += 1;
+   PrintMain("int loop_level = "); translate_value(prog,p); PrintMain(";\n");
+   PrintMain("switch(loop_level){\n");
+   pp = findStartOrEndOfCurrentLoop(prog, pp, direction );
+   if(pp==-1){
+    ErrorOut("%s: not in a loop\n",thisTokenString);
+   }
+   int levelcounter=1;
+   while(pp != -1){
+    PrintMain("case %d: {\n",levelcounter);
+    trans__endloopRestartContinue_PrintGotoString( prog, pp, type );
+    PrintMain("} break;\n");
+    pp = findStartOrEndOfCurrentLoop(prog, pp, direction ); levelcounter+=1;
+   }
+   PrintMain("default: fprintf(stderr,\"%s: bad loop index value %%d\\n\",loop_level); exit(1);\n",thisTokenString);
+   PrintMain("}\n");
+   PrintMain("}\n"); 
+   break;
+  }else if( isvalue( prog->tokens[ *p + 1].type) && expressionIsSimple( prog, *p+1 ) ){ // constant parameter given
+   int pp = *p;
+   *p += 1;
+   int level = getvalue(p,prog);
+   int i;
+   for(i=0; i<level; i++){
+    pp = findStartOrEndOfCurrentLoop(prog, pp, direction );
+   }
+   if(pp==-1){
+    ErrorOut( "%s: couldn't find loop level specified\n",thisTokenString );
+   }
+   trans__endloopRestartContinue_PrintGotoString( prog, pp, type );
+   break;
+  }else{
+   int pp = *p;
+   pp = findStartOrEndOfCurrentLoop(prog, pp, direction );
+   if(pp==-1){
+    ErrorOut( "%s: not in a loop\n",thisTokenString );
+   }
+   trans__endloopRestartContinue_PrintGotoString( prog, pp, type );
+   *p += 1;
+  }
+ } break;
  case t_for:
   {
+   int this_for_p = *p;
    *p += 1;
    if( CurTok.type != t_id ){
     ErrorOut("for: not given an id for a loop variable\n");
@@ -1456,6 +1525,7 @@ void translate_command(program *prog, int *p){
     stepval = trans__double_into_tempbuf( 1.0 );
    }
    // ok
+   PrintMain( "for_p%d_start:\n",this_for_p);
    PrintMain( "{\ndouble fromval = %s; double toval = %s; double stepval = %s; %s = fromval;\n", fromval, toval, stepval, loopvar );
    PrintMain( "if(stepval==0){ fprintf(stderr,\"for step can't be 0\\n\"); exit(1); }\n" );
    PrintMain( "while( stepval>0 ? %s<=toval : %s>=toval ){\n",loopvar,loopvar  );
@@ -1463,12 +1533,14 @@ void translate_command(program *prog, int *p){
     translate_command(prog,p);
    }
    {
+    PrintMain("endfor_p%d_pre_end:\n",*p);
     PrintMain("{\n%s += %s;\n",loopvar,stepval);
     if(!step_is_constant) PrintMain("stepval = %s;\n",stepval);
     if(!to_is_constant)   PrintMain("toval = %s;\n",toval);
     PrintMain("}\n");
    }
    PrintMain("} // endfor\n}\n");
+   PrintMain("endfor_p%d_post_end: ;\n",*p);
    *p += 1;
    free(loopvar);
    free(fromval);
@@ -2003,7 +2075,7 @@ void translate_command(program *prog, int *p){
   } break;
  case t_label:
   {
-   PrintMain("Label_%s:\n",(char*)(1+prog->tokens[ *p ].data.pointer));
+   PrintMain("Label_%s: ;\n",(char*)(1+prog->tokens[ *p ].data.pointer));
    *p += 1;
   } break;
  case t_goto:
@@ -2027,6 +2099,7 @@ void translate_command(program *prog, int *p){
   break;
  case t_while:
   {
+   PrintMain("while_p%d_start:\n",*p);
    PrintMain("while(");
    *p += 1;
    translate_value(prog, p);
@@ -2034,7 +2107,9 @@ void translate_command(program *prog, int *p){
   } break;
  case t_endwhile: case t_endif:
   {
+   PrintMain("endwhile_p%d_pre_end: ;\n",*p);
    PrintMain("}\n");
+   PrintMain("endwhile_p%d_post_end: ;\n",*p);
    *p += 1;
   } break;
  case t_if:
