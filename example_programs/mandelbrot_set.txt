@@ -10,32 +10,37 @@ constant maxiter 128;
 
 startgraphics 800 800;
 option "wintitle" "Mandelbrot Set"
-variable i;
+variable i titlex titley;
 
+refreshmode 1
 while ! mouseb
  wait 17
  if expose;
-  cls
+  set titlex - >> winw 1 >> 470 1
+  set titley - >> winh 1 >> 161 1
   gcol -1
-  drawscaledtext 10 10 4 4 "Mandelbrot Set"
-  drawtext 16 55 1 "Click and drag on any part of the image to zoom in."
-  drawtext 16 75 1 "Right-click on an area to centre the view on that point."
-  drawtext 16 95 1 "Middle-click to zoom out."
+  cls
+  drawscaledtext (+ titlex 10) (+ titley 10) 4 4	"Mandelbrot Set"
+  drawtext (+ titlex 16) (+ titley 55) 1		"Click and drag on any part of the image to zoom in."
+  drawtext (+ titlex 16) (+ titley 75) 1		"Right-click on an area to centre the view on that point."
+  drawtext (+ titlex 16) (+ titley 95) 1		"Middle-click to zoom out."
   gcol 0xff7f40
-  drawtext 16 135 1 "Click mouse to begin"
+  drawtext (+ titlex 16) (+ titley 135) 1		"Click mouse to begin"
+  refresh
  endif;
 endwhile;
 while mouseb
 endwhile
+refreshmode 0
 cls
 
 variable _X _Y _I xi yi x y xt;
-variable currentColour lastY thisY;
+variable currentColour lastY;
 variable zoomlevel viewxoffset viewyoffset w h d1zoomlevel lastzoomlevel oldwinw oldwinh;
 
-set zoomlevel 1
+set zoomlevel * 0.25 + (/ winw 800) (/ winh 800)
 
-set viewyoffset neg >> winh 1
+set viewyoffset * (/ 1 zoomlevel) neg (/ winh 2)
 
 set oldwinw winw
 set oldwinh winh
@@ -58,7 +63,7 @@ set d1zoomlevel / 1 zoomlevel
 for _X 0 - winw 1;
 
  set xi + -2 * whm + viewxoffset * _X d1zoomlevel
- set lastY >> winh 1
+ set lastY 0
  set currentColour 0
 
  for _Y 0 winh;
@@ -86,9 +91,8 @@ for _X 0 - winw 1;
   if ||  ! = _I currentColour  = _Y winh  
    gcol (* currentColour 15) (* 8 currentColour) * currentColour 4
    set currentColour _I
-   set thisY _Y
-   line _X lastY _X thisY
-   set lastY thisY
+   line _X lastY _X _Y
+   set lastY _Y
   endif
 
  endfor # _Y
