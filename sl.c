@@ -682,6 +682,19 @@ process_id(program *prog, token *t){
  *t = foundid->t;
 }
 
+id_info*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+peek_id(program *prog, char *searchforthis){
+ id_info *foundid=NULL;
+ // first, check current function's id list
+ foundid = find_id( prog->current_function->ids, searchforthis );
+ // if nothing was found, check the global id list
+ if(foundid==NULL) foundid = find_id( prog->ids, searchforthis );
+ return foundid;
+}
+
 void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
@@ -2192,6 +2205,7 @@ tokenstring(token t){
  case t_else: case t_elsef:		return "else";
  case t_endif: case t_endiff:		return "endif";
 
+ case t_set_stackaccess: case t_set_Df:
  case t_set:		return "set";
  case t_appendS:	return "append$";
 
@@ -3717,7 +3731,7 @@ expressionIsSimple(program *prog, int p){
   case t_id:
    // peek the id, if it's just a number constant then that's okay, otherwise return 0
    {
-    id_info *thisIdInfo = find_id(prog->ids, prog->tokens[p].data.pointer);
+    id_info *thisIdInfo = peek_id(prog, (char*)prog->tokens[p].data.pointer );
     if( ! thisIdInfo ) return 0;
     token t = thisIdInfo->t;
     if( t.type != t_number ){
@@ -4214,6 +4228,10 @@ interpreter(int p, program *prog){
  // ========================================================
  // =========  SET  ========================================
  // ========================================================
+ // fast 'set'
+ case t_set_Df: p+=2; *(double*)t.data.pointer = getvalue(&p,prog); break;
+ case t_set_stackaccess: p+=2; prog->stack[prog->sp+t.data.i] = getvalue(&p,prog); break;
+ // normal 'set'
  case t_set: t_set_start:
  {
   t=prog->tokens[p+1]; p+=2;
@@ -4229,6 +4247,10 @@ interpreter(int p, program *prog){
   }
   case t_Df:
   {
+   // fix
+   prog->tokens[p-2].type = t_set_Df;
+   prog->tokens[p-2].data.pointer = (void*) t.data.pointer;
+   // perform set
    *(double*)t.data.pointer = getvalue(&p, prog);
    break;
   }
@@ -4260,6 +4282,10 @@ interpreter(int p, program *prog){
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_stackaccess:
+   // fix
+   prog->tokens[p-2].type = t_set_stackaccess;
+   prog->tokens[p-2].data.i = t.data.i;
+   // perform set
    index = prog->sp + t.data.i;
    //if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad stack access\n");
    prog->stack[index] = getvalue(&p, prog);

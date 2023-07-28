@@ -146,7 +146,7 @@ Johnson_C_CharacterAccess( SVL svl, int index )
 #endif
 {
  if( index<0 || index>=svl.len ){
-  printf("Johnsonscript error: C (characteraccess): index out of range\n");
+  fprintf(stderr,"Johnsonscript error: C (characteraccess): index out of range, index==%d len==%d\n",index,svl.len);
   exit(0);
  }
  return svl.buf + index;
@@ -161,7 +161,7 @@ Johnson_V_ValueAccess( SVL svl, int index )
 {
  int l = svl.len >> 3;
  if( index<0 || index>=l ){
-  printf("Johnsonscript error: C (characteraccess): index out of range\n");
+  fprintf(stderr,"Johnsonscript error: V (valueaccess): index out of range, index==%d valuelen==%d (stringlength==%d)\n",index,l,svl.len);
   exit(0);
  }
  return ((double*)svl.buf) + index;

@@ -201,6 +201,11 @@
 #define t_endforf		COCKSPENIS	//	processed 'endfor' with pointer to forinfo in token.data.pointer
 // ===================================
 
+// ===== fast modified versions of 'set' =======================
+
+#define t_set_Df		COCKSPENIS	//	fast set for t_Df
+#define t_set_stackaccess	COCKSPENIS	//	fast set for t_stackaccess
+
 // ===== string functions & stuff that's a 'string value' ======
 					//		EXAMPLE				RETURNS		DESCRIPTION
 #define t_stringconst		COCKSPENIS	//	"string"					string constant
