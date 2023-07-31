@@ -89,7 +89,7 @@ for _X 0 - winw 1;
   endif
 
   if ||  ! = _I currentColour  = _Y winh  
-   gcol (* currentColour 15) (* 8 currentColour) * currentColour 4
+   gcol fncol * currentColour 0.0625
    set currentColour _I
    line _X lastY _X _Y
    set lastY _Y
@@ -190,3 +190,19 @@ while 1
  wait 32;
 endwhile;
 goto ".start"
+
+function fncol v local iv rgb ;
+ set iv int v
+ set v - v iv
+ if & iv 1
+  set v - 1 v
+ endif
+ set rgb @ "RGB"
+ set C$rgb 0  int * v 255
+ if < v 0.5 
+  set C$rgb 1  0
+ else
+  set C$rgb 1  int * v 510 - v 0.5
+ endif
+ set C$rgb 2  int * v v v v v v v v 255
+return | <<(C$rgb % iv 3)16  <<(C$rgb %(+ iv 1)3)8  (C$rgb %(+ iv 2)3)
