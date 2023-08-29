@@ -17,6 +17,16 @@ void trans_add_id(id_info *ids, id_info *new_id){
 }
 
 // ----------------------------------------------------------------------------------------------------------------
+// ---- Transpiler options ----------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------------------
+
+// for each of the variables here, when 0, the default setting will be used, otherwise the user setting will be used
+
+int OPTIONSWITCH_reverse_params = 0; // 1: don't reverse, 2: reverse
+int OPTIONSWITCH_dont_remove_unused_functions = 0; // when != 0, disable removing unused functions
+int OPTIONSWITCH_dont_clear_disabled_areas = 0; // when != 0, disable removing disabled ('if 0 [...] endif') areas
+
+// ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
@@ -123,9 +133,13 @@ void LoadTM(TransBuf buf){
 
 void SetTM(char *s, int p){trans_main=s;trans_main_p=p;}
 
-char* trans__double_into_tempbuf( double v ){
+char* trans__double_into_tempbuf( double number ){
  char *out = malloc(32768);
- sprintf(out,"%a",v);
+ if( (number == (int) number) && ( number > -2147483648.0 && number < 2147483647.0 ) && ((int)number != -2147483648) ){
+  sprintf(out,"%.1f",number);
+ }else{
+  sprintf(out,"%a",number);
+ }
  return out;
 }
 
@@ -908,7 +922,12 @@ void translate_value(program *prog, int *p){
   } break;
  case t_number:
   {
-   PrintMain("%a",prog->tokens[ *p ].data.number);
+   double number = prog->tokens[ *p ].data.number;
+   if( (number == (int) number) && ( number > -2147483648.0 && number < 2147483647.0 ) && ((int)number != -2147483648) ){
+    PrintMain("%.1f",number);
+   }else{
+    PrintMain("%a",number);
+   }
    *p += 1;
   } break;
  case t_lessthan: case t_morethan: case t_lesseq: case t_moreeq: case t_equal:// two params
@@ -1431,6 +1450,13 @@ void translate_command(program *prog, int *p){
  #endif
  trans_com_start:
  switch( prog->tokens[ *p ].type ){
+ case t_unclaim: {
+  *p += 1;
+  do_unclaim_command:
+  PrintMain("{\n //unclaim\nSVR *thisSVR = Johnson_stringvar_deref(");
+  translate_value(prog, p);
+  PrintMain(");\nthisSVR->claimed = 0;\nif( thisSVR->bufsize > 256 ) Johnson_CleanSVR( thisSVR, 0 );\n}\n");
+ } break;
  case t_endloop: case t_restart: case t_continue: {
   TOKENTYPE_TYPE type = CurTok.type;
   int direction = type==t_restart ? -1 : 1;
@@ -1867,10 +1893,8 @@ void translate_command(program *prog, int *p){
    }
    char *opstr = (char*)CurTok.data.pointer;
    *p += 1;
-   if( TheseStringsMatch(opstr, "unclaim") ){
-    PrintMain("StringVars[(int)");
-    translate_value(prog, p);
-    PrintMain("]->claimed = 0;\n");
+   if( TheseStringsMatch(opstr, "unclaim") ){ // obsolete, 'unclaim' is now a keyword
+    goto do_unclaim_command;
    }else if( TheseStringsMatch(opstr, "vsize") ){
     if( expressionIsSimple( prog, *p ) ){
      trans_vsize = 1+(int)getvalue(p,prog);
@@ -2049,6 +2073,8 @@ void translate_command(program *prog, int *p){
     #else
     ErrorOut("PENIS\n");
     #endif
+   }else if( TheseStringsMatch(opstr, "cleanup") ){
+    PrintMain("{\n/* option \"cleanup\" */\nJohnson_Cleanup();\n}\n");
    }else{
     trans_print_sourcetext_location( prog, *p);
     PrintErr("translate_command: option: unrecognised option '%s'\n",opstr);
@@ -2958,11 +2984,15 @@ void translate_program(program *prog){
  BlockValidityCheck(prog, t_while, t_endwhile);
  BlockValidityCheck(prog, t_caseof, t_endcase);
  BlockValidityCheck(prog, t_for, t_endfor);
- trans_reverse_function_params = does_this_arch_use_reverse_order_evaluation_of_function_params();
- //trans_reverse_function_params=1;
- #if TRANS_CRASHDEBUG 
- PrintErr("Detected function parameter evaluation order for this arch: %s\n", trans_reverse_function_params ? "Right to left (reversed)" : "Left to right");
- #endif
+
+ if( OPTIONSWITCH_reverse_params ){
+  trans_reverse_function_params = (OPTIONSWITCH_reverse_params - 1);
+ }else{
+  trans_reverse_function_params = does_this_arch_use_reverse_order_evaluation_of_function_params();
+  #if TRANS_CRASHDEBUG 
+  PrintErr("Detected function parameter evaluation order for this arch: %s\n", trans_reverse_function_params ? "Right to left (reversed)" : "Left to right");
+  #endif
+ }
 
  int i=0; int p=0;
  
@@ -3017,12 +3047,13 @@ void translate_program(program *prog){
 
  trans_function_gposses = calloc(256,sizeof(int));
  trans_build_fgpos_array(prog); 
-#if 1
- if( ! trans_program_contains_F ){
+
+ if( ! trans_program_contains_F && ! OPTIONSWITCH_dont_remove_unused_functions ){
   translate_remove_unused_functions(prog);
  }
- translate_clear_disabled_areas(prog);
-#endif
+ if( ! OPTIONSWITCH_dont_clear_disabled_areas ){
+  translate_clear_disabled_areas(prog);
+ }
 
  i=0; // do function prototypes
  while( prog->functions[i] ){
@@ -3094,6 +3125,33 @@ int main(int argc, char **argv){
  }else{
   printf("%s [program text or path to a file containing program text]\nThis will write the translated C program to stdout.\n",argv[0]);
   return 0;
+ }
+
+ // command line options
+ int i;
+ for(i=2; i<argc; i++){
+  if( ! strcmp("--reverse-params",argv[i]) ){
+   // This will override the default. The default is to autodetect based the result of 'param_order_test'
+   OPTIONSWITCH_reverse_params = 2;
+  }else if(! strcmp("--no-reverse-params",argv[i])){
+   OPTIONSWITCH_reverse_params = 1;
+  }else if(! strcmp("--remove-unused-functions",argv[i])){
+   // do nothing because this is the default
+  }else if(! strcmp("--no-remove-unused-functions",argv[i])){
+   OPTIONSWITCH_dont_remove_unused_functions = 1;
+  }else if(! strcmp("--remove-disabled-areas",argv[i])){
+   // do nothing because this is the default
+  }else if(! strcmp("--no-remove-disabled-areas",argv[i])){
+   OPTIONSWITCH_dont_clear_disabled_areas = 1;
+  }else{
+   fprintf(stderr,"Unrecognised command line option %s\n\nSupported options:\n\
+   --no-reverse-params \n\
+   --remove-unused-functions	(default)\n\
+   --no-remove-unused-functions\n\
+   --remove-disabled-areas	(default)\n\
+   --no-remove-disabled-areas\n",argv[i]);
+   exit(1);
+  }
  }
 
  translate_program(prg);

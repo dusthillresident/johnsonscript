@@ -101,6 +101,10 @@
 
 #define t_extfun	COCKSPENIS	//	external function, t.data.pointer contains a function pointer, used for extensions
 
+#define t_error_line	COCKSPENIS	//	line number for last error
+#define t_error_column	COCKSPENIS	//	column number for last error
+#define t_error_number	COCKSPENIS	//	code number for last error
+
 #define t_leftb		COCKSPENIS	//	(
 
 #define VALUES_END	t_leftb
@@ -176,6 +180,11 @@
 #define t_wait			COCKSPENIS	//	wait [value];		usleep value*1000
 #define t_oscli			COCKSPENIS	//	oscli [stringvalue];	system("string");
 #define t_quit			COCKSPENIS	//	quit ([value]);		exit(value);
+#define t_unclaim		COCKSPENIS	//	unclaim [string reference number];		Unclaim (release) strings so they can be reused by "S"
+#define t_catch			COCKSPENIS	//	catch [commands]				run some commands, if an error happens during that then it'll be caught. Also works as a pseudo-value in the same way that oscli does
+#define t_throw			COCKSPENIS	//	throw "error message"
+#define t_endcatch		COCKSPENIS	//	terminate the code block where errors are being trapped
+#define t_catchf		COCKSPENIS	//	processed catch that knows where the corresponding 'endcatch' is
 // ---------------------------------------------
 #define t_appendS		COCKSPENIS	//	append$ [stringvar] [stringvalue]		append to string variables
 #define t_extcom		COCKSPENIS	//	external command, used for extensions
@@ -222,6 +231,8 @@
 #define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
 #define t_vectorS		COCKSPENIS	//	vector$ [num] [...]		STR		return string containing vector string, meant for use with 'V' (vectors)
 #define t_extsfun		COCKSPENIS	//	external string function, used for extensions
+#define t_error_message		COCKSPENIS	//	error message string from last encountered error
+#define t_error_file		COCKSPENIS	//	name of the program text file from the last encountered error
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_extsfun
 #ifdef enable_graphics_extension // graphics extension stringvalues

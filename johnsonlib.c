@@ -115,7 +115,7 @@ void ExpandSVR( SVR *svr, int newsize ){
   fprintf(stderr,"Johnsonlib: ExpandSVR: len => bufsize\n");
   exit(0);
  }
- newsize = newsize+(512-(newsize % 512));
+ newsize = newsize+(256-(newsize % 256));
  //printf("ExpandSVR: %p : bufsize %d, newsize %d\n",svr->buf,svr->bufsize,newsize);
  if( svr->buf == NULL ){
   svr->buf = calloc(1, newsize);
@@ -502,6 +502,37 @@ int InstrS( int sa_l, SVL sv1, SVL sv2 )
   SAL=-1;
  }
  return result;
+}
+
+
+// 'option "cleanup"'
+void Johnson_CleanSVR(SVR *svr, int preserve){
+ if( !svr->buf ) return;
+ if( !svr->claimed || !preserve || !svr->len ){
+  free(svr->buf);
+  svr->bufsize = 0;
+  svr->len = 0;
+  svr->buf=NULL;
+  //fprintf(stderr, "debug1: len %d, bufsize %d\n",svr->len,svr->bufsize);
+ }else if(svr->bufsize != svr->len+1){
+  void *old_ptr = svr->buf;
+  svr->buf = realloc( svr->buf, svr->len+1 );
+  svr->bufsize = svr->len+1;
+  //fprintf(stderr, "debug2: len %d, bufsize %d\n",svr->len,svr->bufsize);
+  if( svr->len && !svr->buf ){
+   fprintf(stderr,"Johnson_CleanSVR: realloc failed\n");
+   exit(1);
+  }
+ }
+}
+void Johnson_Cleanup(){
+ int i;
+ for(i=0; i<max_stringacc; i++){
+  Johnson_CleanSVR( StringAcc[i], 0 );
+ }
+ for(i=0; i<max_stringvars; i++){
+  Johnson_CleanSVR( StringVars[i], 1 );
+ }
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -900,7 +931,6 @@ void Johnsonlib_init(int argc, char **argv){
  // seed random number generator
  SeedRng();
 }
-
 
 #ifndef using_johnsonlib
 int main(int argc,char **argv){

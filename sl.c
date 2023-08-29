@@ -1,10 +1,12 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include "mylib.c"
 #include <ctype.h> // isspace
 #include <unistd.h> // usleep
 #include <math.h>
+#include <setjmp.h>
 
 // Apparently isnan() returns 0 for -nan when GCC optimisations are enabled.
 // So I needed to find my own replacement for isnan() that behaves how I want.
@@ -187,6 +189,13 @@ struct program {
  id_info *extensions; // used for external extensions
  id_info *quit_procs; // used for extensions that need special routines in order to quit gracefully
  stringslist *program_strings;
+ // ------------ these variables will hold error handler info, and info about the last error to be trapped
+ jmp_buf *error_handler;
+ stringvar *_error_message; 
+ stringvar *_error_file;
+ int _error_line;
+ int _error_column;
+ int _error_number;
 };
 typedef struct program program;
 //--------------------------
@@ -201,7 +210,7 @@ void free_ids(id_info *ids);
 token* tokenise( program *prog, char *text, int *length_return, char *name_of_source_file);
 token* loadtokensfromtext(program *prog, char *path,int *length_return);
 void process_function_definitions(program *prog,int startpos);
-void error(program *prog, char *s);
+void error(program *prog, int p, char *format, ...);
 stringval getstringvalue( program *prog, int *pos );
 int isstringvalue(TOKENTYPE_TYPE type);
 int isvalue(TOKENTYPE_TYPE type);
@@ -213,6 +222,12 @@ int add_id(id_info *ids, id_info *new_id);
 void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id);
 id_info* make_id(char *id_string, token t);
 id_info* find_id(id_info *ids, char *id_string);
+void clean_stringvar( program *prog, stringvar *svr, int preserve );
+void unclaim(program *prog, int *p);
+int oscli(program *prog, int *p);
+int catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue );
+void copy_stringval_to_stringvar(stringvar *dest, stringval src);
+void process_catch(program *prog, int p);
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -258,6 +273,10 @@ newprog(int maxlen, int vsize, int ssize){
  out->ids = calloc(1,sizeof(id_info));
  // initialise stringslist
  out->program_strings = calloc(1,sizeof(stringslist));
+ // initialise error info
+ out->_error_message = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE); 
+ out->_error_file    = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE);
+ copy_stringval_to_stringvar(out->_error_message, (stringval){"(C)2023 Johnsonscript",21} );
  return out;
 }
 
@@ -276,17 +295,17 @@ get_free_fileslot(program *prog){
  // if one was not found, create a new one
  prog->max_files += 1;
  prog->files = realloc(prog->files, sizeof(void*) * prog->max_files);
- if(prog->files == NULL) error(prog, "get_free_fileslot: realloc failed\n");
+ if(prog->files == NULL) error(prog, -1, "get_free_fileslot: realloc failed");
  prog->files[prog->max_files-1] = calloc(1,sizeof(file));
  return prog->max_files-1;
 }
 file* getfile(program *prog, int file_reference_number, int read, int write){
  int fileindex = file_reference_number - 1;
- if( fileindex<0 || fileindex>=prog->max_files ) error(prog, "bad file access (filenumber out of range)\n");
+ if( fileindex<0 || fileindex>=prog->max_files ) error(prog, -1, "bad file access (filenumber out of range)");
  file *out = prog->files[fileindex];
- if( ! out->open ) error(prog, "bad file access (not open)\n");
- if( read  && ! out->read_access  ) error(prog, "bad file access (not readable)\n");
- if( write && ! out->write_access ) error(prog, "bad file access (not writable)\n");
+ if( ! out->open ) error(prog, -1, "bad file access (not open)");
+ if( read  && ! out->read_access  ) error(prog, -1, "bad file access (not readable)");
+ if( write && ! out->write_access ) error(prog, -1, "bad file access (not writable)");
  return out;
 }
 // -------------------------------------------------------------------------------------------
@@ -396,8 +415,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 register_external_function( id_info *id_list, double (*external_function)(int*,program*), char *id ){
  if( ! add_id( id_list, make_id( id, maketoken_extfun( external_function ) ) ) ){
-  printf("id was %s\n",id);
-  error(NULL, "register_external_function: id already exists\n");
+  error(NULL, -1, "register_external_function: id '%s' already exists",id);
  }
 }
 
@@ -407,8 +425,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 register_external_stringfunction( id_info *id_list, stringval (*external_stringfunction)(program*,int*), char *id ){
  if( ! add_id( id_list, make_id( id, maketoken_extsfun( external_stringfunction ) ) ) ){
-  printf("id was %s\n",id);
-  error(NULL, "register_external_stringfunction: id already exists\n");
+  error(NULL, -1, "register_external_stringfunction: id '%s' already exists",id);
  }
 }
 
@@ -418,8 +435,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 register_external_command( id_info *id_list, void (*external_command)(int*,program*), char *id ){
  if( ! add_id( id_list, make_id( id, maketoken_extc( external_command ) ) ) ){
-  printf("id was %s\n",id);
-  error(NULL, "register_external_command: id already exists\n");
+  error(NULL, -1, "register_external_command: id '%s' already exists",id);
  }
 }
 
@@ -430,8 +446,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 register_external_option( id_info *id_list, void (*external_option_procedure)(program*,int*), char *id){
  if( ! add_id( id_list, make_id( id, maketoken_extopt( external_option_procedure ) ) ) ){
-  printf("id was %s\n",id);
-  error(NULL, "register_external_option: id already exists\n");
+  error(NULL, -1, "register_external_option: id '%s' already exists",id);
  }
 }
 // register a procedure to call when quitting.
@@ -443,8 +458,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 register_quit_procedure( id_info *id_list, void (*quit_procedure)(program*), char *id ){
  token t; t.type = t_bad; t.data.pointer = (void*) quit_procedure;
  if( ! add_id( id_list, make_id( id, t ) ) ){
-  printf("id was %s\n",id);
-  error(NULL, "register_external_option: id already exists\n");
+  error(NULL, -1, "register_external_option: id '%s' already exists",id);
  }
 }
 
@@ -456,8 +470,8 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 register_replacement( id_info *id_list, TOKENTYPE_TYPE target, char *replacewith ){
  id_info *replacewith_idinfo;
  if( ! (replacewith_idinfo = find_id(id_list,replacewith) ) ){
-  printf("id for replacement was '%s'\n",replacewith);
-  error(NULL, "extension for replacement not found");
+  token t = {0}; t.type = target;
+  error(NULL, -1, "extension '%s' for replacement of '%s' not found",replacewith,tokenstring(t));
  }
  token replacement = replacewith_idinfo->t;
 
@@ -465,8 +479,8 @@ register_replacement( id_info *id_list, TOKENTYPE_TYPE target, char *replacewith
  strcpy(replacement_id_string, "__REPLACEMENT");
  *replacement_id_string = target;
  if( ! add_id( id_list, make_id( replacement_id_string, replacement ) ) ){
-  printf("tokentype number was '%d'\n",target);
-  error(NULL, "register_replacment: a replacement is already registered for this token type\n");
+  fprintf(stderr, "tokentype number was '%d'\n",target);
+  error(NULL, -1, "register_replacment: a replacement is already registered for this token type");
  }
 }
 
@@ -540,17 +554,16 @@ init_program( char *str,int str_is_filepath, id_info *extensions ){
   if( extensions->name && !strncmp("OPTION_",extensions->name,7) ){
    char *extension_option_string_permanent_address = calloc( strlen(extensions->name)+1, sizeof(char));
    strcpy( extension_option_string_permanent_address, extensions->name+7 );
-   //printf("fuckin fuck %s\n",extension_option_string_permanent_address);//test, remove soon
+   //fprintf(stderr,"fuckin fuck %s\n",extension_option_string_permanent_address);//test, remove soon
    token extension_option_token = extensions->t;
    if( extension_option_token.type != t_extopt ){
-    error(NULL, "invalid extension configuration, please check\n");
+    error(NULL, -1, "invalid extension configuration, please check");
    }
    if( ! prog->external_options ){
     prog->external_options = calloc(1,sizeof(id_info));
    }
    if( ! add_id( prog->external_options, make_id( extension_option_string_permanent_address, extension_option_token) ) ){
-    printf("id was %s\n",extension_option_string_permanent_address);
-    error(NULL, "init_program: external option id already exists\n");
+    error(NULL, -1, "init_program: external option id '%s' already exists",extension_option_string_permanent_address);
    }
    stringslist_addstring(prog->program_strings, extension_option_string_permanent_address);
   }
@@ -559,7 +572,7 @@ init_program( char *str,int str_is_filepath, id_info *extensions ){
     prog->quit_procs = calloc(1,sizeof(id_info));
    }
    if( ! add_id( prog->quit_procs, make_id( extensions->name, extensions->t) ) ){
-    error(NULL, "there is already a quit procedure with this name\n");
+    error(NULL, -1, "there is already a quit procedure with this name '%s'",extensions->name);
    }
   }
   extensions = extensions->next;
@@ -588,8 +601,8 @@ int
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 allocate_variable_data(program *prog, int amount ){
- if( amount <= 0 ) error(prog, "allocate_variable_data: bad allocation request\n");
- if( prog->next_free_var+amount > (prog->vsize - prog->ssize) ) error(prog, "allocate_variable_data: run out of space\n");
+ if( amount <= 0 ) error(prog, -1, "allocate_variable_data: bad allocation request %d",amount);
+ if( prog->next_free_var+amount > (prog->vsize - prog->ssize) ) error(prog, -1, "allocate_variable_data: run out of space");
  int index = prog->next_free_var; prog->next_free_var += amount;
  return index;
 }
@@ -614,8 +627,8 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 add_id(id_info *ids, id_info *new_id){
  // check if this id name is already used in this id list
  if( ids->name && !strcmp(new_id->name, ids->name) ){
-  //printf("add_id: id was '%s'\n",new_id->name);
-  //error(NULL, "add_id: this id is already used in this id list\n");
+  //fprintf(stderr,"add_id: id was '%s'\n",new_id->name);
+  //error(NULL, "add_id: this id is already used in this id list");
   return 0;
  }
  // ----------
@@ -632,11 +645,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id){
  if( ! add_id( ids, new_id ) ){
-  if( p > -1 ){
-   print_sourcetext_location( prog, p );
-  }
-  printf("add_id: id was '%s'\n",new_id->name);
-  error(prog, errormessage);
+  error(prog, p, "%s, id was '%s'",errormessage,new_id->name);
  }
 }
 
@@ -673,9 +682,7 @@ process_id(program *prog, token *t){
  if(foundid==NULL) foundid = find_id( prog->ids, (char*)t->data.pointer );
  // if nothing was still found, error
  if(foundid==NULL){
-  print_sourcetext_location( prog, (int) (t - prog->tokens) );
-  printf("process_id: id was '%s'\n",(char*)t->data.pointer);
-  error(prog, "process_id: unknown id\n");
+  error(prog, (int) (t - prog->tokens), "process_id: unknown id '%s'",(char*)t->data.pointer);
  }
  // --- something was found ---
  // overwrite the token with the kind of token in the found id_info
@@ -761,23 +768,23 @@ process_function_definition(int pos,program *prog){
  case t_F:
   pos+=1;
   func_number = getvalue(&pos,prog);
-  if(prog->functions[func_number]){ printf("process_function_definition: this function number is already used\n"); goto process_function_definition_errorout; }
+  if(prog->functions[func_number]){ fprintf(stderr,"process_function_definition: this function number is already used\n"); goto process_function_definition_errorout; }
   break;
  case t_id:
   // check if the id is allowed, eg, if it's not already used
-   if( find_id(prog->ids, (char*)prog->tokens[pos].data.pointer) ){ printf("process_function_definition: this identifier '%s' is already used\n",(char*)prog->tokens[pos].data.pointer); goto process_function_definition_errorout; }
+   if( find_id(prog->ids, (char*)prog->tokens[pos].data.pointer) ){ fprintf(stderr,"process_function_definition: this identifier '%s' is already used\n",(char*)prog->tokens[pos].data.pointer); goto process_function_definition_errorout; }
   // find the next unused function number, error if there are no unused function numbers
    {int i;
     for(i=0; i<MAX_FUNCS; i++){
      if( !prog->functions[i] ){ func_number = i; i=MAX_FUNCS; }
     }
-    if(func_number == -1){ printf("process_function_definition: too many functions have already been defined\n"); goto process_function_definition_errorout; }
+    if(func_number == -1){ fprintf(stderr,"process_function_definition: too many functions have already been defined\n"); goto process_function_definition_errorout; }
    }
   // save the id's string in func_id, to be later added to the id list 
   func_id = (char*)prog->tokens[pos].data.pointer;
   pos +=1;
   break;
- default: printf("process_function_definition: expected F or identifier\n"); goto process_function_definition_errorout;
+ default: fprintf(stderr,"process_function_definition: expected F or identifier\n"); goto process_function_definition_errorout;
  }
  
  // is this a function with named parameters, or a function with unnamed parameters, or a function that has no parameters at all?
@@ -825,7 +832,7 @@ process_function_definition(int pos,program *prog){
     num_ls +=1;
     pos+=1;
    }
-   if( num_ls == 0 ){ printf("process_function_definition: local: expected at least one identifier\n"); goto process_function_definition_errorout; }
+   if( num_ls == 0 ){ fprintf(stderr,"process_function_definition: local: expected at least one identifier\n"); goto process_function_definition_errorout; }
    //save the number of locals
    out->num_locals = num_ls;
    break;
@@ -836,7 +843,7 @@ process_function_definition(int pos,program *prog){
   break;
  case t_endstatement: // function with no locals
   goto process_function_definition_normalout;
- default: printf("process_function_definition: expected L or identifier\n"); goto process_function_definition_errorout;
+ default: fprintf(stderr,"process_function_definition: expected L or identifier\n"); goto process_function_definition_errorout;
  }
 
 
@@ -861,7 +868,7 @@ process_function_definition(int pos,program *prog){
  }
 
  if( prog->tokens[pos].type != t_endstatement ){
-  printf("process_function_definition: the function definition is complete but ';' was not found\n"); goto process_function_definition_errorout;
+  fprintf(stderr,"process_function_definition: the function definition is complete but ';' was not found\n"); goto process_function_definition_errorout;
  }
  pos+=1;
  // set function execution start position
@@ -902,6 +909,7 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_import	2	// import functions from another file
 #define opt_seedrnd	3	// seed RNG
 #define opt_unclaim	4	// unclaim a string (so it can be re-used by 'S')
+#define opt_cleanup	5	// free unused memory from all stringvars and string accs
 
 #ifdef enable_graphics_extension
 #define opt_wmclose	100	// specify action to take when the window close button is pressed
@@ -943,6 +951,7 @@ option( program *prog, int *p ){
   if( !strncmp( "import", id_string.string, id_string.len )){opt_number = opt_import; goto option__identify_option_string_out;}	//	import		Import functions from another file
   if( !strncmp( "seedrnd", id_string.string, id_string.len)){opt_number= opt_seedrnd; goto option__identify_option_string_out;}	//	seedrnd		Seed RNG
   if( !strncmp( "unclaim", id_string.string, id_string.len)){opt_number= opt_unclaim; goto option__identify_option_string_out;} //	unclaim [string ref num]	Unclaim a string
+  if( !strncmp( "cleanup", id_string.string, id_string.len)){opt_number= opt_cleanup; goto option__identify_option_string_out;} //	cleanup		String var/acc garbage collection
 #ifdef enable_graphics_extension
   if( !strncmp( "wintitle", id_string.string, id_string.len ) ){ opt_number=opt_wintitle;	goto option__identify_option_string_out;}	// 
   if( !strncmp( "wmclose", id_string.string, id_string.len ) ){ opt_number=opt_wmclose;	goto option__identify_option_string_out;}	//	
@@ -989,11 +998,10 @@ option( program *prog, int *p ){
  case opt_vsize: // vsize
  {
   int new_vsize = getvalue(p,prog);
-  //printf("new_vsize %d \n",new_vsize);
-  if( new_vsize <= 0 ) error(prog, "option: vsize: new vsize is less than or equal to 0\n");
-  if( prog->next_free_var ) error(prog, "option: vsize: it's not possible to change the vsize after variables have been allocated\n");
+  if( new_vsize <= 0 ) error(prog, starting_p, "option: vsize: new vsize '%d' is less than or equal to 0",new_vsize);
+  if( prog->next_free_var ) error(prog, starting_p, "option: vsize: it's not possible to change the vsize after variables have been allocated");
   double *newvarray = calloc(new_vsize + prog->ssize, sizeof(double));
-  if( newvarray == NULL ) error(prog, "option: vsize: failed to allocate memory\n");
+  if( newvarray == NULL ) error(prog, starting_p, "option: vsize: failed to allocate memory");
   size_t oldsize = sizeof(double) * (prog->vsize-prog->ssize);
   size_t newsize = sizeof(double) * new_vsize;
   memcpy( (void*)newvarray, (void*)prog->vars, oldsize < newsize ? oldsize : newsize ); // copy variables
@@ -1007,12 +1015,12 @@ option( program *prog, int *p ){
  case opt_ssize: // ssize
  {
   int new_ssize = getvalue(p,prog);
-  if( new_ssize <= 0 ) error(prog, "option: ssize: new ssize is less than or equal to 0\n");
-  if( prog->next_free_var ) error(prog, "option: ssize: it's not possible to change the ssize after variables have been allocated\n");
-  if( new_ssize <= prog->sp + (prog->current_function->num_locals + (prog->current_function->params_type==p_atleast ? prog->stack[ prog->sp ] : prog->current_function->num_params )) ) error(prog, "option: ssize: new stack size is too small to contain the current contents of the stack\n");
+  if( new_ssize <= 0 ) error(prog, starting_p, "option: ssize: new ssize '%d' is less than or equal to 0",new_ssize);
+  if( prog->next_free_var ) error(prog, starting_p, "option: ssize: it's not possible to change the ssize after variables have been allocated");
+  if( new_ssize <= prog->sp + (prog->current_function->num_locals + (prog->current_function->params_type==p_atleast ? prog->stack[ prog->sp ] : prog->current_function->num_params )) ) error(prog, starting_p, "option: ssize: new stack size is too small to contain the current contents of the stack");
   prog->vsize -= prog->ssize;  prog->ssize = new_ssize;  prog->vsize += new_ssize; //update size information
   prog->vars = realloc( prog->vars, sizeof(double) * prog->vsize ); // reallocate vars+stack array
-  if( prog->vars == NULL ) error(prog, "option: ssize: realloc failed\n");
+  if( prog->vars == NULL ) error(prog, starting_p, "option: ssize: realloc failed");
   prog->stack = prog->vars + (prog->vsize - prog->ssize);
   break;
  }
@@ -1021,13 +1029,13 @@ option( program *prog, int *p ){
   token *tokens; int tokens_length; stringval filename;
   // get filename
   filename = getstringvalue(prog,p);
-  char holdthis = filename.string[filename.len]; filename.string[filename.len]=0;
+  char fname[filename.len+1];
+  strncpy(fname, filename.string, filename.len);
+  fname[filename.len]=0;
   // load text file and process it, getting the tokens (program code data) and program_strings
-  tokens = loadtokensfromtext(prog,filename.string,&tokens_length);
-  filename.string[filename.len]=holdthis;
+  tokens = loadtokensfromtext(prog, fname, &tokens_length);
   if( tokens == NULL ){
-   print_sourcetext_location( prog, starting_p );
-   error(prog, "import: couldn't open file\n");
+   error(prog, starting_p, "import: couldn't open file '%s'",fname);
   }
   // resize array and append new code
   prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length)*sizeof(token));
@@ -1052,16 +1060,23 @@ option( program *prog, int *p ){
   XRANDranc = v[2];
   break;
  }
- case opt_unclaim:
+ case opt_unclaim: // deprecated but preserved for compatibility, 'unclaim' is now a keyword
  {
-  int stringvar_num = (int)getvalue(p,prog);
-  if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
-   print_sourcetext_location( prog, starting_p );
-   printf("stringvar_num: %d\n",stringvar_num);
-   error(prog, "unclaim: bad stringvariable access\n");
-  }
-  prog->stringvars[stringvar_num]->unclaimed=1;
+  prog->tokens[starting_p].type = t_endstatement;
+  prog->tokens[id_stringconst_pos].type = t_unclaim;
+  *p = id_stringconst_pos;
   break;
+ case opt_cleanup:
+ {
+  int i;
+  for(i=0; i<prog->max_stringvars; i++){
+   clean_stringvar( prog, prog->stringvars[i], 1 );
+  }
+  for(i=0; i<prog->max_string_accumulator_levels; i++){
+   clean_stringvar( prog, prog->string_accumulator[i], 0 );
+  }
+ }
+ break;
 #ifdef enable_graphics_extension
  case opt_wmclose:
  {
@@ -1087,17 +1102,14 @@ option( program *prog, int *p ){
  case opt_pastetext: case opt_pastebmp: {
   int stringvar_num = (int)getvalue(p,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
-   print_sourcetext_location( prog, starting_p );
-   printf("stringvar_num: %d\n",stringvar_num);
-   error(prog, "pastetext: bad stringvariable access\n");
+   error(prog, starting_p, "pastetext: bad stringvariable access '%d'",stringvar_num);
   }
   // now we have the stringvar as prog->stringvars[stringvar_num]
   if( ( opt_number == opt_pastetext ) ? NB_PasteText() : NB_PasteBmp() ){
    if( prog->stringvars[stringvar_num]->bufsize < PasteBufferContentsSize ){ // reallocate string buffer if necessary
     prog->stringvars[stringvar_num]->string = realloc( prog->stringvars[stringvar_num]->string, PasteBufferContentsSize );
     if( prog->stringvars[stringvar_num]->string == NULL ){
-     print_sourcetext_location( prog, starting_p );
-     error(prog, "option: memory allocation failuring during Paste\n");
+     error(prog, starting_p, "option: memory allocation failuring during Paste");
     }//endif
     prog->stringvars[stringvar_num]->bufsize = PasteBufferContentsSize;
    }
@@ -1134,7 +1146,7 @@ option( program *prog, int *p ){
    unsigned int offset     = *(unsigned int*)(bmpstring.string + 2+4+2+2);
    unsigned int image_size = *(unsigned int*)(bmpstring.string + 2+4+2+2+ 4+4+4+4+2+2+4);
    if( offset + image_size > (unsigned int)bmpstring.len ){
-    printf("option: drawbmp: invalid bitmap\n");
+    error(prog, starting_p, "option: drawbmp: invalid bitmap");
     return;
    }
    NB_DrawBmp( x, y, sx,sy,w,h, (Bmp*)bmpstring.string );
@@ -1143,8 +1155,7 @@ option( program *prog, int *p ){
  case opt_hascliptext: case opt_hasclipbmp: {
   int variable_number = (int)getvalue(p,prog);
   if( variable_number < 0 || variable_number >= prog->vsize+prog->ssize ){
-   print_sourcetext_location( prog, starting_p );
-   error(prog, "option: hasclip: bad variable access\n");
+   error(prog, starting_p, "option: hasclip: bad variable access '%d'",variable_number);
   }
   prog->vars[ variable_number ] = ( opt_number == opt_hascliptext ? NB_HasClipText() : NB_HasClipBmp() );
  } break;
@@ -1163,9 +1174,7 @@ option( program *prog, int *p ){
  case opt_xresource: {
   int stringvar_num = (int)getvalue(p,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
-   print_sourcetext_location( prog, starting_p );
-   printf("stringvar_num: %d\n",stringvar_num);
-   error(prog, "pastetext: bad stringvariable access\n");
+   error(prog, starting_p, "pastetext: bad stringvariable access '%d'",stringvar_num);
   }
   stringvar *sv = prog->stringvars[stringvar_num];
   stringval itemname = getstringvalue( prog, p ); unsigned char h1 = itemname.string[itemname.len]; itemname.string[itemname.len]=0;
@@ -1195,7 +1204,7 @@ option( program *prog, int *p ){
  } break;
 #endif
  }
- default: print_sourcetext_location( prog, starting_p ); error(prog, "option: unrecognised option\n");
+ default: error(prog, starting_p, "option: unrecognised option");
  }
 
 }
@@ -1240,7 +1249,7 @@ wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text){
  int result = wordmatch(pos, word, text);
  if( result ){
   //tb();
-  //printf("fuckin shit %d\n",*pos);
+  //fprintf(stderr,"fuckin shit %d\n",*pos);
   if( isspace(text[*pos]) || ispunct(text[*pos]) || !text[*pos] ) return 1;
   *pos = holdpos;
  }
@@ -1292,7 +1301,7 @@ void
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 _gettoken_setstring(stringslist *progstrings, token *t, unsigned char *text, int l){
- //printf("FUCK PENIS FUCK\n");
+ //fprintf(stderr,"FUCK PENIS FUCK\n");
  // allocate memory for string and copy string to it
  t->data.pointer = calloc(l+1,sizeof(char));
  strncpy((char*)t->data.pointer, (char*)text, l);
@@ -1309,7 +1318,7 @@ _gettoken_skippastcomments(int *pos, unsigned char *text){
  if( wordmatch( pos,"/*", text) ){		
   while( !wordmatch( pos,"*/", text) ){
    *pos += 1;
-   if( !text[*pos] ) error(NULL, "missing */\n");
+   if( !text[*pos] ) error(NULL, -1, "missing */");
   }//endwhile
  }//endif
  // line comment
@@ -1331,7 +1340,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   *pos+=1;
   _gettoken_skippastcomments(pos,text);
  }
- //printf("COCK ROCK %c\n",text[*pos]);
+ //fprintf(stderr,"COCK ROCK %c\n",text[*pos]);
 
  int l;
 
@@ -1354,7 +1363,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
 
  // label
  if( text[*pos]=='.' ){	
-  //printf("here\n");
+  //fprintf(stderr,"here\n");
   l = patternmatch( *pos+1,"_qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890.", text);
   if(l){
    // put here: allocate memory for identifier string and store it wherever
@@ -1545,6 +1554,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  if( wordmatch_plus_whitespace( pos,"append$", text) ){	//	
   out = maketoken( t_appendS ); goto gettoken_normalout;
  }
+ if( wordmatch_plus_whitespace( pos,"unclaim", text) ){	//	unclaim [string reference number], release strings. Mainly used when working with temporary strings provided by 'S'
+  out = maketoken( t_unclaim ); goto gettoken_normalout;
+ }
  if( wordmatch_plus_whitespace( pos,"function", text) ){	//	
   out = maketoken( t_deffn ); goto gettoken_normalout;
  }
@@ -1619,8 +1631,8 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   l=0;
   while( text[*pos]!='"' ){
    switch( text[*pos] ){
-   case 0: error(prog, "missing \"\n");
-   //case 10: error(prog, "missing \" on this line\n");
+   case 0: error(prog, -1, "missing \"");
+   //case 10: error(prog, "missing \" on this line");
    }//endswitch
    l+=1;
    *pos += 1;
@@ -1690,6 +1702,32 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
 
  if( wordmatch_plus_whitespace( pos,"option", text) ){	//	
   out = maketoken( t_option ); goto gettoken_normalout;
+ }
+
+ if( wordmatch_plus_whitespace( pos,"catch", text) ){	//	
+  out = maketoken( t_catch ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"endcatch", text) ){	//	
+  out = maketoken( t_endcatch ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"throw", text) ){	//	
+  out = maketoken( t_throw ); goto gettoken_normalout;
+ }
+
+ if( wordmatch_plus_whitespace( pos,"_error_line", text) ){	//	
+  out = maketoken( t_error_line ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"_error_column", text) ){	//	
+  out = maketoken( t_error_column ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"_error_number", text) ){	//	
+  out = maketoken( t_error_number ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"_error_file", text) ){	//	
+  out = maketoken( t_error_file ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"_error_message", text) ){	//	
+  out = maketoken( t_error_message ); goto gettoken_normalout;
  }
 
  #ifdef enable_graphics_extension 
@@ -1933,11 +1971,11 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
    // ----
    if(!test_run) _gettoken_setstring(progstrings, &out,text+*pos,l+1);
    // here: we check the list of extensions, and if this id matches one of those, we change the token accordingly
-   //printf("fuck %p\n",prog->extensions);
+   //fprintf(stderr,"fuck %p\n",prog->extensions);
    // ----
    if(prog->extensions && !test_run){
     id_info *extension_id;
-    //printf("fuckers '%s'\n",(char*)out.data.pointer);
+    //fprintf(stderr,"fuckers '%s'\n",(char*)out.data.pointer);
     if( extension_id = find_id( prog->extensions, (char*)out.data.pointer) ){
      out = extension_id->t;
     }
@@ -1953,20 +1991,20 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
 */
 
- //printf("FUCK (%c) %d   pos %d\n",text[*pos],text[*pos], *pos);
+ //fprintf(stderr,"FUCK (%c) %d   pos %d\n",text[*pos],text[*pos], *pos);
 
-// printf("*pos == %d: %d '%c'\n",*pos,text[*pos],text[*pos]);
+// fprintf(stderr,"*pos == %d: %d '%c'\n",*pos,text[*pos],text[*pos]);
 // if(text[*pos])goto gettoken_start;
 
- if(!text[*pos]) printf("FUCK OFF!\n"); // this should never FUCKING happen
+ if(!text[*pos]) fprintf(stderr,"FUCK OFF!\n"); // this should never FUCKING happen
 
  gettoken_failout:
- printf("WARNING: garbage in input: \"");
+ if(prog) fprintf(stderr,"WARNING: garbage in input: \"");
  while( text[*pos] && !isspace(text[*pos]) ){
-  printf("%c",text[*pos]);
+  if(prog) fprintf(stderr,"%c",text[*pos]);
   *pos+=1;
  }
- printf("\"\n");
+ if(prog) fprintf(stderr,"\"\n");
  while( text[*pos] && isspace(text[*pos]) ){
   *pos+=1;
  }
@@ -2039,8 +2077,8 @@ gettokens(program *prog, token *tokens_return, int len, unsigned char *text, uns
    progstrings->string = realloc( progstrings->string, newarraysize * sizeof(TTP) );
    TextPosses = (TTP*)progstrings->string;
    if( TextPosses == NULL ){
-    printf("gettokens: couldn't allocate memory for TTP\n");
-    exit(0);
+    fprintf(stderr,"gettokens: couldn't allocate memory for TTP\n");
+    exit(1);
    }
    TextPosses->arraysize = newarraysize;
   }
@@ -2065,7 +2103,7 @@ gettokens(program *prog, token *tokens_return, int len, unsigned char *text, uns
  if(TextPosses){ // update and trim the TTP array
   if( ttp_lastindex ){
    TextPosses->lastindex = ttp_lastindex + count;
-   //printf("shit %d\n",TextPosses->lastindex);
+   //fprintf(stderr,"shit %d\n",TextPosses->lastindex);
    TextPosses->arraysize = TextPosses->lastindex+1;
    TextPosses = realloc( TextPosses, TextPosses->arraysize * sizeof(TTP) );
    TextPosses[TextPosses->lastindex]=(TTP){0,0,0,0,0};
@@ -2123,14 +2161,32 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
+get_sourcetext_location_info( program *prog, int token_p,  int *line, int *column, char **file){
+ if( prog->program_strings->string == NULL || ( token_p<0 || token_p>=prog->length )  ){
+  *line = -1;
+  *column = -1;
+  *file = "[unspecified]";
+  return;
+ }
+ TTP *ttp = (TTP*)prog->program_strings->string;
+ *line = ttp[token_p].line;
+ *column = ttp[token_p].column;
+ *file = ttp[token_p].file == NULL ? "[unspecified]" : ttp[token_p].file;
+ return;
+}
+
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
 print_sourcetext_location( program *prog, int token_p){
  if( prog->program_strings->string == NULL ) return;
  TTP *ttp = (TTP*)prog->program_strings->string;
- //printf("hmm, ttp==%p\n",ttp); printf("ttp->arraysize==%d, ttp->lastindex==%d\n",ttp->arraysize,ttp->lastindex); //test
+ //fprintf(stderr,"hmm, ttp==%p\n",ttp); printf("ttp->arraysize==%d, ttp->lastindex==%d\n",ttp->arraysize,ttp->lastindex); //test
  if( token_p<0 || token_p>=prog->length ){
-  printf("print_sourcetext_location: token_p out of range\n");
+  fprintf(stderr, "print_sourcetext_location: token_p out of range\n");
  }else{
-  printf(":::: At line %d, column %d, in file '%s' ::::\n", ttp[token_p].line, ttp[token_p].column, ttp[token_p].file == NULL ? "null" : ttp[token_p].file );
+  fprintf(stderr, ":::: At line %d, column %d, in file '%s' ::::\n", ttp[token_p].line, ttp[token_p].column, ttp[token_p].file == NULL ? "null" : ttp[token_p].file );
  }
 }
 
@@ -2236,6 +2292,16 @@ tokenstring(token t){
  case t_for: case t_forf: return "for";
  case t_endfor: case t_endforf: return "endfor";
 
+ case t_catch: case t_catchf: return "catch";
+ case t_endcatch: return "endcatch";
+ case t_throw: return "throw";
+
+ case t_error_line:	return "_error_line";
+ case t_error_column:	return "_error_column";
+ case t_error_number:	return "_error_number";
+ case t_error_file:	return "_error_file";
+ case t_error_message:	return "_error_message";
+
  // ------ file stuff ------------------
  case t_openin:		return "openin";
  case t_openout:	return "openout";
@@ -2258,6 +2324,7 @@ tokenstring(token t){
 
  case t_stringvar:	return "stringvar";
  case t_S:		return "$";
+ case t_unclaim:	return "unclaim";
 
  case t_rnd:		return "rnd";
  case t_wait:		return "wait";
@@ -2409,6 +2476,46 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
+clean_stringvar( program *prog, stringvar *svr, int preserve ){
+ if( svr->unclaimed || !preserve ){
+  svr->len = 0;
+  if( svr->bufsize == DEFAULT_NEW_STRINGVAR_BUFSIZE ) return;
+  svr->bufsize = DEFAULT_NEW_STRINGVAR_BUFSIZE;
+  free( svr->string );
+  svr->string = malloc( DEFAULT_NEW_STRINGVAR_BUFSIZE );
+  if( ! svr->string ){
+   error(prog, -1, "clean_stringvar: allocation failed");
+  }
+ }else if( svr->bufsize != svr->len+1 ){
+  svr->bufsize = svr->len+1;
+  svr->string = realloc( svr->string, svr->bufsize );
+  if( svr->string == NULL ){
+   error(prog, -1, "clean_stringvar: reallocation failed");
+  }
+ }
+}
+
+// unclaim [string ref number] 		Release string variables to be reused by 'S'
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+unclaim(program *prog, int *p){
+ int starting_p = *p;
+ *p += 1;
+ int stringvar_num = (int)getvalue(p,prog);
+ if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
+  error(prog, starting_p, "unclaim: bad stringvariable access '%d'",stringvar_num);
+ }
+ stringvar *svr = prog->stringvars[stringvar_num];
+ svr->unclaimed=1;
+ if( svr->bufsize > DEFAULT_NEW_STRINGVAR_BUFSIZE ) clean_stringvar( prog, svr, 0 );
+}
+
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
 mystrncpy(char *dest, char *src, size_t n){
  //strncpy(dest,src,n); return;
  size_t i;
@@ -2428,10 +2535,10 @@ stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserv
   return;
  }
  int new_bufsize = bufsize_required+(256-bufsize_required % 256);
- //if( new_bufsize <= bufsize_required ) error(NULL, "still happening");
+ //if( new_bufsize <= bufsize_required ) error(NULL, -1, "still happening");
  if(preserve){
   sv->string = realloc(sv->string, new_bufsize);
-  if(sv->string == NULL) error(NULL, "stringvar_adjustsize: realloc failed\n");
+  if(sv->string == NULL) error(NULL, -1, "stringvar_adjustsize: realloc failed");
   sv->bufsize = new_bufsize;
   sv->string[sv->len]=0;
  }else{
@@ -2460,6 +2567,10 @@ isstringvalue(TOKENTYPE_TYPE type){
  return (type==t_leftb || type==t_id || (type>=STRINGVALS_START && type<=STRINGVALS_END)) ;
 }
 
+// ========================================================
+// =========  GETSTRINGVALUE  =============================
+// ========================================================
+
 stringval
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
@@ -2481,9 +2592,7 @@ getstringvalue( program *prog, int *pos ){
  {
   int stringvar_num = (int)getvalue(pos,prog);
   if( stringvar_num<0 || stringvar_num >= prog->max_stringvars ){
-   print_sourcetext_location( prog, *pos - 1);
-   printf("stringvar_num: %d\n",stringvar_num);
-   error(prog, "getstringvalue: bad stringvariable access\n");
+   error(prog, *pos-1, "getstringvalue: bad stringvariable access '%d'",stringvar_num);
   }
   stringvar *in = prog->stringvars[stringvar_num];
   stringval out;
@@ -2639,8 +2748,7 @@ getstringvalue( program *prog, int *pos ){
  {
   stringval out = getstringvalue( prog,pos );
   if( prog->tokens[ *pos ].type != t_rightb ){
-   print_sourcetext_location( prog, *pos - 1);
-   error(prog, "getstringvalue: expected closing bracket\n");
+   error(prog, *pos-1, "getstringvalue: expected closing bracket");
   }
   *pos += 1;
   return out;
@@ -2683,7 +2791,7 @@ getstringvalue( program *prog, int *pos ){
      //printf("fuck1 %d, %d\n",accumulator->len, accumulator->bufsize);
      stringvar_adjustsizeifnecessary(accumulator, accumulator->bufsize + 1, 1);
      //printf("fuck2 %d, %d\n",accumulator->len, accumulator->bufsize);
-     //if( accumulator->len >= accumulator->bufsize ) error(NULL,"FUCK PENIS FUCK\n"); //remove later
+     //if( accumulator->len >= accumulator->bufsize ) error(NULL,-1,"FUCK PENIS FUCK"); //remove later
     }
    }
    // ==========================================================
@@ -2691,7 +2799,7 @@ getstringvalue( program *prog, int *pos ){
    // ======= reading a specific number of bytes ===============
    if( accumulator->bufsize <= num_bytes_to_read ){
     stringvar_adjustsizeifnecessary(accumulator, num_bytes_to_read, 1);
-    //if( accumulator->bufsize <= num_bytes_to_read ) error(NULL,"FUCK ###########################################\n"); //remove later
+    //if( accumulator->bufsize <= num_bytes_to_read ) error(NULL,-1,"FUCK ###########################################"); //remove later
    }//endif bufsize
    accumulator->len = fread( (void*)accumulator->string, sizeof(char), num_bytes_to_read, f->fp );
    // ==========================================================
@@ -2717,10 +2825,10 @@ getstringvalue( program *prog, int *pos ){
  // ======= END OF GRAPHICS EXTENSION ==========================================================
  // ============================================================================================
  #endif
+ case t_error_message: return *(stringval*)prog->_error_message;
+ case t_error_file:    return *(stringval*)prog->_error_file;
  default:
-  print_sourcetext_location( prog, *pos - 1);
-  printf("getstringvalue: token is %s\n",tokenstring(t));
-  error(prog, "getstringvalue: didn't find a stringvalue\n");
+  error(prog, *pos-1, "getstringvalue: didn't find a stringvalue, instead found '%s'",tokenstring(t));
  }//endswitch
 }//endproc
 
@@ -2729,7 +2837,7 @@ stringvar*
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 create_new_stringvar(program *prog,int bufsize){
- if( bufsize <= 0 ) error(prog, "create_new_stringvar: requested buffer size is less than or equal to 0\n");
+ if( bufsize <= 0 ) error(prog, -1, "create_new_stringvar: requested buffer size is less than or equal to 0");
  int svnum = prog->max_stringvars;
  prog->stringvars = realloc(prog->stringvars, sizeof(void*)*(svnum+1));
  prog->stringvars[svnum] = newstringvar(bufsize);
@@ -2762,14 +2870,30 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-error(program *prog, char *s){
+error(program *prog, int p, char *format, ...){
+ va_list args;
+ va_start(args, format);
+ char s[256];
+ vsprintf(s,format,args);
+ // ------ if the program is catching an error ---------
+ if( prog && prog->error_handler ){
+  char *file;
+  get_sourcetext_location_info( prog, p,  &prog->_error_line, &prog->_error_column, &file );
+  copy_stringval_to_stringvar( prog->_error_message, (stringval){s,strlen(s)} );
+  copy_stringval_to_stringvar( prog->_error_file, (stringval){file,strlen(file)} );
+  longjmp(*prog->error_handler, 1);
+ }
+ // ------ default error response --------
+ if( p > -1 ){
+  print_sourcetext_location( prog, p );
+ }
  #ifdef enable_graphics_extension
  if(newbase_is_running){
   Wait(1);
   MyCleanup();
  }
  #endif
- printf("%s",s);
+ fprintf(stderr, "%s\n",s);
  if( prog ) quit_cleanup(prog);
  exit(0); 
 }
@@ -2791,8 +2915,7 @@ C_CharacterAccess(int *p, program *prog){
  svl = getstringvalue(prog,p);
  index = getvalue(p,prog);
  if(index<0 || index >= svl.len ){
-  print_sourcetext_location( prog, *p - 1);
-  error(prog, "C (characteraccess): index out of range\n");
+  error(prog, *p-1, "C (characteraccess): index '%d' out of range",index);
  }//endif
  return svl.string + index;
 }//endproc
@@ -2806,8 +2929,7 @@ V_ValueAccess(int *p, program *prog){
  svl = getstringvalue(prog,p);
  index = getvalue(p,prog);
  if(index<0 || index >= (svl.len>>3)){
-  print_sourcetext_location( prog, *p - 1);
-  error(prog, "V (valueaccess): index out of range\n");
+  error(prog, *p-1, "V (valueaccess): index '%d' out of range",index);
  }
  return ((double*)svl.string) + index;
 }
@@ -2865,6 +2987,7 @@ getvalue(int *p, program *prog){
  {
   int a,b;
   a = getvalue(p, prog); b = getvalue(p, prog);
+  if( !b ) error(prog, *p, "modulo division by zero");
   return (double)(a % b);
  }
  case t_shiftleft:
@@ -3034,8 +3157,7 @@ getvalue(int *p, program *prog){
  {
   double out = getvalue(p, prog);
   if( prog->tokens[*p].type != t_rightb ){
-   print_sourcetext_location( prog, *p - 1);
-   error(prog, "expected closing bracket\n");
+   error(prog, *p-1, "expected closing bracket");
   }
   *p += 1;
   return out;
@@ -3045,8 +3167,7 @@ getvalue(int *p, program *prog){
  {
   int index = getvalue(p, prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
-  print_sourcetext_location( prog, *p - 1);
-  error(prog, "getvalue: bad variable access\n");
+  error(prog, *p-1, "getvalue: bad variable access '%d'",index);
   break;
  }
  case t_Df:
@@ -3057,18 +3178,19 @@ getvalue(int *p, program *prog){
  {
   int index = (int)getvalue(p,prog) + (int)getvalue(p,prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
-  print_sourcetext_location( prog, *p - 1);
-  error(prog, "getvalue: bad array access\n");
+  error(prog, *p-1, "getvalue: bad array access '%d'",index);
   break;
  }
+/*
+ // This is unused...
  case t_Af:
  { 
   int index = t.data.i + (int)getvalue(p,prog);
   if( index>=0 && index<prog->vsize) return prog->vars[ index ];
-  print_sourcetext_location( prog, *p - 1);
-  error(prog, "getvalue: bad array access\n");
+  error(prog, *p-1, "getvalue: bad array access");
   break; 
  }
+*/
  case t_C:
  {
   return (double)(unsigned char)*C_CharacterAccess(p, prog);
@@ -3082,20 +3204,19 @@ getvalue(int *p, program *prog){
  case t_P:
  {
   int index = prog->sp + prog->current_function->num_locals + (int)getvalue(p,prog);
-  if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad parameter access\n");
+  if(index<0 || index>=prog->ssize) error(prog, *p-1, "getvalue: bad parameter access");
   return prog->stack[index];
  }
  case t_L:
  {
   int index = prog->sp + (int)getvalue(p,prog);
-  if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad local variable access\n");
+  if(index<0 || index>=prog->ssize) error(prog, *p-1, "getvalue: bad local variable access");
   return prog->stack[index];
  }
  case t_stackaccess:
  {
   int index = prog->sp + t.data.i;
-  //printf("FUCK %d\n",index);
-  //if(index<0 || index>=prog->ssize) error(prog, "getvalue: bad stack access\n");
+  //if(index<0 || index>=prog->ssize) error(prog, *p-1, "getvalue: bad stack access");
   return prog->stack[index];
  }
 
@@ -3366,7 +3487,7 @@ getvalue(int *p, program *prog){
     // return the reference number of the new string variable
     return referred_string_constant->string_variable_number;
    }
-  default: error(prog, "getvalue: bad use of @\n");
+  default: error(prog, *p, "getvalue: bad use of @");
   }
   break;
  }
@@ -3391,9 +3512,7 @@ getvalue(int *p, program *prog){
    finfo_cur = prog->current_function;
    fnum = getvalue(p,prog);
    if( (fnum<0 || fnum>(MAX_FUNCS-1)) || !prog->functions[fnum] ){
-    print_sourcetext_location( prog, *p);
-    printf("F: function number was %d\n",fnum);
-    error(prog, "getvalue: bad function call\n");
+    error(prog, *p, "getvalue: F: no such function numbered '%d'",fnum);
    }
    func_info *finfo_new = prog->functions[fnum];
    goto getvalue_functioncall;
@@ -3411,7 +3530,7 @@ getvalue(int *p, program *prog){
 
    // check if there's space on the stack for the new stack frame (new number of locals + new number of params) and if not, error
    minimum_stack_required = finfo_new->num_locals + finfo_new->num_params;
-   if( newsp + minimum_stack_required > prog->ssize ) error(prog, "interpreter stack overflow\n");
+   if( newsp + minimum_stack_required > prog->ssize ) error(prog, *p, "ran out of stack");
    // make space for local variables
    spp = newsp + finfo_new->num_locals;
    prog->spo += finfo_new->num_locals;
@@ -3427,7 +3546,7 @@ getvalue(int *p, program *prog){
    //  store number of params in local variable 0 (_num_params)
    if( finfo_new->params_type == p_atleast ){
     while( isvalue( prog->tokens[*p].type ) ){
-     if( spp >= prog->ssize ) error(prog, "interpreter stack overflow\n");
+     if( spp >= prog->ssize ) error(prog, *p, "ran out of stack");
      prog->stack[ spp ] = getvalue(p, prog);
      spp+=1;
      prog->spo += 1;
@@ -3506,10 +3625,28 @@ getvalue(int *p, program *prog){
  // ======= END OF GRAPHICS EXTENSION ==========================================================
  // ============================================================================================
  #endif
+ case t_error_line:	return prog->_error_line;
+ case t_error_column:	return prog->_error_column;
+ case t_error_number:	return prog->_error_number;
+ // ==================================================================================
+ // ======= 'pseudo values' ==========================================================
+ // ==================================================================================
+ // Although isvalue() will return 0 for these tokens, getvalue() will still operate on them. These are known as 'pseudo values'.
+ // This allows for things like checking the return value of the external command called by 'oscli',
+ // or checking if catch caught an error
+ case t_oscli: // although t_oscli is a command, and not a value according to isvalue(), enable getvalue to operate on it so we can get the retun value of system()
+  return oscli(prog,p);
+ case t_catch: // process an unprocessed 'catch'
+  process_catch(prog,*p-1);
+  t = prog->tokens[ *p - 1 ];
+  // deliberately run through
+ case t_catchf: { // catch returns 1 if an error was caught, 0 otherwise
+  int catchretval = catch( prog, p, 0 /*action: call interpreter*/ , NULL, NULL);
+  *p = t.data.i;
+  return catchretval;
+ }
  default:
-  print_sourcetext_location( prog, *p - 1);
-  printf("getvalue: t.type == %d '%s'\n", t.type, tokenstring(t) );
-  error(prog, "getvalue: expected a value\n");
+  error(prog, *p-1, "getvalue: expected a value, instead found '%s'",tokenstring(t));
  }//endswitch t.type
 }//endproc getvalue
 
@@ -3517,14 +3654,103 @@ getvalue(int *p, program *prog){
 // ----------------------------------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------------------------------
 
+// ===================================
+// == CATCH, AND EXCEPTION HANDLING ==
+// ===================================
+
+#define catch_magicnumber 11673314021918612911030223021049252244204987641215237006073991731396480243030832901810606149921138073986225596601835736011927752855882887282164819871339110857468686545366091027521562266553425728565376521514336124928.000000
+#define catch__call_interpreter		0
+#define catch__call_getvalue		1
+#define catch__call_getstringvalue	2
+
+void
+__attribute__((noinline))
+process_catch(program *prog, int p){
+ int pp=p;
+ int level=1;
+ while(level && pp<prog->length){
+  pp += 1;
+  switch( prog->tokens[pp].type ){
+   case t_catch:    level += 1; break;
+   case t_endcatch: level -= 1; break;
+   case t_deffn:    level = 0;
+  }
+ }
+ if(prog->tokens[pp].type != t_endcatch){
+  error(prog, p, "no 'endcatch' for this 'catch'");
+ }
+ prog->tokens[p].type = t_catchf;
+ prog->tokens[p].data.i = pp+1;
+}
+
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue ){
+
+ // save current interpreter state information
+ volatile jmp_buf *hold_error_handler = (volatile jmp_buf *)prog->error_handler;
+ volatile func_info *hold_current_function = (volatile func_info *)prog->current_function;
+ volatile int hold_getstringvalue_level = prog->getstringvalue_level;
+ volatile int hold_sp = prog->sp;
+ volatile int hold_spo = prog->spo;
+ 
+ // prepare setjmp
+ prog->error_handler = malloc(sizeof(jmp_buf));
+ int setjmp_retval = setjmp( *prog->error_handler );
+
+ // perform the requested action, saving the return value if successful
+ double catch_returnValue;
+ stringval catch_returnString = (stringval){"PENIS",0};
+ if( ! setjmp_retval ){
+  switch( action ){
+   case catch__call_interpreter:
+    catch_returnValue = interpreter(*p,prog );
+    break;
+   case catch__call_getvalue:
+    catch_returnValue = getvalue(p,prog);
+    break;
+   case catch__call_getstringvalue:
+    catch_returnString = getstringvalue(prog,p);
+    if( returnStringValue ) *returnStringValue = catch_returnString;
+    break;
+  }
+  if( returnValue ) *returnValue = catch_returnValue;
+ }
+
+ // tidy away the setjmp
+ free( prog->error_handler );
+ // and restore the previous interpreter state information
+ prog->error_handler = (jmp_buf*)hold_error_handler;
+ prog->current_function = (func_info*)hold_current_function;
+ prog->getstringvalue_level = hold_getstringvalue_level;
+ prog->sp = hold_sp;
+ prog->spo = hold_spo;
+
+ // return value is 0 if no error was caught, and 1 if an error was caught
+ return setjmp_retval;
+}
+
+int oscli(program *prog, int *p){
+ stringval sv = getstringvalue( prog, p );
+ char holdthis = sv.string[sv.len]; sv.string[sv.len]=0;
+ //fprintf(stderr,"oscli: '%s'\n",sv.string);
+ int SystemReturnValue;
+ SystemReturnValue = system(sv.string);
+ sv.string[sv.len]=holdthis;
+ return SystemReturnValue;
+}
+
 int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 _interpreter_ifsearch(int p, program *prog){
+ int starting_p = p;
  int levelcount=1;
  while(levelcount){
-  if(p>=prog->length) error(prog, "interpreter: missing endif or otherwise bad ifs\n");
+  if(p>=prog->length) error(prog, starting_p, "interpreter: missing endif or otherwise bad ifs");
   switch(prog->tokens[p].type){
   case t_else:
    if(levelcount==1){
@@ -3552,8 +3778,7 @@ _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen){
    return i+1;
   }//endif
  }//next
- printf("_interpreter_labelsearch: label was %s\n",labelstring);
- error(prog, "interpreter: goto: couldn't find label\n");
+ error(prog, -1, "interpreter: goto: couldn't find label '%s'",labelstring);
  return 0;
 }//endproc
 
@@ -3578,7 +3803,7 @@ caseof_skippast(program *prog, int p){ // p must point to the starting 'caseof'
   case t_endcase: level -= 1; break;
   }
  }
- if(i == prog->length) error(prog, "caseof_skippast: missing endcase\n");
+ if(i == prog->length) error(prog, p, "caseof_skippast: missing endcase");
  return i;
 }
 int
@@ -3591,7 +3816,7 @@ caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the 
  while( i < prog->length ){
   switch( prog->tokens[i].type ){
   case 0:
-   error(prog, "caseof_numwhens: missing endcase\n");
+   error(prog, p, "caseof_numwhens: missing endcase");
    break;
   case t_caseof:
    i = caseof_skippast( prog, i);
@@ -3600,7 +3825,7 @@ caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the 
    if(co){
     co->whens[out] = i;
     if( out>0 && !co->whens_[out-1] ){
-     error(prog, "caseof_numwhens:1: 'when' list not terminated by ';'\n"); // this can't always be caught but at least in some cases it'll be nice to be notified by this error message
+     error(prog, i, "caseof_numwhens:1: 'when' list not terminated by ';'"); // this can't always be caught but at least in some cases it'll be nice to be notified by this error message
     }
    }
    out += 1;
@@ -3614,7 +3839,7 @@ caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the 
    if(co){
     co->otherwise = i;
     if( out>0 && !co->whens_[out-1] ){
-     error(prog, "caseof_numwhens:2: 'when' list not terminated by ';'\n");
+     error(prog, i, "caseof_numwhens:2: 'when' list not terminated by ';'");
     }
    }
    break;
@@ -3623,7 +3848,7 @@ caseof_numwhens(program *prog, int p,struct caseof *co){ // p must point to the 
   }
   i+=1;
  }
- error(prog, "caseof_numwhens: this should never happen\n");
+ error(prog, -1, "caseof_numwhens: this should never happen");
 }
 int
 #ifndef DISABLE_ALIGN_STUFF
@@ -3634,7 +3859,7 @@ determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value
  if( prog->tokens[i].type == t_id ) process_id(prog, &prog->tokens[i]); // process it if it's an id
  if( isstringvalue(prog->tokens[i].type) ) return 1; // return 1 if it's a stringvalue
  if( isvalue(prog->tokens[i].type) ) return 0; // return 0 if it's a value
- error(prog, "expected a value or a stringvalue\n"); // cause an error because we expected a value or a stringvalue
+ error(prog, p, "expected a value or a stringvalue"); // cause an error because we expected a value or a stringvalue
 }
 #define PROCESSCASEOF_RUBBISH 0
 void
@@ -3647,7 +3872,7 @@ _interpreter_processcaseof(program *prog, int p){ int i;
  int caseofpos = p;
  int endcasepos = caseof_skippast(prog,p);
  #if PROCESSCASEOF_RUBBISH
- printf("fuckk %s\n",tokenstring(prog->tokens[ endcasepos ]));
+ fprintf(stderr,"fuckk %s\n",tokenstring(prog->tokens[ endcasepos ]));
  #endif
 //  determine if this is a caseofV or caseofS, or cause an error if there's an inappropriate token after the caseof.
 //  replace the caseof with caseofV_f or caseofS_f appropriately.
@@ -3663,7 +3888,7 @@ _interpreter_processcaseof(program *prog, int p){ int i;
  // debug
  #if PROCESSCASEOF_RUBBISH
  for(i=0; i<numwhens; i++){
-  printf("ffuck %0d: %d(%s), %d(%s)\n", i, co->whens[i],tokenstring(prog->tokens[co->whens[i]]), co->whens_[i],tokenstring(prog->tokens[co->whens_[i]])  );
+  fprintf(stderr,"ffuck %0d: %d(%s), %d(%s)\n", i, co->whens[i],tokenstring(prog->tokens[co->whens[i]]), co->whens_[i],tokenstring(prog->tokens[co->whens_[i]])  );
  }
  #endif
  // replace otherwise with goto
@@ -3692,7 +3917,7 @@ _interpreter_processcaseof(program *prog, int p){ int i;
  // debug
  #if PROCESSCASEOF_RUBBISH
  for(i=0; i<numwhens; i++){
-  printf("ffuck %0d: %d(%s), %d(%s)\n", i, co->whens[i],tokenstring(prog->tokens[co->whens[i]]), co->whens_[i],tokenstring(prog->tokens[co->whens_[i]])  );
+  fprintf(stderr,"ffuck %0d: %d(%s), %d(%s)\n", i, co->whens[i],tokenstring(prog->tokens[co->whens[i]]), co->whens_[i],tokenstring(prog->tokens[co->whens_[i]])  );
  }
  #endif
  // just FUCKING do this right now so you don't need to do it later, save maybe 0.0000001 seconds of processing time god damn it.....
@@ -3756,7 +3981,7 @@ typedef struct {
 
 #if 0
 void debugforinfo( program *prog, forinfo *thisfor ){
- printf("thisfor:\n type:%d\n v:%p\n stackOffset:%d\n fromValIsConstant:%d\n fromVal:%f\n fromValExpressionP:%d\n toValIsConstant:%d\n toVal:%f\n toValExpressionP:%d\n stepValIsConstant:%d\n stepVal:%f\n stepValExpressionP:%d\n start_p:%d\n end_p:%d\n",
+ fprintf(stderr,"thisfor:\n type:%d\n v:%p\n stackOffset:%d\n fromValIsConstant:%d\n fromVal:%f\n fromValExpressionP:%d\n toValIsConstant:%d\n toVal:%f\n toValExpressionP:%d\n stepValIsConstant:%d\n stepVal:%f\n stepValExpressionP:%d\n start_p:%d\n end_p:%d\n",
 thisfor->type,
 thisfor->v,
 thisfor->stackOffset,
@@ -3804,7 +4029,7 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
  int endfor_p=0; // location of the 'endfor' corresponding to this 'for'
 
  if( prog->tokens[p+1].type != t_id ){
-  error(prog,"for: not given an ID for a loop variable\n");
+  error(prog, for_p, "for: not given an ID for a loop variable");
  }
  p += 1;
  process_id(prog, &prog->tokens[p] );
@@ -3819,7 +4044,7 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
    thisfor->stackOffset = prog->tokens[p].data.i;
   }
   break;
-  default: error(prog,"for: not given a loop variable\n");
+  default: error(prog, for_p, "for: not given a loop variable");
  }
  p += 1;
  
@@ -3830,7 +4055,7 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
   p+=1;
   switch(prog->tokens[p].type){
    case 0: {
-    error(prog, "no matching 'endfor' for this 'for'\n");
+    error(prog, for_p, "no matching 'endfor' for this 'for'");
    } break;
    case t_endfor: {
     if( !forlevel ){
@@ -3878,7 +4103,7 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
   *stepVal = for_processParam( &thisfor->stepValIsConstant, &thisfor->stepValExpressionP, &thisfor->stepVal );
 
   if( prog->tokens[p].type != t_endstatement ){
-   error(prog, "for parameters list must be terminated with ';'\n");
+   error(prog, p, "for parameters list must be terminated with ';'");
   }
 
   start_p = p+1;
@@ -3943,7 +4168,7 @@ interpreter_for_getStepVal(program *prog, forinfo *thisfor){
   //debugforinfo(prog, thisfor);
   stepVal = getvalue(&pp, prog);
   if( stepVal == 0 ){
-   error(prog, "for: step can't be 0\n");
+   error(prog, pp, "for: step can't be 0");
   }
  }
  return stepVal;
@@ -4037,7 +4262,7 @@ interpreter(int p, program *prog){
   // search for matching endwhile
   int levelcount=1;
   while(levelcount){
-   if(p>=prog->length) error(prog, "interpreter: missing endwhile\n");
+   if(p>=prog->length) error(prog, s_pos, "interpreter: missing endwhile");
    switch( prog->tokens[p].type ){
    case t_while: levelcount+=1; break;
    case t_endwhile: levelcount-=1; break;
@@ -4074,10 +4299,11 @@ interpreter(int p, program *prog){
  }
  case t_endwhile:
  {
+  int starting_p = p;
   int levelcount=1;
   while(levelcount){
    p-=1;
-   if(p<0) error(prog, "interpreter: can't find while for this endwhile\n");
+   if(p<0) error(prog, starting_p, "interpreter: can't find while for this endwhile");
    switch( prog->tokens[p].type ){
    case t_while: levelcount-=1; break;
    case t_endwhile: levelcount+=1; break;
@@ -4101,9 +4327,9 @@ interpreter(int p, program *prog){
   }else{
    endifpos = _interpreter_ifsearch(elsepos+1, prog);
   }
-  //if( prog->tokens[ifpos].type != t_if ) error(NULL,"blah1\n"); 
-  //if( elsepos>=0 && prog->tokens[elsepos].type != t_else ) error(NULL,"blah2\n"); 
-  //if( prog->tokens[endifpos].type != t_endif ) error(NULL,"blah3\n"); 
+  //if( prog->tokens[ifpos].type != t_if ) error(NULL,-1,"blah1\n"); 
+  //if( elsepos>=0 && prog->tokens[elsepos].type != t_else ) error(NULL,-1,"blah2\n"); 
+  //if( prog->tokens[endifpos].type != t_endif ) error(NULL,-1,"blah3\n"); 
   // fix if
   prog->tokens[ifpos].type = t_iff;
   prog->tokens[ifpos].data.i = ( elsepos==-1 ? endifpos+1 : elsepos+1 );
@@ -4130,7 +4356,7 @@ interpreter(int p, program *prog){
   _interpreter_processfor(prog, p, &fromVal, &toVal, &stepVal );
   forinfo *thisfor = (forinfo*)prog->tokens[p].data.pointer;
   v = interpreter_for_getLoopVarPtr(prog, thisfor);
-  //printf("%p\n",v);
+  //fprintf(stderr,"%p\n",v);
   *v = fromVal;
   if( stepVal>0 ? (*v>toVal) : (*v<toVal) ){
    // condition already met, skip past the loop body
@@ -4185,7 +4411,7 @@ interpreter(int p, program *prog){
  // t_endfor: encountering an unprocessed 'endfor'
  case t_endfor: {
   int pp = findStartOrEndOfCurrentLoop(prog, p, -1);
-  if(pp==-1) error(prog,"no 'for' for this 'endfor'\n");
+  if(pp==-1) error(prog,p,"no 'for' for this 'endfor'");
   double blah1,blah2,blah3;
   _interpreter_processfor(prog, pp, &blah1, &blah2, &blah3);
  }
@@ -4211,13 +4437,13 @@ interpreter(int p, program *prog){
    char *msg=NULL;
    switch( t.type ){
     case t_endloop:
-     msg = (level==1 ? "endloop: not in a loop\n" : "endloop: couldn't find loop level specified\n"); break;
+     msg = (level==1 ? "endloop: not in a loop\n" : "endloop: couldn't find loop level specified"); break;
     case t_continue:
-     msg = (level==1 ? "continue: not in a loop\n" : "continue: couldn't find loop level specified\n"); break;
+     msg = (level==1 ? "continue: not in a loop\n" : "continue: couldn't find loop level specified"); break;
     case t_restart:
-     msg = (level==1 ? "restart: not in a loop\n" : "restart: couldn't find loop level specified\n"); break;
+     msg = (level==1 ? "restart: not in a loop\n" : "restart: couldn't find loop level specified"); break;
    }
-   error(prog, msg);
+   error(prog, op, msg);
   }
   if(t.type == t_endloop) p+=1;
   if(levelIsConstant){
@@ -4240,8 +4466,8 @@ interpreter(int p, program *prog){
   case t_D:
   {
    index = (int)getvalue(&p, prog);
-   //printf("  set index: %d\n",index);
-   if(index<0 || index>=prog->vsize) error(prog, "interpreter: set: bad variable access\n");
+   //fprintf(stderr,"  set index: %d\n",index);
+   if(index<0 || index>=prog->vsize) error(prog, p-1, "interpreter: set: bad variable access '%d'",index);
    prog->vars[index] = getvalue(&p, prog);
    break;
   }
@@ -4256,7 +4482,7 @@ interpreter(int p, program *prog){
   }
   case t_A:
    index = (int)getvalue(&p,prog) + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->vsize) error(prog, "interpreter: set: bad array access\n");
+   if(index<0 || index>=prog->vsize) error(prog, p-1, "interpreter: set: bad array access '%d'",index);
    prog->vars[index] = getvalue(&p, prog);
    break;
   case t_C:
@@ -4273,12 +4499,12 @@ interpreter(int p, program *prog){
    break;
   case t_P:
    index = prog->sp + prog->current_function->num_locals + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad parameter access\n");
+   if(index<0 || index>=prog->ssize) error(prog, p-1, "interpreter: set: bad parameter access");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_L:
    index = prog->sp + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad parameter access\n");
+   if(index<0 || index>=prog->ssize) error(prog, p-1, "interpreter: set: bad parameter access");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_stackaccess:
@@ -4287,7 +4513,7 @@ interpreter(int p, program *prog){
    prog->tokens[p-2].data.i = t.data.i;
    // perform set
    index = prog->sp + t.data.i;
-   //if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad stack access\n");
+   //if(index<0 || index>=prog->ssize) error(prog, "interpreter: set: bad stack access");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_id:
@@ -4297,7 +4523,7 @@ interpreter(int p, program *prog){
   case t_S:
   {
    int string_number = getvalue(&p,prog);
-   if(string_number<0 || string_number>=prog->max_stringvars) error(prog, "interpreter: set: bad stringvar access\n");
+   if(string_number<0 || string_number>=prog->max_stringvars) error(prog, p-1, "interpreter: set: bad stringvar access '%d'",string_number);
    stringvar *svr = prog->stringvars[string_number];
    copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
    break;
@@ -4309,21 +4535,55 @@ interpreter(int p, program *prog){
    break;
   }
   default:
-   print_sourcetext_location( prog, p-2 );
-   error(prog, "interpreter: set: bad use of 'set' command\n");
+   error(prog, p-2, "interpreter: set: bad use of 'set' command");
   }
   break; // Sat 14 Sep 12:35 - is this break necessary?
  }
+ // ========================================================
+ // =========  CATCH  ======================================
+ // ========================================================
+ case t_catch: {
+  process_catch(prog,p);
+  break;
+ }
+ case t_catchf: {
+  p+=1;
+  double retval;
+  int errorcaught = catch( prog, &p, catch__call_interpreter, &retval, NULL );
+  if( !errorcaught && retval != catch_magicnumber ){
+   return retval;
+  }
+  p=t.data.i;
+  break;
+ }
+ case t_endcatch: {
+  return catch_magicnumber;
+ }
+ // ========================================================
+ // =========  THROW  ======================================
+ // ========================================================
+ case t_throw: {
+  p+=1;
+  int pp = p;
+  stringval sv = getstringvalue(prog, &p);
+  int l = sv.len > 128 ? 128 : sv.len;
+  char msg[l+1];
+  strncpy(msg,sv.string,l);
+  msg[l]=0;
+  error(prog, pp, msg);
+ }
+ // ========================================================
+ // =========  CREATING VARIABLES ETC  =====================
+ // ========================================================
  case t_var: // create a variable
  {
   p+=1;
   while( prog->tokens[p].type != t_endstatement ){
    if( prog->tokens[p].type != t_id ){ 
-    print_sourcetext_location( prog, p );
-    error(prog, "interpreter: bad 'variable' command\n");
+    error(prog, p, "interpreter: bad 'variable' command");
    }
-   //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error(prog, "interpreter: variable: this identifier is already used\n");
-   add_id__error_if_fail( prog, p, "variable: the id for this variable is already used\n",
+   //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error(prog, -1, "interpreter: variable: this identifier is already used");
+   add_id__error_if_fail( prog, p, "variable: the id for this variable is already used",
                           prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
    p+=1;
   }
@@ -4333,13 +4593,12 @@ interpreter(int p, program *prog){
  {
   p+=1;
   if( prog->tokens[p].type != t_id ){
-   print_sourcetext_location( prog, p );
-   error(prog, "interpreter: bad 'constant' command\n");
+   error(prog, p, "interpreter: bad 'constant' command");
   }
   char *idstring = (char*)prog->tokens[p].data.pointer;
-  //if( find_id(prog->ids, idstring) ) error(prog, "interpreter: constant: this identifier is already used\n");
+  //if( find_id(prog->ids, idstring) ) error(prog, -1, "interpreter: constant: this identifier is already used");
   p+=1;
-  add_id__error_if_fail( prog, p, "constant: the id for this constant is already used\n",
+  add_id__error_if_fail( prog, p, "constant: the id for this constant is already used",
           prog->ids, make_id( idstring, maketoken_num( getvalue(&p, prog) ) ) );
   break;
  }
@@ -4352,21 +4611,33 @@ interpreter(int p, program *prog){
   // get id for new string variable
   idt = prog->tokens[p]; 
   if( idt.type != t_id ){
-   print_sourcetext_location( prog, p );
-   error(prog, "interpreter: bad 'stringvar' command\n");
+   error(prog, p, "interpreter: bad 'stringvar' command");
   }
   p+=1;
+  // ------- DISABLED: obsolete feature that was never used -------
   // if the optional bufsize parameter is present, then get it
-  if( prog->tokens[p].type!=t_id && isvalue( prog->tokens[p].type ) ){
-   bufsize = getvalue(&p,prog);
-  }
+  //if( prog->tokens[p].type!=t_id && isvalue( prog->tokens[p].type ) ){
+  // bufsize = getvalue(&p,prog);
+  //}
+  // --------------------------------------------------------------
   // create id for new string variable
-  add_id__error_if_fail( prog, p, "stringvar: the id for this stringvar is already used\n",
+  add_id__error_if_fail( prog, p, "stringvar: the id for this stringvar is already used",
           prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( create_new_stringvar(prog,bufsize) ) ) );
   if( prog->tokens[p].type != t_endstatement ) goto t_stringvar_start;
   p+=1;
   break;
  }
+ // ========================================================
+ // =========  UNCLAIM  ====================================
+ // ========================================================
+ case t_unclaim:
+ {
+  unclaim(prog, &p);
+  break;
+ }
+ // ========================================================
+ // =========  APPEND$  ====================================
+ // ========================================================
  case t_appendS:
  {
   p+=1;
@@ -4383,13 +4654,11 @@ interpreter(int p, program *prog){
    p+=1;
    int svrNum = getvalue(&p,prog);
    if(svrNum<0 || svrNum>= prog->max_stringvars){
-    print_sourcetext_location( prog, p );
-    error(prog, "append$: bad stringvariable access\n");
+    error(prog, p, "append$: bad stringvariable access");
    }
    appendTo = prog->stringvars[svrNum];
   }else{
-   print_sourcetext_location( prog, p );
-   error(prog, "append$: not given a string variable\n");
+   error(prog, p, "append$: not given a string variable");
   }
   do{
    appendString = getstringvalue(prog,&p);
@@ -4408,6 +4677,9 @@ interpreter(int p, program *prog){
   }while( isstringvalue( prog->tokens[ p ].type ) );
   break;
  }
+ // ========================================================
+ // =========  PRINT  ======================================
+ // ========================================================
  case t_print: // print
  {
   double value; stringval stringvalue; int i;
@@ -4453,12 +4725,15 @@ interpreter(int p, program *prog){
   }
   goto t_print_start;
  }
+ // ========================================================
+ // =========  WAIT  =======================================
+ // ========================================================
  case t_wait:
  {
   p+=1;
   #ifdef enable_graphics_extension
   double waitv = getvalue(&p,prog);
-  if( newbase_is_running && newbase_allow_fake_vsync && ((int)waitv==16) ){
+  if( ((int)waitv==16) && newbase_is_running && newbase_allow_fake_vsync ){
    newbase_fake_vsync_request=1;
    while( newbase_fake_vsync_request ) usleep(4);
   }else{
@@ -4470,6 +4745,7 @@ interpreter(int p, program *prog){
   break;
  }
  case t_endfn:
+ case t_deffn: // upon meeting a function definition, we know that the 'scope' of the current function (or of the main program body) has reached its end.
   return 0.0;
  case t_id: // ids can represent functions, so they must be processed if encountered by 'interpreter'
   process_id(prog,&prog->tokens[p]);
@@ -4496,15 +4772,12 @@ interpreter(int p, program *prog){
  case t_oscli:
  {
   p+=1;
-  stringval sv = getstringvalue( prog, &p );
-  char holdthis = sv.string[sv.len]; sv.string[sv.len]=0;
-  //printf("oscli: '%s'\n",sv.string);
-  int SystemReturnValue;
-  SystemReturnValue = system(sv.string);
-  sv.string[sv.len]=holdthis;
+  oscli( prog, &p );
   break;
  }
- // ------------ file related commands ------------------
+ // ========================================================
+ // =========  FILE RELATED COMMANDS  ======================
+ // ========================================================
  case t_sptr:
  {
   p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,0);
@@ -4547,7 +4820,9 @@ interpreter(int p, program *prog){
   fclose(f->fp);
   break;
  }
- // --------- end of file related commands --------------
+ // ========================================================
+ // =========  CASEOF  =====================================
+ // ========================================================
  case t_caseof:
   _interpreter_processcaseof(prog,p);
   break;
@@ -4557,23 +4832,23 @@ interpreter(int p, program *prog){
    p+=1;
    double v = getvalue(&p,prog);
    #if PROCESSCASEOF_RUBBISH
-   printf("v: %f\n",v);
+   fprintf(stderr,"v: %f\n",v);
    #endif
    int i;
    for(i=0; i < co->num_whens; i++){
     p=co->whens[i];
     #if PROCESSCASEOF_RUBBISH
-    printf("shit %s\n",tokenstring(prog->tokens[p]));
+    fprintf(stderr,"shit %s\n",tokenstring(prog->tokens[p]));
     #endif
     double v2;
     while( isvalue( prog->tokens[p].type ) ){
      v2 = getvalue(&p,prog);
      #if PROCESSCASEOF_RUBBISH
-     printf("v2: %f\n",v2);
+     fprintf(stderr,"v2: %f\n",v2);
      #endif
      if( v == v2 ){
       #if PROCESSCASEOF_RUBBISH
-      tb(); printf("match %f, %f\n",v,v2);
+      tb(); fprintf(stderr,"match %f, %f\n",v,v2);
       #endif
       p=co->whens_[i]; goto caseofV_out;
      }
@@ -4605,6 +4880,9 @@ interpreter(int p, program *prog){
   caseofS_out:
   prog->getstringvalue_level -= 1;
   break;
+ // ========================================================
+ // =========  QUIT  =======================================
+ // ========================================================
  case t_quit:
   {
    p+=1;
@@ -4616,7 +4894,7 @@ interpreter(int p, program *prog){
    #endif
    double ret_val = 0;
    if( isvalue( prog->tokens[p].type ) ){
-    //printf("this is happening\n"); tb(); // test
+    //fprintf(stderr,"this is happening\n"); tb(); // test
     ret_val = getvalue(&p,prog);
    }
    quit_cleanup(prog);
@@ -4813,38 +5091,38 @@ interpreter(int p, program *prog){
 #if allow_debug_commands
  case t_printentirestack:
  {
-  printf("---- STACK ----\n");
+  fprintf(stderr,"---- STACK ----\n");
   int i;
   for(i=0; i<prog->sp; i++){ // print everything until the current stack frame.
-   printf(" %f\n",prog->stack[ i ]);
+   fprintf(stderr," %f\n",prog->stack[ i ]);
   }  
  }// continue into t_printstackframe and let it print the current stack frame (as well as advance p past the printentirestack command)
  case t_printstackframe:
  {
   p+=1;
   int i;
-  printf("STACK FRAME\n----- locals -----\n");
+  fprintf(stderr,"STACK FRAME\n----- locals -----\n");
   for(i=0; i < prog->current_function->num_locals + (prog->current_function->params_type==p_atleast ? prog->stack[ prog->sp ] : prog->current_function->num_params ); i++){
-   if(i==prog->current_function->num_locals) printf("----- params -----\n");
-   printf(" %f\n",prog->stack[ prog->sp + i ]);
+   if(i==prog->current_function->num_locals) fprintf(stderr,"----- params -----\n");
+   fprintf(stderr," %f\n",prog->stack[ prog->sp + i ]);
   }
-  printf("------------------\n\n");
+  fprintf(stderr,"------------------\n\n");
  } break;
  case t_tb: tb(); p+=1; break;
 #endif
  case t_nul: {
+  /*
   if( prog->current_function != &prog->initial_function ){
-   error(prog,"unexpected end of program\n");
+   error(prog,-1,"unexpected end of program");
   }
+  */
   return 0;
  }
  case t_label: case t_endif: case t_endiff: case t_endstatement:
   p+=1;
   goto interpreter_start;
  default:
-  print_sourcetext_location( prog, p );
-  printf("interpreter: token is %s\n",tokenstring(t));
-  error(prog, "interpreter: unexpected token\n");
+  error(prog, p, "expected a command, instead found '%s'",tokenstring(t));
  }
  goto interpreter_start;
 }
@@ -4893,9 +5171,9 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
  if(argc>1){
   prg = init_program( argv[1], Exists(argv[1]), extensions ); 
  }else{
-  printf("Johnsonscript interpreter, built on %s, %s\nhttps://github.com/dusthillresident/JohnsonScript/\n", __DATE__, __TIME__);
-  if( extra_version_info ) printf("%s",extra_version_info);
-  printf("Usage:\n%s [program text or path to a file containing program text]\n",argv[0]);
+  fprintf(stderr,"Johnsonscript interpreter, built on %s, %s\nhttps://github.com/dusthillresident/JohnsonScript/\n", __DATE__, __TIME__);
+  if( extra_version_info ) fprintf(stderr,"%s",extra_version_info);
+  fprintf(stderr,"Usage:\n%s [program text or path to a file containing program text]\n",argv[0]);
   return 0;
  }
 
@@ -4904,18 +5182,18 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
 #endif
 
 #if main_printstuff
- printf("ok\n\n");
+ fprintf(stderr,"ok\n\n");
  detokenise(prg,-1);
- printf("\n");
+ fprintf(stderr,"\n");
 #endif
 
 #if main_printstuff
- printf("------- program output -------\n");
+ fprintf(stderr,"------- program output -------\n");
 #endif
  double result = interpreter(0,prg);
 #if main_printstuff
- printf("------------------------------\n");
- printf("\n");
+ fprintf(stderr,"------------------------------\n");
+ fprintf(stderr,"\n");
 #endif
 
 #if main_printstuff
@@ -4923,7 +5201,7 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
 #endif
 
 #if main_printstuff
- printf("result: %f\n",result);
+ fprintf(stderr,"result: %f\n",result);
 #endif
 
 #if main_printstuff
