@@ -817,6 +817,11 @@ void translate_value(program *prog, int *p){
    *p += 1;
    transval_getref_start:
    switch( prog->tokens[ *p ].type ){
+   case t_rnd:
+    {
+     *p += 1;
+     PrintMain("dhr_random__current_seed()");
+    } break;
    // ------ strings -------
    case t_stringconst:
     {
@@ -1217,10 +1222,18 @@ void translate_value(program *prog, int *p){
  case t_rnd:
   {
    PrintMain("(double)");
-   PrintMain("Rnd(");
+   PrintMain("({\nint rnd_n = (int)");
    *p += 1;
    translate_value(prog, p);
-   PrintMain(")");
+   PrintMain(";\n \
+double rnd_r = dhr_random();\n \
+switch(rnd_n){\n\
+ case 0: rnd_r = (double)(int)(unsigned int)(0x100000000 * rnd_r); break;\n \
+ case 1: break;\n\
+ default: rnd_r = (int)(rnd_r * rnd_n); \n\
+}\n\
+rnd_r;\n \
+})");
   } break;
 /*
  case t_:
@@ -1444,12 +1457,61 @@ void trans__endloopRestartContinue_PrintGotoString(program *prog, int pp, TOKENT
  );
 }
 
+// =============================
+// ===== TRANSLATE COMMAND =====
+// =============================
+
 void translate_command(program *prog, int *p){
  #if TRANS_CRASHDEBUG
  fprintf(stderr,"translate_command: %s\n",tokenstring(prog->tokens[ *p ]));
  #endif
  trans_com_start:
  switch( prog->tokens[ *p ].type ){
+ case t_increment: case t_decrement: {
+  int type = (CurTok.type == t_increment);
+  *p += 1;
+  if( CurTok.type == t_id ){
+   translate_processid(prog, p);
+  }
+  switch( CurTok.type ){
+   case t_Df:
+   case t_stackaccess:
+    translate_value(prog, p);
+    PrintMain(" += %s;\n", type ? "1.0" : "-1.0");
+    break;
+   case t_C:
+    PrintMain("(");
+    translate_value(prog, p);
+    PrintMain(")");
+    PrintMain(" += %s;\n", type ? "1" : "-1");
+    break;
+   case t_V:
+    PrintMain("(");
+    translate_value(prog, p);
+    PrintMain(")");
+    PrintMain(" += %s;\n", type ? "1.0" : "-1.0");
+    break;
+   default:
+    ErrorOut("bad use of increment, given %s",tokenstring(CurTok));
+  }
+ } break;
+ // ----- FIXME: implement proper error handling ----
+ case t_throw: {
+  *p += 1;
+  PrintMain("{\nSVL errormsg = ");
+  translate_stringvalue(prog,p);
+  PrintMain(";\n");
+  PrintMain("fwrite( errormsg.buf, 1, errormsg.len, stderr );\n");
+  PrintMain("fprintf(stderr,\"\\n\");\nexit(1);\n");
+  PrintMain("}\n");
+ } break;
+ case t_catch: {
+  *p += 1;
+ } break;
+ case t_endcatch: {
+  *p += 1;
+ } break;
+ // -------------------------------------------------
  case t_unclaim: {
   *p += 1;
   do_unclaim_command:
@@ -1928,17 +1990,14 @@ void translate_command(program *prog, int *p){
     ErrorOut("FUCK OFF!\n");
     #endif
    }else if( TheseStringsMatch(opstr, "seedrnd") ){
-    PrintMain("Johnson_Seedrnd( (int[3]){");
-    int i;
-    for(i=0; i<3; i++){
-     if( translate_determine_valueorstringvalue_(prog, *p, 0) == 0 ){
-      translate_value(prog,p);
-     }else{
-      PrintMain("0");
-     }
-     if(i<2) PrintMain(",");
-    }
-    PrintMain("} );\n");
+
+    PrintMain("dhr_random__seed(");
+    translate_value(prog,p);
+    PrintMain(");\n");
+   }else if( TheseStringsMatch(opstr, "randomise") ){
+
+    PrintMain("SeedRng();\n");
+
    }else if( TheseStringsMatch(opstr, "copytext") ){
     #ifdef enable_graphics_extension 
     PrintMain("{ SVL s = ");
@@ -2454,7 +2513,7 @@ void translate_command(program *prog, int *p){
      PrintMain("{ double value =");
      translate_value(prog, p);
      PrintMain(";\n");
-     PrintMain("if( !Johnson_isnan(value) && value == (double)(int)value ){ printf(\"%%d\",(int)value); }else{ printf(\"%%f\",value); }\n");
+     PrintMain("if( !Johnson_isnan(value) && value == (double)(int)value ){ printf(\"%%d\",(int)value); }else{ printf(\"%%.16f\",value); }\n");
      PrintMain("}\n");
     }//endif value or string value
    }//endwhile values and stringvalues

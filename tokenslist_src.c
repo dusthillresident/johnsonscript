@@ -79,6 +79,7 @@
 #define t_sinh		COCKSPENIS	//	sinh
 #define t_exp		COCKSPENIS	//	exp
 #define t_log		COCKSPENIS	//	log
+#define t_log2		COCKSPENIS	//	log2
 #define t_log10		COCKSPENIS	//	log10
 #define t_pow		COCKSPENIS	//	pow
 #define t_sqr		COCKSPENIS	//	sqr
@@ -185,6 +186,12 @@
 #define t_throw			COCKSPENIS	//	throw "error message"
 #define t_endcatch		COCKSPENIS	//	terminate the code block where errors are being trapped
 #define t_catchf		COCKSPENIS	//	processed catch that knows where the corresponding 'endcatch' is
+#define t_increment		COCKSPENIS	//	increment [name of numerical variable]		increases variable by 1
+#define t_increment_stackaccess	COCKSPENIS	//	processed increment that increments a local variable
+#define t_increment_df		COCKSPENIS	//	processed increment that increments a global variable
+#define t_decrement		COCKSPENIS	//	decrement [name of numerical variable]		decreases variable by 1
+#define t_decrement_stackaccess	COCKSPENIS	//	
+#define t_decrement_df		COCKSPENIS
 // ---------------------------------------------
 #define t_appendS		COCKSPENIS	//	append$ [stringvar] [stringvalue]		append to string variables
 #define t_extcom		COCKSPENIS	//	external command, used for extensions

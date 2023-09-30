@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mylib.c"
+#include "mylib.h"
 
 // memory problem debugging stuff
 #if 0
@@ -388,7 +388,7 @@ SVL StrS( int sa_l, double val )
  if(!Johnson_isnan(val) && val == (double)(int)val){
   snpf_return = snprintf(accumulator->buf, accumulator->bufsize, "%d",(int)val);
  }else{
-  snpf_return = snprintf(accumulator->buf, accumulator->bufsize, "%f",val);
+  snpf_return = snprintf(accumulator->buf, accumulator->bufsize, "%.16f",val);
  }
  SVL out;
  out.len = snpf_return>=accumulator->bufsize ? accumulator->bufsize-1 : snpf_return;
@@ -877,14 +877,6 @@ int Johnson_BmpValidityCheck( SVL bmpstring ){
 }
 
 #endif
-
-// ----------------------------------------------------------------------------------------------
-
-void Johnson_Seedrnd(int v[3]){
- XRANDrand = v[0];
- XRANDranb = v[1];
- XRANDranc = v[2];
-}
 
 // ----------------------------------------------------------------------------------------------
 

@@ -217,7 +217,7 @@ int isvalue(TOKENTYPE_TYPE type);
 int determine_valueorstringvalue(program *prog, int p);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
-void stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve);
+void stringvar_adjustsizeifnecessary(stringvar *sv, size_t bufsize_required, int preserve);
 int add_id(id_info *ids, id_info *new_id);
 void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id);
 id_info* make_id(char *id_string, token t);
@@ -910,6 +910,7 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_seedrnd	3	// seed RNG
 #define opt_unclaim	4	// unclaim a string (so it can be re-used by 'S')
 #define opt_cleanup	5	// free unused memory from all stringvars and string accs
+#define opt_randomise	6	// get a new random seed based on the current clock time in seconds
 
 #ifdef enable_graphics_extension
 #define opt_wmclose	100	// specify action to take when the window close button is pressed
@@ -950,6 +951,8 @@ option( program *prog, int *p ){
   if( !strncmp( "ssize", id_string.string, id_string.len ) ){ opt_number = opt_ssize; goto option__identify_option_string_out;}	//	ssize		Set the size of the stack array
   if( !strncmp( "import", id_string.string, id_string.len )){opt_number = opt_import; goto option__identify_option_string_out;}	//	import		Import functions from another file
   if( !strncmp( "seedrnd", id_string.string, id_string.len)){opt_number= opt_seedrnd; goto option__identify_option_string_out;}	//	seedrnd		Seed RNG
+  if( !strncmp( "randomise", id_string.string, id_string.len)){opt_number= opt_randomise; goto option__identify_option_string_out;}	//	randomise
+  if( !strncmp( "randomize", id_string.string, id_string.len)){opt_number= opt_randomise; goto option__identify_option_string_out;}	//	randomise
   if( !strncmp( "unclaim", id_string.string, id_string.len)){opt_number= opt_unclaim; goto option__identify_option_string_out;} //	unclaim [string ref num]	Unclaim a string
   if( !strncmp( "cleanup", id_string.string, id_string.len)){opt_number= opt_cleanup; goto option__identify_option_string_out;} //	cleanup		String var/acc garbage collection
 #ifdef enable_graphics_extension
@@ -1049,15 +1052,12 @@ option( program *prog, int *p ){
  }
  case opt_seedrnd: // seed random number generator
  {
-  int vp=0;
-  int v[3] = { 0, 0, 0 };
-  do{
-   v[vp] = getvalue(p,prog);
-   vp++;
-  }while( isvalue( prog->tokens[*p].type ) && vp < 3  );
-  XRANDrand = v[0];
-  XRANDranb = v[1];
-  XRANDranc = v[2];
+  dhr_random__seed( getvalue(p,prog) );
+  break;
+ }
+ case opt_randomise:
+ {
+  SeedRng();
   break;
  }
  case opt_unclaim: // deprecated but preserved for compatibility, 'unclaim' is now a keyword
@@ -1182,7 +1182,7 @@ option( program *prog, int *p ){
   char *result = NewBase_GetXResourceString(itemname.string, classname.string);
   sv->len = 0;
   if( result ){
-   int l = strlen(result);
+   size_t l = strlen(result);
    stringvar_adjustsizeifnecessary(sv, l+1, 0);
    strcpy(sv->string, result);
    sv->len = l;
@@ -1874,6 +1874,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  if( wordmatch_plus_whitespace( pos,"log10", text) ){	//	
   out = maketoken( t_log10 ); goto gettoken_normalout;
  }
+ if( wordmatch_plus_whitespace( pos,"log2", text) ){	//	
+  out = maketoken( t_log2 ); goto gettoken_normalout;
+ }
  if( wordmatch_plus_whitespace( pos,"log", text) ){	//	
   out = maketoken( t_log ); goto gettoken_normalout;
  }
@@ -1956,6 +1959,13 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
  if( wordmatch_plus_whitespace( pos,"quit", text) ){	//	
   out = maketoken( t_quit ); goto gettoken_normalout;
+ }
+
+ if( wordmatch_plus_whitespace( pos,"increment", text) ){	//	
+  out = maketoken( t_increment ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"decrement", text) ){	//	
+  out = maketoken( t_decrement ); goto gettoken_normalout;
  }
 
  // ----------------------------------------------
@@ -2346,6 +2356,7 @@ tokenstring(token t){
  case  t_sin:		return "sin";
  case  t_exp:		return "exp";
  case  t_log10:		return "log10";
+ case  t_log2:		return "log2";
  case  t_log:		return "log";
  case  t_pow:		return "pow";
  case  t_sqr:		return "sqr";
@@ -2405,6 +2416,9 @@ tokenstring(token t){
 
  case t_quit:		return "quit";
 
+ case t_increment: case t_increment_df: case t_increment_stackaccess: return "increment";
+ case t_decrement: case t_decrement_df: case t_decrement_stackaccess: return "decrement";
+
  #ifdef enable_graphics_extension 
  // ============================================================================================
  // ======= GRAPHICS EXTENSION =================================================================
@@ -2455,6 +2469,7 @@ tokenstring(token t){
   }
  }
 }
+// end of tokenstring
 
 void
 #ifndef DISABLE_ALIGN_STUFF
@@ -2529,7 +2544,7 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-stringvar_adjustsizeifnecessary(stringvar *sv, int bufsize_required, int preserve){
+stringvar_adjustsizeifnecessary(stringvar *sv, size_t bufsize_required, int preserve){
  if(bufsize_required<sv->bufsize){
   //tb();
   return;
@@ -2667,7 +2682,7 @@ getstringvalue( program *prog, int *pos ){
  {
   prog->getstringvalue_level += 1;
   stringval in;
-  int bufsize_required;
+  size_t bufsize_required;
   accumulator->len=0;
   while( isstringvalue( prog->tokens[ *pos ].type ) ){
    in = getstringvalue( prog,pos );
@@ -2685,24 +2700,25 @@ getstringvalue( program *prog, int *pos ){
  case t_stringS:
  {
   char *stringS_tempbuf = NULL;
-  int n = (int)getvalue(pos,prog);
+  double n_value = getvalue(pos,prog);
   stringval svl = getstringvalue( prog,pos );
-  if( ! svl.len || n < 1 ){
+  if( ! svl.len || n_value < 1 ){
    return (stringval){NULL,0};
   }
+  size_t n = (size_t)n_value;
   if( svl.string == accumulator->string || ( svl.string > accumulator->string && svl.string <= accumulator->string+accumulator->len ) ){ // Äkta dig för Rövar-Albin
    stringS_tempbuf = malloc(svl.len);
    memcpy(stringS_tempbuf, svl.string, svl.len);
    svl.string = stringS_tempbuf;
   }
-  int bufsize_required = svl.len * n;
+  size_t bufsize_required = svl.len * n;
   if( bufsize_required > accumulator->bufsize ){
    stringvar_adjustsizeifnecessary(accumulator, bufsize_required, 1);
   }
   if( svl.len == 1 ){ // if it's one character we can just do a nice memset()
    memset(accumulator->string, svl.string[0], n);
   }else{ // or otherwise
-   int i;
+   size_t i;
    char *p = accumulator->string;
    for(i=0; i<n; i++){
     memcpy(p, svl.string, svl.len);
@@ -2724,7 +2740,7 @@ getstringvalue( program *prog, int *pos ){
   if(!MyIsnan(val) && val == (double)(int)val){
    snpf_return = snprintf(accumulator->string, accumulator->bufsize, "%d",(int)val);
   }else{
-   snpf_return = snprintf(accumulator->string, accumulator->bufsize, "%f",val);
+   snpf_return = snprintf(accumulator->string, accumulator->bufsize, "%.16f",val);
   }
   stringval out;
   out.len = snpf_return>=accumulator->bufsize ? accumulator->bufsize-1 : snpf_return;
@@ -2776,7 +2792,7 @@ getstringvalue( program *prog, int *pos ){
  {            // If n is greater than 0, it represents the number of bytes to be read. Else, it represents a specific string terminating value. (n <= -256) will read until EOF
   file *f = getfile(prog, getvalue(pos,prog), 1,0);
   int num_bytes_to_read = -10;
-  if( isvalue( prog->tokens[*pos].type ) ) num_bytes_to_read = getvalue(pos,prog);
+  if( isvalue( prog->tokens[*pos].type ) ) num_bytes_to_read = getvalue(pos,prog); // FIXME: size_t fix: this needs fixing to enable loading strings longer than signed 32bit int max
   accumulator->len=0;
   if( num_bytes_to_read <= 0 ){
    // ======= reading until a specified character is found =====
@@ -3150,7 +3166,14 @@ getvalue(int *p, program *prog){
 
  case t_rnd:
  {
-  return (double)Rnd((int)getvalue(p,prog));
+  //return (double)Rnd((int)getvalue(p,prog));
+  int n = (int)getvalue(p,prog);
+  double r = dhr_random();
+  switch(n){
+   case 0:  return (double)(int)(unsigned int)(0x100000000 * r);
+   case 1:  return r;
+   default: return (int)(r * n);
+  }
  }
 
  case t_leftb:
@@ -3429,6 +3452,8 @@ getvalue(int *p, program *prog){
   return log(getvalue(p,prog));
  case  t_log10:	
   return log10(getvalue(p,prog));
+ case  t_log2:	
+  return log2(getvalue(p,prog));
  case  t_pow:	
  {
   double a,b;
@@ -3487,6 +3512,8 @@ getvalue(int *p, program *prog){
     // return the reference number of the new string variable
     return referred_string_constant->string_variable_number;
    }
+  case t_rnd: // obtain the current state/seed of the random number generator
+   return _rnd_v;
   default: error(prog, *p, "getvalue: bad use of @");
   }
   break;
@@ -4540,6 +4567,78 @@ interpreter(int p, program *prog){
   break; // Sat 14 Sep 12:35 - is this break necessary?
  }
  // ========================================================
+ // =========  INCREMENT & DECREMENT  ======================
+ // ========================================================
+ case t_increment: case t_decrement: {
+  int type = (t.type == t_increment);
+  double inc = type ? 1.0 : -1.0;
+  int starting_p = p;
+  p+=1;
+  increment_start:
+  switch( prog->tokens[p].type ){
+   case t_id:
+    process_id(prog, &prog->tokens[p]);
+    goto increment_start;
+   case t_Df:
+    prog->tokens[starting_p].type = type ? t_increment_df : t_decrement_df;
+    prog->tokens[starting_p].data.pointer = prog->tokens[p].data.pointer;
+    (*(double*)prog->tokens[p].data.pointer) += inc;
+    p+=1;
+    break;
+   case t_stackaccess:
+    prog->tokens[starting_p].type = type ? t_increment_stackaccess : t_decrement_stackaccess;
+    prog->tokens[starting_p].data.i = prog->tokens[p].data.i;
+    prog->stack[prog->sp + prog->tokens[p].data.i] += inc;
+    p+=1;
+    break;
+   case t_L:
+    error(prog, p, "increment: 'L' not supported");
+   case t_P:
+    {
+     p+=1;
+     int index = prog->sp + prog->current_function->num_locals + (int)getvalue(&p,prog);
+     if(index<0 || index>=prog->ssize) error(prog, starting_p+1, "increment: bad parameter access");
+     prog->stack[index] += inc;
+    }
+    break;
+   case t_V:
+    p+=1;
+    (*V_ValueAccess( &p, prog)) += inc;
+    break;
+   case t_C:
+    p+=1;
+    (*C_CharacterAccess( &p, prog )) += (char)inc;
+    break;
+   case t_A:
+    {
+     p+=1;
+     int index = (int)getvalue(&p,prog) + (int)getvalue(&p,prog);
+     if(index<0 || index>=prog->vsize) error(prog, starting_p+1, "increment: bad array access '%d'",index);
+     prog->vars[index] += inc;
+    }
+    error(prog, p-1, "increment: unimplemented");
+    break;
+   default:
+    error(prog, p-1, "increment: bad argument '%s'",tokenstring(prog->tokens[p]));
+  }
+ } break;
+ case t_increment_df: {
+  (*(double*)t.data.pointer)+=1.0;
+  p+=2;
+ } break;
+ case t_increment_stackaccess: {
+  prog->stack[prog->sp+t.data.i]+=1.0;
+  p+=2;
+ } break;
+ case t_decrement_df: {
+  (*(double*)t.data.pointer)-=1.0;
+  p+=2;
+ } break;
+ case t_decrement_stackaccess: {
+  prog->stack[prog->sp+t.data.i]-=1.0;
+  p+=2;
+ } break;
+ // ========================================================
  // =========  CATCH  ======================================
  // ========================================================
  case t_catch: {
@@ -4715,7 +4814,7 @@ interpreter(int p, program *prog){
   if( !MyIsnan(value) && value == (double)(int)value){
    printf("%d",(int)value);
   }else{
-   printf("%f",value);
+   printf("%.16f",value);
   }
   goto t_print_start;
   t_print_stringval: //====================================================================
