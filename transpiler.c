@@ -2016,7 +2016,7 @@ void translate_command(program *prog, int *p){
      PrintMain("_rnd_v2 &= 0xffffffffffff; dhr_random_u32();\n}\n");
     }
 
-   }else if( TheseStringsMatch(opstr, "randomise") ){
+   }else if( TheseStringsMatch(opstr, "randomise") || TheseStringsMatch(opstr, "randomize") ){
 
     PrintMain("SeedRng();\n");
 
