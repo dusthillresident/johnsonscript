@@ -2011,7 +2011,7 @@ void translate_command(program *prog, int *p){
      PrintMain("_rnd_v1=0x101010101010; _rnd_v2=0; double v;\n");
      do{
       PrintMain("v = "); translate_value(prog,p); PrintMain(";\n");
-      PrintMain("_rnd_v1 += v; dhr_random_u32(); _rnd_v2 -= v; dhr_random_u32(); _rnd_v1 ^= _rnd_v2;");
+      PrintMain("_rnd_v1 += v*1.123364323; dhr_random_u32(); _rnd_v2 -= v*4.136526324; dhr_random_u32(); _rnd_v1 ^= _rnd_v2;\n");
      }while( isvalue( CurTok.type) );
      PrintMain("_rnd_v2 &= 0xffffffffffff; dhr_random_u32();\n}\n");
     }
