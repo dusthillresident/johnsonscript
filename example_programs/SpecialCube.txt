@@ -1,0 +1,261 @@
+# ----------------
+# - Special Cube -
+# ----------------
+
+/*
+
+               4     5
+ 
+  ^   0     1
+  |            6     7     ^
+  |                       /
+  |   2     3            /
+  Y                     /
+     X ------>         Z
+
+*/
+
+# --------------------
+# - Create variables -
+# --------------------
+variable _zx_rnd_b; variable _rng_c _rng_v; zx_randomize 6; 
+stringvar corners cornersR edges noisePoints noisePointsR scaler;
+variable i j a b c sizeMul;
+
+# -------------------------
+# - Create corners matrix -
+# -------------------------
+set corners vector$ 
+ 3 8	# width height
+ -1 -1 -1   # 0
+  1 -1 -1   # 1
+ -1  1 -1   # 2
+  1  1 -1   # 3
+ -1 -1  1   # 4
+  1 -1  1   # 5
+ -1  1  1   # 6
+  1  1  1   # 7 
+;
+set cornersR corners;
+
+# ----------------------
+# - Create edges array -
+# ----------------------
+set edges vector$
+ 0 1
+ 2 3
+ 0 2
+ 1 3
+ 
+ 4 5
+ 6 7
+ 4 6
+ 5 7
+
+ 0 4
+ 1 5
+ 2 6
+ 3 7
+;
+
+for i 0 2500;
+ append$ noisePoints vector$ (+ -1 * 2 zx_rnd) (+ -1 * 2 zx_rnd) (+ -1 * 2 zx_rnd)
+endfor
+set noisePoints cat$ (vector$ 3 (/ vlen$ noisePoints 3)) noisePoints
+
+stringvar _rx _ry _rz _r _rTemp;
+
+startgraphics 500 500
+refreshmode 1
+
+while 1
+ 
+ # --------------------------------
+ # - Change the angle of the cube -
+ # --------------------------------
+ if 1  /* <--- Change this to 0 if you want to control the angle of the cube with the mouse */
+  set a + a 0.01
+  set b + b 0.022566
+  set c + c 0.016153
+ else
+  set b * _pi * (/ 1 winw ) - >> winw 1 mousex
+  set a * _pi * neg (/ 1 winh ) - >> winh 1 mousey
+  set c * _pi mousez / 1 64
+ endif
+
+ # ---------------------------
+ # - Prepare rotation matrix -
+ # ---------------------------
+ set _rx vector$ 3 3
+  1		0		0
+  0		cos a		neg sin a
+  0		sin a		cos a
+ ;
+ set _ry vector$ 3 3
+  cos b		0       	sin b
+  0		1		0
+  neg sin b	0		cos b
+ ;
+ set _rz vector$ 3 3
+  cos c		neg sin c	0
+  sin c		cos c		0
+  0		0		1
+ ;
+
+ # --------------------------
+ # - Prepare scaling matrix -
+ # --------------------------
+ set sizeMul >> V(vector$ winw winh)(> winw winh) 2
+ set scaler (vector$ 3 3
+    sizeMul	0		0
+    0		sizeMul		0
+    0		0		sizeMul
+ );
+
+ # -----------------------------
+ # - Rotate and scale the cube -
+ # -----------------------------
+ matrixMultiply @_rx	@_ry	@_r;
+ matrixMultiply @_rz	@_r     @_r;
+ matrixMultiply @_r @scaler @_r;
+
+ matrixMultiply @corners @_r @cornersR;
+ matrixMultiply @noisePoints @_r @noisePointsR
+
+ # ---------------------------
+ # - Update graphics display -
+ # ---------------------------
+ cls
+
+ for i 2 (+ -1 vlen$noisePointsR) 3;
+  pixel	 fnx VnoisePointsR(i)	fny VnoisePointsR(+i 1)
+ endfor
+
+ for i 0 (+ -1 vlen$edges) 2;
+  line	fnx VcornersR(+ 2 * 3 Vedges(i))	fny VcornersR(+ 2 + 1 * 3 Vedges(i))
+	fnx VcornersR(+ 2 * 3 Vedges(+ i 1))	fny VcornersR(+ 2 + 1 * 3 Vedges(+ i 1))
+ endfor 
+
+ wait 16.6
+ refresh 
+ 
+endwhile
+
+# ----------------------------------------------------------------------------
+# - Function for putting the graphics x,y origin in the centre of the window -
+# ----------------------------------------------------------------------------
+function fnx v; return + >> winw 1 v
+function fny v; return + >> winh 1 v
+
+# ---------------------------------------
+# - Functions for operating on matrices -
+# ---------------------------------------
+function matrixMultiply a b c local wa ha wb hb i j k _wa _wb _hb product p holdc ii; 
+ set wa V$a 0
+ set ha V$a 1
+ set wb V$b 0
+ set hb V$b 1
+ if ! = (* wa ha) + -2 vlen$$a 
+  throw "Matrix A is invalid: width*height != length"
+ endif
+ if ! = (* wb hb) + -2 vlen$$b 
+  throw "Matrix B is invalid: width*height != length"
+ endif
+ if ! = wa hb 
+  throw "Width of A must equal height of B"
+ endif
+ if vlen$$c
+  if ! = (+ 2 * wb ha)  + 2 * V$c 0  V$c 1 
+   goto ".prepareC"
+  endif
+ else
+  .prepareC
+  set $c string$ (+ 2 * wb ha) vector$ 0
+  set V$c 0  wb
+  set V$c 1  ha
+ endif
+ set holdc -1
+ if || = c a = c b
+  set holdc c
+  set c @""
+  set $c $holdc
+ endif
+ set _wb - wb 1
+ set _wa - wa 1
+ set ii * wa - ha 1
+ set p 2
+ for i 0 ii wa;
+  for j 0 _wb;
+   set product 0
+   for k 0 _wa;
+    set product + product * (V$a + 2 k i) V$b + 2 j * k wb
+   endfor
+   set V$c p product
+   increment p
+  endfor
+ endfor
+ if > holdc -1
+  set $holdc $c
+ endif
+endfunction
+
+function printMatrix m local x y w h p;
+ set w V$m 0
+ set h V$m 1
+ set p 2
+ for y 0 - h 1;
+  for x 0 - w 1;
+   sput _stdout "	" str$ V$m p
+   set p + p 1
+  endfor
+  print
+ endfor
+endfunction
+
+function createMatrix w h m;
+ set $m string$ (+ 2 * w h) vector$ 0
+ set V$m 0 w
+ set V$m 0 h
+endfunction
+
+function stringToMatrix s local out m a b wc p vp;
+ set out S vector$ 0 0
+ set m S $s
+ set a 1
+ set vp 2
+ while && len$$m || a b 
+  set a + 1 instr$ $m ","
+  set b + 1 instr$ $m ";"
+  if && a < a b 
+   set wc + wc 1
+   set p a
+  else
+   set V$out 0 + wc 1
+   set wc 0
+   set V$out 1 + 1 V$out 1
+   set p b
+   if = a b
+    set p len$$m
+   endif
+  endif
+  append$ $out vector$ val$ $m
+  set $m right$ $m - len$$m p
+  #print a" "b" "p;
+  #print $m
+  #wait 500
+ endwhile
+ unclaim m
+return out
+
+# ---------------------------------------------------------------
+# - The random number generator from Sinclair ZX Spectrum BASIC -
+# ---------------------------------------------------------------
+#   https://worldofspectrum.org/ZXBasicManual/zxmanchap11.html
+
+function zx_rnd;
+ set _zx_rnd_b % (* 75 _zx_rnd_b) 65537
+return / (- _zx_rnd_b 1) 65536
+
+function zx_randomize n;
+ set _zx_rnd_b + n 1
+endfunction
