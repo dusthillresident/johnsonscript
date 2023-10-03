@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mylib.h"
+#include "mylib.c"
 
 // memory problem debugging stuff
 #if 0
@@ -221,8 +221,6 @@ SVR* NewStringvar_svrp(){
  int svn = NewStringvar();
  return StringVars[svn];
 }
-
-int SF_isFirst=1; // this string function is the first being evaluated
 
 void AppendSVLtoSVR( SVR *svr, SVL a){
  int newlen = svr->len + a.len;

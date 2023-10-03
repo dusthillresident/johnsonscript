@@ -238,13 +238,15 @@
 #define t_Sf			171	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
 #define t_sget			172	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
 #define t_vectorS		173	//	vector$ [num] [...]		STR		return string containing vector string, meant for use with 'V' (vectors)
-#define t_extsfun		174	//	external string function, used for extensions
-#define t_error_message		175	//	error message string from last encountered error
-#define t_error_file		176	//	name of the program text file from the last encountered error
+#define t_error_message		174	//	error message string from last encountered error
+#define t_error_file		175	//	name of the program text file from the last encountered error
+#define t_rnd_state		176	//	obtain the current state value of the random number generator
+// ----- this one has to be the last one in the list of 'string value' tokens cos it's used for STRINGVALS_END -------------------------
+#define t_extsfun		177	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_extsfun
 #ifdef enable_graphics_extension // graphics extension stringvalues
- #define t_readkeyS		177	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
+ #define t_readkeyS		178	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
  #undef STRINGVALS_END
  #define STRINGVALS_END t_readkeyS
 #endif
@@ -255,33 +257,33 @@
 #ifdef enable_graphics_extension
  // ===== graphics extension commands =====
  // commands
- #define t_startgraphics	178	// startgraphics		winwidth winheight ;
- #define t_stopgraphics		179	// stopgraphics			;
- #define t_winsize		180	// winsize			W H ;
- #define t_pixel		181	// pixel			X Y ([X Y] ...) ;
- #define t_line			182	// line				X Y X Y ([X Y] ...) ;
- #define t_circlef		183	// circlef			X Y R ;
- #define t_circle		184	// circle			X Y R ;
- #define t_arcf			185	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
- #define t_arc			186	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
- #define t_rectanglef		187	// rectanglef			X Y W [H] ;
- #define t_rectangle		188	// rectangle			X Y W [H] ;
- #define t_triangle		189	// triangle			X Y X Y X Y ;
- #define t_drawtext		190	// drawtext			X Y S (stringval);
- #define t_drawscaledtext	191	// drawscaledtext		X Y XS YS (stringval);
- #define t_refreshmode		192	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		193	// refresh 			;
- #define t_gcol			194	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		195	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			196	// cls				;
- #define t_drawmode		197	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_startgraphics	179	// startgraphics		winwidth winheight ;
+ #define t_stopgraphics		180	// stopgraphics			;
+ #define t_winsize		181	// winsize			W H ;
+ #define t_pixel		182	// pixel			X Y ([X Y] ...) ;
+ #define t_line			183	// line				X Y X Y ([X Y] ...) ;
+ #define t_circlef		184	// circlef			X Y R ;
+ #define t_circle		185	// circle			X Y R ;
+ #define t_arcf			186	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_arc			187	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_rectanglef		188	// rectanglef			X Y W [H] ;
+ #define t_rectangle		189	// rectangle			X Y W [H] ;
+ #define t_triangle		190	// triangle			X Y X Y X Y ;
+ #define t_drawtext		191	// drawtext			X Y S (stringval);
+ #define t_drawscaledtext	192	// drawscaledtext		X Y XS YS (stringval);
+ #define t_refreshmode		193	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		194	// refresh 			;
+ #define t_gcol			195	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		196	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			197	// cls				;
+ #define t_drawmode		198	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
 #if allow_debug_commands
- #define t_tb		198	//	testbeep
- #define t_printstackframe 199	//	print everything in the current stack frame
- #define t_printentirestack 200	//	print everything in the stack up to the current stack frame
+ #define t_tb		199	//	testbeep
+ #define t_printstackframe 200	//	print everything in the current stack frame
+ #define t_printentirestack 201	//	print everything in the stack up to the current stack frame
 #endif
 
 #define t_bad		255	//			bad data

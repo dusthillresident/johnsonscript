@@ -20,8 +20,8 @@ then
 fi
 
 ./convertbin "$1" > TEMP_FILE.c
-gcc -Ofast -c mylib.c
-gcc TEMP_FILE.c mylib.o -lm -lXext -lX11 -lpthread
+#gcc -Ofast -c mylib.c
+gcc TEMP_FILE.c -lm -lXext -lX11 -lpthread
 rm TEMP_FILE.c
 if [[ -e a.out ]]
 then

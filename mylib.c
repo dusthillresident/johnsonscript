@@ -48,59 +48,60 @@ FILE* Openup(char *filename){
 
 // =============== RNG ===================
 
-double _rnd_v;
-// Warning: output sequence changes when gcc's -Ofast flag is enabled
-// Statistical testing was done with -Ofast on
-double dhr_random(){
- double mviv = _rnd_v - (int)_rnd_v;				
- _rnd_v=(_rnd_v+34.19249667096534) * 82.41991188303562 * (93.7185494935692-mviv);	
- if( _rnd_v > 8321.787723770267 ){					
-  _rnd_v = mviv+(8321.787723770267*(_rnd_v-(int)_rnd_v));			
- }							
- return mviv;					
+unsigned long long int _rnd_v1, _rnd_v2;
+#define RND_V1M (unsigned long long int)0x91abe813a357d
+#define RND_V1L (unsigned long long int)0x1db61b5bde843616
+unsigned int dhr_random_u32(){
+ unsigned long long int m1 = _rnd_v1 & 0xffffffffffff;
+ _rnd_v1 = (_rnd_v1 + m1 + 1)*(RND_V1M+m1); if(_rnd_v1>RND_V1L){ _rnd_v1=(RND_V1L*m1)+_rnd_v2; _rnd_v2=m1; }
+ return (unsigned int)m1 ^ (unsigned int)(_rnd_v1 >> 48);
 }
 
-void dhr_random__seed(double seed){
- int isNanOrInf(double x){
-  x=x*0.0; // (inf * 0) becomes -nan
-  if( x==0.0 && (int)x ){ // all comparisons between nan and any other number seem to evaluate to 1, and (int)nan becomes -2147483648
-   return 1;
-  }
-  return 0;
- }
- double constrain(double x, double max){
-  if(isNanOrInf(x)) return 0.0;
-  if( x < 0.0 ) x = -x;
-  if( x > max ){
-   x = (x/max);
-   x = max*(x-(int)x);
-  }
-  return x;
- }
- _rnd_v  = constrain( seed,  8321.787723770267  );
+// state_return must be a char buffer of length 29 at least, to contain 28 hex characters and a 0 null terminator 
+void dhr_random__save_state( char *state ){
+ // convert to hex charagers
+ sprintf(state,"%016llx%012llx", _rnd_v1, _rnd_v2);
 }
 
-double dhr_random__current_seed(){
- return _rnd_v;
+int dhr_random__load_state( char *state ){
+ char buf[29];
+ strncpy( buf,state, 28 );
+ size_t l = strlen(state);
+ // if we're given an invalid string that's too short,
+ // then let's at least pad it with '1's so we (hopefully) 
+ // have less of a chance of ending up with a state that's really broken...
+ if( l<28 ){
+  for(int i=l; i<28; i++)
+   buf[i]='1';
+ }
+ buf[28]=0;
+ _rnd_v1 = 0; _rnd_v2 = 0;
+ int ret = sscanf( buf, "%016llx%012llx", &_rnd_v1, &_rnd_v2 ) == 2;
+ _rnd_v2 = _rnd_v2 & 0xffffffffffff;
+ return ret;
 }
 
 int Rnd(int n){
- double r = dhr_random();
- if( n == 0 )
-  return (int)(unsigned int)(r * (double)0x100000000);
+ unsigned long int r = dhr_random_u32();
+ if( !n )
+  return r;
  else
-  return n * r;
+  return (int)(r & 0x7fffffff) % n;
 }
 
 #ifndef TimeConflictBullshit
 #include <time.h>
 void SeedRng(){
- unsigned int t = time(NULL);
- t = ((t<<24) | (t>>8)) ^ 0xaaaaaaaa;
- _rnd_v = ((double)t / (double)0x100000000) * 8321.787723770267 ;
- //fprintf(stderr, "_rnd_v is now %f\n",_rnd_v);
- for(int i=0; i<16; i++){
-  dhr_random();
+ unsigned long long int t = time(NULL);
+ unsigned long long int a=0, b=0;
+ for(int i=0; i<32; i++){
+  a = (a<<1) | !!(t & (1 << i));
+  b = (b<<1) | !!(t & (2 << i));
+ }
+ _rnd_v1 = (a * 0xf3259af + t) % RND_V1L;
+ _rnd_v2 = (b * 0xa35d391 + ~t) & 0xffffffffffff;
+ for(int i=0; i<8; i++){
+  dhr_random_u32();
  }
 }
 #endif

@@ -237,9 +237,11 @@
 #define t_Sf			COCKSPENIS	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
 #define t_sget			COCKSPENIS	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
 #define t_vectorS		COCKSPENIS	//	vector$ [num] [...]		STR		return string containing vector string, meant for use with 'V' (vectors)
-#define t_extsfun		COCKSPENIS	//	external string function, used for extensions
 #define t_error_message		COCKSPENIS	//	error message string from last encountered error
 #define t_error_file		COCKSPENIS	//	name of the program text file from the last encountered error
+#define t_rnd_state		COCKSPENIS	//	obtain the current state value of the random number generator
+// ----- this one has to be the last one in the list of 'string value' tokens cos it's used for STRINGVALS_END -------------------------
+#define t_extsfun		COCKSPENIS	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_extsfun
 #ifdef enable_graphics_extension // graphics extension stringvalues

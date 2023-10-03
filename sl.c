@@ -217,7 +217,7 @@ int isvalue(TOKENTYPE_TYPE type);
 int determine_valueorstringvalue(program *prog, int p);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
-void stringvar_adjustsizeifnecessary(stringvar *sv, size_t bufsize_required, int preserve);
+void stringvar_adjustsizeifnecessary(program *prog, stringvar *sv, size_t bufsize_required, int preserve);
 int add_id(id_info *ids, id_info *new_id);
 void add_id__error_if_fail( program *prog, int p, char *errormessage,   id_info *ids, id_info *new_id);
 id_info* make_id(char *id_string, token t);
@@ -226,7 +226,7 @@ void clean_stringvar( program *prog, stringvar *svr, int preserve );
 void unclaim(program *prog, int *p);
 int oscli(program *prog, int *p);
 int catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue );
-void copy_stringval_to_stringvar(stringvar *dest, stringval src);
+void copy_stringval_to_stringvar(program *prog, stringvar *dest, stringval src);
 void process_catch(program *prog, int p);
 
 // -------------------------------------------------------------------------------------------
@@ -276,7 +276,7 @@ newprog(int maxlen, int vsize, int ssize){
  // initialise error info
  out->_error_message = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE); 
  out->_error_file    = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE);
- copy_stringval_to_stringvar(out->_error_message, (stringval){"(C)2023 Johnsonscript",21} );
+ copy_stringval_to_stringvar(out, out->_error_message, (stringval){"(C)2023 Johnsonscript",21} );
  return out;
 }
 
@@ -1052,7 +1052,21 @@ option( program *prog, int *p ){
  }
  case opt_seedrnd: // seed random number generator
  {
-  dhr_random__seed( getvalue(p,prog) );
+  if( determine_valueorstringvalue(prog, *p) ){
+   stringval state = getstringvalue(prog,p);
+   int h = state.string[ state.len ];
+   dhr_random__load_state( state.string );
+   state.string[ state.len ]=h;
+  }else{
+   int count = 0;
+   _rnd_v1=0x101010101010; _rnd_v2=0;
+   do {
+    double v = getvalue(p,prog);
+    _rnd_v1 += v; dhr_random_u32(); _rnd_v2 -= v; dhr_random_u32();
+    count++;
+   } while( count<3 && isvalue( prog->tokens[*p].type ) );
+   _rnd_v2 &= 0xffffffffffff; dhr_random_u32();
+  }
   break;
  }
  case opt_randomise:
@@ -1183,7 +1197,7 @@ option( program *prog, int *p ){
   sv->len = 0;
   if( result ){
    size_t l = strlen(result);
-   stringvar_adjustsizeifnecessary(sv, l+1, 0);
+   stringvar_adjustsizeifnecessary(prog, sv, l+1, 0);
    strcpy(sv->string, result);
    sv->len = l;
    free(result);
@@ -1690,9 +1704,13 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   out = maketoken( t_instrS ); goto gettoken_normalout;
  }
 
+ if( wordmatch_plus_whitespace( pos,"_rnd_state", text) ){	//	_rnd_state
+  out = maketoken( t_rnd_state ); goto gettoken_normalout;
+ }
  if( wordmatch_plus_whitespace( pos,"rnd", text) ){	//	rnd
   out = maketoken( t_rnd ); goto gettoken_normalout;
  }
+
  if( wordmatch_plus_whitespace( pos,"wait", text) ){	//	
   out = maketoken( t_wait ); goto gettoken_normalout;
  }
@@ -2337,6 +2355,7 @@ tokenstring(token t){
  case t_unclaim:	return "unclaim";
 
  case t_rnd:		return "rnd";
+ case t_rnd_state:	return "_rnd_state";
  case t_wait:		return "wait";
  case t_alloc:		return "alloc";
  case t_endfn:		return "endfunction";
@@ -2544,7 +2563,8 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-stringvar_adjustsizeifnecessary(stringvar *sv, size_t bufsize_required, int preserve){
+stringvar_adjustsizeifnecessary(program *prog, stringvar *sv, size_t bufsize_required, int preserve){
+ //fprintf(stderr,"ADJUST	sv %p		str %p	siz %lu	len %lu	req %lu	preserve %d\n", sv, sv->string, sv->bufsize, sv->len, bufsize_required, preserve); Wait(1);
  if(bufsize_required<sv->bufsize){
   //tb();
   return;
@@ -2553,7 +2573,7 @@ stringvar_adjustsizeifnecessary(stringvar *sv, size_t bufsize_required, int pres
  //if( new_bufsize <= bufsize_required ) error(NULL, -1, "still happening");
  if(preserve){
   sv->string = realloc(sv->string, new_bufsize);
-  if(sv->string == NULL) error(NULL, -1, "stringvar_adjustsize: realloc failed");
+  if(sv->string == NULL) error(prog, -1, "stringvar_adjustsize: realloc failed");
   sv->bufsize = new_bufsize;
   sv->string[sv->len]=0;
  }else{
@@ -2568,8 +2588,8 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-copy_stringval_to_stringvar(stringvar *dest, stringval src){
- if( src.len+1 >= dest->bufsize ) stringvar_adjustsizeifnecessary(dest, src.len+1, 0);
+copy_stringval_to_stringvar(program *prog, stringvar *dest, stringval src){
+ if( src.len+1 >= dest->bufsize ) stringvar_adjustsizeifnecessary(prog, dest, src.len+1, 0);
  mystrncpy(dest->string, src.string, src.len);
  dest->len = src.len;
 }
@@ -2687,7 +2707,7 @@ getstringvalue( program *prog, int *pos ){
   while( isstringvalue( prog->tokens[ *pos ].type ) ){
    in = getstringvalue( prog,pos );
    bufsize_required = accumulator->len + in.len+1;
-   if( bufsize_required > accumulator->bufsize ) stringvar_adjustsizeifnecessary(accumulator, bufsize_required, 1);
+   if( bufsize_required > accumulator->bufsize ) stringvar_adjustsizeifnecessary(prog, accumulator, bufsize_required, 1);
    mystrncpy( accumulator->string + accumulator->len,  in.string, in.len );
    accumulator->len += in.len;
   }
@@ -2713,7 +2733,7 @@ getstringvalue( program *prog, int *pos ){
   }
   size_t bufsize_required = svl.len * n;
   if( bufsize_required > accumulator->bufsize ){
-   stringvar_adjustsizeifnecessary(accumulator, bufsize_required, 1);
+   stringvar_adjustsizeifnecessary(prog, accumulator, bufsize_required, 1);
   }
   if( svl.len == 1 ){ // if it's one character we can just do a nice memset()
    memset(accumulator->string, svl.string[0], n);
@@ -2779,7 +2799,7 @@ getstringvalue( program *prog, int *pos ){
    accumulator->len += 8;
    if( accumulator->bufsize - accumulator->len < 32 ){
     size_t ptr_offset = (void*)vectorp - (void*)accumulator->string;
-    stringvar_adjustsizeifnecessary(accumulator, accumulator->bufsize+32, 1);
+    stringvar_adjustsizeifnecessary(prog, accumulator, accumulator->bufsize+32, 1);
     vectorp = (double*)(accumulator->string + ptr_offset);
    }
   }
@@ -2805,7 +2825,7 @@ getstringvalue( program *prog, int *pos ){
     accumulator->len += 1;
     if( accumulator->len >= accumulator->bufsize-1 ){
      //printf("fuck1 %d, %d\n",accumulator->len, accumulator->bufsize);
-     stringvar_adjustsizeifnecessary(accumulator, accumulator->bufsize + 1, 1);
+     stringvar_adjustsizeifnecessary(prog, accumulator, accumulator->bufsize + 1, 1);
      //printf("fuck2 %d, %d\n",accumulator->len, accumulator->bufsize);
      //if( accumulator->len >= accumulator->bufsize ) error(NULL,-1,"FUCK PENIS FUCK"); //remove later
     }
@@ -2814,7 +2834,7 @@ getstringvalue( program *prog, int *pos ){
   }else{ 
    // ======= reading a specific number of bytes ===============
    if( accumulator->bufsize <= num_bytes_to_read ){
-    stringvar_adjustsizeifnecessary(accumulator, num_bytes_to_read, 1);
+    stringvar_adjustsizeifnecessary(prog, accumulator, num_bytes_to_read, 1);
     //if( accumulator->bufsize <= num_bytes_to_read ) error(NULL,-1,"FUCK ###########################################"); //remove later
    }//endif bufsize
    accumulator->len = fread( (void*)accumulator->string, sizeof(char), num_bytes_to_read, f->fp );
@@ -2825,6 +2845,11 @@ getstringvalue( program *prog, int *pos ){
   out.string = accumulator->string;
   return out;
  }//end case block
+ case t_rnd_state: {
+  accumulator->len = 28; 
+  dhr_random__save_state( accumulator->string );
+  return *(stringval*)accumulator;
+ }
  #ifdef enable_graphics_extension 
  // ============================================================================================
  // ======= GRAPHICS EXTENSION =================================================================
@@ -2895,8 +2920,8 @@ error(program *prog, int p, char *format, ...){
  if( prog && prog->error_handler ){
   char *file;
   get_sourcetext_location_info( prog, p,  &prog->_error_line, &prog->_error_column, &file );
-  copy_stringval_to_stringvar( prog->_error_message, (stringval){s,strlen(s)} );
-  copy_stringval_to_stringvar( prog->_error_file, (stringval){file,strlen(file)} );
+  copy_stringval_to_stringvar( prog, prog->_error_message, (stringval){s,strlen(s)} );
+  copy_stringval_to_stringvar( prog, prog->_error_file, (stringval){file,strlen(file)} );
   longjmp(*prog->error_handler, 1);
  }
  // ------ default error response --------
@@ -3166,13 +3191,12 @@ getvalue(int *p, program *prog){
 
  case t_rnd:
  {
-  //return (double)Rnd((int)getvalue(p,prog));
   int n = (int)getvalue(p,prog);
-  double r = dhr_random();
+  unsigned int r = dhr_random_u32();
   switch(n){
-   case 0:  return (double)(int)(unsigned int)(0x100000000 * r);
-   case 1:  return r;
-   default: return (int)(r * n);
+   case 0:  return (double)(int)r;
+   case 1:  return (double)r / 4294967296.0;
+   default: return (double)((int)(r>>1) % n);
   }
  }
 
@@ -3316,7 +3340,7 @@ getvalue(int *p, program *prog){
   int i;
   int stringgiven=0;
 //  stringvar *svr = (stringvar*)t.data.pointer;
-//  copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
+//  copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, &p) );
   stringvar *svr = NULL;
   for( i = prog->max_stringvars-1; i>=0; i-- ){
 
@@ -3335,7 +3359,7 @@ getvalue(int *p, program *prog){
    stringgiven = isstringvalue( prog->tokens[*p].type );
   }
   if( stringgiven ){
-   copy_stringval_to_stringvar(svr, getstringvalue(prog, p) );
+   copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, p) );
   }else{
    svr->len = 0;
   }
@@ -3505,15 +3529,13 @@ getvalue(int *p, program *prog){
     *p-=1;
     // create new string variable and copy the string constant to it
     stringvar *referred_string_constant = create_new_stringvar(prog,DEFAULT_NEW_STRINGVAR_BUFSIZE);
-    copy_stringval_to_stringvar(referred_string_constant, getstringvalue(prog, p) );
+    copy_stringval_to_stringvar(prog, referred_string_constant, getstringvalue(prog, p) );
     // replace the getref token with a referredstringconst
     prog->tokens[*p-2].type = t_referredstringconst;
     prog->tokens[*p-2].data.i = referred_string_constant->string_variable_number;
     // return the reference number of the new string variable
     return referred_string_constant->string_variable_number;
    }
-  case t_rnd: // obtain the current state/seed of the random number generator
-   return _rnd_v;
   default: error(prog, *p, "getvalue: bad use of @");
   }
   break;
@@ -4552,13 +4574,13 @@ interpreter(int p, program *prog){
    int string_number = getvalue(&p,prog);
    if(string_number<0 || string_number>=prog->max_stringvars) error(prog, p-1, "interpreter: set: bad stringvar access '%d'",string_number);
    stringvar *svr = prog->stringvars[string_number];
-   copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
+   copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, &p) );
    break;
   }
   case t_Sf:
   {
    stringvar *svr = (stringvar*)t.data.pointer;
-   copy_stringval_to_stringvar(svr, getstringvalue(prog, &p) );
+   copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, &p) );
    break;
   }
   default:
@@ -4762,13 +4784,13 @@ interpreter(int p, program *prog){
   do{
    appendString = getstringvalue(prog,&p);
    size_t len = appendString.len;
-   if( appendTo->bufsize + len + 1 >= appendTo->bufsize ){
+   if( appendTo->len + len + 1 >= appendTo->bufsize ){
     if( appendString.string >= appendTo->string && appendString.string < (appendTo->string + appendTo->len) ){ // Äkta dig för Rövar-Albin
      size_t ptr_offset = appendString.string - appendTo->string;
-     stringvar_adjustsizeifnecessary(appendTo, appendTo->bufsize + len + 1, 1);
+     stringvar_adjustsizeifnecessary(prog, appendTo, appendTo->len + len + 1, 1);
      appendString.string = appendTo->string + ptr_offset;
     }else{
-     stringvar_adjustsizeifnecessary(appendTo, appendTo->bufsize + len + 1, 1);
+     stringvar_adjustsizeifnecessary(prog, appendTo, appendTo->len + len + 1, 1);
     }
    }
    memcpy( appendTo->string + appendTo->len, appendString.string, len);
@@ -5239,7 +5261,7 @@ sl_c__parse_argc_argv(program *prg, int argc, char **argv){
                         prg->ids, make_id( "_argc", maketoken_num( argc-2 ) ) );
  int i;
  for(i=2; i<argc; i++){
-  copy_stringval_to_stringvar(   create_new_stringvar(prg,strlen( argv[i] ) ), (stringval) { argv[i], strlen(argv[i]) } );
+  copy_stringval_to_stringvar( prg,  create_new_stringvar(prg,strlen( argv[i] ) ), (stringval) { argv[i], strlen(argv[i]) } );
  }
 
  char errormessage[] = "main: failed to create _argv0 constant, this should never happen\n";
@@ -5250,7 +5272,7 @@ sl_c__parse_argc_argv(program *prg, int argc, char **argv){
   char *varname_permanent_address = calloc(8,sizeof(char));
   strcpy(varname_permanent_address, varname);
   stringvar *svr = create_new_stringvar(prg,256);
-  copy_stringval_to_stringvar( svr, (stringval) { argv[i], strlen(argv[i])} );
+  copy_stringval_to_stringvar( prg, svr, (stringval) { argv[i], strlen(argv[i])} );
   add_id__error_if_fail( prg, -1, errormessage,
                          prg->ids, make_id( varname_permanent_address, maketoken_Sf( svr ) ) );
   stringslist_addstring(prg->program_strings, varname_permanent_address);

@@ -1,6 +1,9 @@
 #!/bin/bash
 # -lXext for the Xdbe double buffer X extension
-if [[ -e ./gfxbin ]]
+echo "Checking for johnsonscript interpreter (you may see an error message)"
+interpreterIsWorking=$(./gfxbin "print 1; return 0")
+echo "Check complete"
+if [[ $interpreterIsWorking ]]
 then 
  echo "// DO NOT EDIT THIS, instead edit tokenslist_src.c" > tokenslist.c
  cat tokenslist_src.c | ./gfxbin PENIStool.johnson >> tokenslist.c

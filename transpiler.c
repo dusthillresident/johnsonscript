@@ -1,6 +1,10 @@
 #define disable_sl_c_main
 #include "sl.c"
 
+#define t_DEFER_START 10000
+#define t_DEFER_VAR 10000
+#define t_DEFER_CON 10001
+
 void trans_add_id(id_info *ids, id_info *new_id){
  // check if this id name is already used in this id list
  if( ids->name && !strcmp(new_id->name, ids->name) ){
@@ -310,6 +314,14 @@ void translate_stringvalue(program *prog, int *p){
  fprintf(stderr,"translate_stringvalue: %s\n",tokenstring(prog->tokens[ *p ]));
  #endif
  switch( prog->tokens[ *p ].type ){
+  case t_rnd_state: {
+   *p += 1;
+   PrintMain("({ // _rnd_state\n");
+   PrintMain("SAL++; int sa_l = SAL; SVR *acc = NewStrAccLevel( sa_l );\n");
+   PrintMain("dhr_random__save_state( acc->buf ); acc->len = 28;\n");
+   PrintMain("if(sa_l == 0) SAL=-1;\n");
+   PrintMain("SVRtoSVL( acc ); })");
+  } break;
   case t_sget:
    if( trans_reverse_function_params ){
     *p += 1;
@@ -817,11 +829,6 @@ void translate_value(program *prog, int *p){
    *p += 1;
    transval_getref_start:
    switch( prog->tokens[ *p ].type ){
-   case t_rnd:
-    {
-     *p += 1;
-     PrintMain("dhr_random__current_seed()");
-    } break;
    // ------ strings -------
    case t_stringconst:
     {
@@ -1226,13 +1233,13 @@ void translate_value(program *prog, int *p){
    *p += 1;
    translate_value(prog, p);
    PrintMain(";\n \
-double rnd_r = dhr_random();\n \
+unsigned int rnd_r = dhr_random_u32(); double r;\n \
 switch(rnd_n){\n\
- case 0: rnd_r = (double)(int)(unsigned int)(0x100000000 * rnd_r); break;\n \
- case 1: break;\n\
- default: rnd_r = (int)(rnd_r * rnd_n); \n\
+ case 0:  r = (double)(int)rnd_r; break; \
+ case 1:  r = (double)rnd_r / 4294967296.0; break; \
+ default: r = (double)((int)(rnd_r>>1) %% rnd_n); break; \
 }\n\
-rnd_r;\n \
+r;\n \
 })");
   } break;
 /*
@@ -1991,9 +1998,24 @@ void translate_command(program *prog, int *p){
     #endif
    }else if( TheseStringsMatch(opstr, "seedrnd") ){
 
-    PrintMain("dhr_random__seed(");
-    translate_value(prog,p);
-    PrintMain(");\n");
+    int type = translate_determine_valueorstringvalue(prog, *p);
+  
+    if( type ){
+     PrintMain("{ // option \"seedrnd\" with state string\nSVL state = ");
+     translate_stringvalue(prog,p);
+     PrintMain("; int h = state.buf[state.len]; state.buf[state.len]=0;\n");
+     PrintMain("dhr_random__load_state( state.buf );\n");
+     PrintMain("state.buf[state.len]=h;\n}\n");
+    }else{
+     PrintMain("{ // option \"seedrnd\" with number values\n");
+     PrintMain("_rnd_v1=0x101010101010; _rnd_v2=0; double v;\n");
+     do{
+      PrintMain("v = "); translate_value(prog,p); PrintMain(";\n");
+      PrintMain("_rnd_v1 += v; dhr_random_u32(); _rnd_v2 -= v; dhr_random_u32();");
+     }while( isvalue( CurTok.type) );
+     PrintMain("_rnd_v2 &= 0xffffffffffff; dhr_random_u32();\n}\n");
+    }
+
    }else if( TheseStringsMatch(opstr, "randomise") ){
 
     PrintMain("SeedRng();\n");
@@ -2420,9 +2442,9 @@ void translate_command(program *prog, int *p){
     exit(0);
    }
    *p += 1;
-   prog->tokens[ var_token_p ].type = 199;
+   prog->tokens[ var_token_p ].type = t_DEFER_VAR;
   } break;
- case 199:
+ case t_DEFER_VAR:
   {
    trans_print_sourcetext_location( prog, *p);
    fprintf(stderr,"it should not be possible for this to happen again because the declaration preprocess pass should clear this away with ';'s\n");
@@ -2461,8 +2483,9 @@ void translate_command(program *prog, int *p){
    }
    // otherwise we have to do this: 
    PrintVarp("double CON_%s; ",idstring);
+ 
 
-   prog->tokens[const_token_p].type = 200; // we will set the value of this constant later during the main translation pass.
+   prog->tokens[const_token_p].type = t_DEFER_CON; // we will set the value of this constant later during the main translation pass.
  
    TransTable *ttab = calloc(1,sizeof(TransTable));
    *ttab = (TransTable){
@@ -2475,7 +2498,7 @@ void translate_command(program *prog, int *p){
    trans_add_id(prog->ids, make_id( idstring, maketoken_Df( (double*)ttab ) ) );
 
   } break;
- case 200:
+ case t_DEFER_CON:
   {
    *p += 1;
    char *idstring = (char*)prog->tokens[ *p ].data.pointer;
@@ -2946,7 +2969,7 @@ int _translate_preprocess_declarations(program *prog,func_info *f, int *already,
     found_declarations=1;
     pp=p;
     translate_command(prog, &p);
-    if( prog->tokens[pp].type < 200 ){ // unless something required work later during the main translation pass, we need to clear away the declaration 
+    if( prog->tokens[pp].type < t_DEFER_CON ){ // unless something required work later during the main translation pass, we need to clear away the declaration 
      translate_blankarea(prog, pp, p);
     }
     p-=1; // put p back a position, because translate_command changed the value of p, and the increment at the end of the loop will skip past an extra position
