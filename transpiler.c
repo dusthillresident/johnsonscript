@@ -2012,6 +2012,7 @@ void translate_command(program *prog, int *p){
      do{
       PrintMain("v = "); translate_value(prog,p); PrintMain(";\n");
       PrintMain("_rnd_v1 += v*1.123364323; dhr_random_u32(); _rnd_v2 -= v*4.136526324; dhr_random_u32(); _rnd_v1 ^= _rnd_v2;\n");
+      PrintMain("_rnd_v2 ^= (unsigned long long int)(v * 7176.612621); dhr_random_u32();\n");
      }while( isvalue( CurTok.type) );
      PrintMain("_rnd_v2 &= 0xffffffffffff; dhr_random_u32();\n}\n");
     }

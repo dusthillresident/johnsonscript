@@ -1063,6 +1063,7 @@ option( program *prog, int *p ){
    do {
     double v = getvalue(p,prog);
     _rnd_v1 += v*1.123364323; dhr_random_u32(); _rnd_v2 -= v*4.136526324; dhr_random_u32(); _rnd_v1 ^= _rnd_v2;//good
+    _rnd_v2 ^= (unsigned long long int)(v * 7176.612621); dhr_random_u32(); //good
     count++;
    } while( count<3 && isvalue( prog->tokens[*p].type ) );
    _rnd_v2 &= 0xffffffffffff; dhr_random_u32();
