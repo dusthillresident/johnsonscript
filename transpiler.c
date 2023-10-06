@@ -318,7 +318,7 @@ void translate_stringvalue(program *prog, int *p){
    *p += 1;
    PrintMain("({ // _rnd_state\n");
    PrintMain("SAL++; int sa_l = SAL; SVR *acc = NewStrAccLevel( sa_l );\n");
-   PrintMain("dhr_random__save_state( acc->buf ); acc->len = 28;\n");
+   PrintMain("dhr_random__save_state( acc->buf ); acc->len = 64;\n");
    PrintMain("if(sa_l == 0) SAL=-1;\n");
    PrintMain("SVRtoSVL( acc ); })");
   } break;
@@ -1233,7 +1233,7 @@ void translate_value(program *prog, int *p){
    *p += 1;
    translate_value(prog, p);
    PrintMain(";\n \
-unsigned int rnd_r = dhr_random_u32(); double r;\n \
+unsigned int rnd_r = dhr_random_u32(_rnd_v++); double r;\n \
 switch(rnd_n){\n\
  case 0:  r = (double)(int)rnd_r; break; \
  case 1:  r = (double)rnd_r / 4294967296.0; break; \
@@ -2008,13 +2008,12 @@ void translate_command(program *prog, int *p){
      PrintMain("state.buf[state.len]=h;\n}\n");
     }else{
      PrintMain("{ // option \"seedrnd\" with number values\n");
-     PrintMain("_rnd_v1=0x101010101010; _rnd_v2=0; double v;\n");
+     PrintMain("_rnd_v=0; unsigned long long int v;\n");
      do{
-      PrintMain("v = "); translate_value(prog,p); PrintMain(";\n");
-      PrintMain("_rnd_v1 += v*1.123364323; dhr_random_u32(); _rnd_v2 -= v*4.136526324; dhr_random_u32(); _rnd_v1 ^= _rnd_v2;\n");
-      PrintMain("_rnd_v2 ^= (unsigned long long int)(v * 7176.612621); dhr_random_u32();\n");
+      PrintMain("v = (unsigned long long int)"); translate_value(prog,p); PrintMain(";\n");
+      PrintMain("_rnd_v = (_rnd_v<<32) ^ v;\n");
      }while( isvalue( CurTok.type) );
-     PrintMain("_rnd_v2 &= 0xffffffffffff; dhr_random_u32();\n}\n");
+     PrintMain("}\n");
     }
 
    }else if( TheseStringsMatch(opstr, "randomise") || TheseStringsMatch(opstr, "randomize") ){

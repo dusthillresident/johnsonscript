@@ -16,10 +16,10 @@ int SetPtr(FILE *fp, int pos);
 
 //static double _rnd_v;					
 
-double dhr_random_u32();
+double dhr_random_u32(unsigned long long int n);
 
 void dhr_random__save_state( char * );
-int dhr_random__load_state( char * );
+void dhr_random__load_state( char * );
 
 int Rnd(int n);
 

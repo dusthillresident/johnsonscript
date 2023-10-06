@@ -1059,14 +1059,12 @@ option( program *prog, int *p ){
    state.string[ state.len ]=h;
   }else{
    int count = 0;
-   _rnd_v1=0x101010101010; _rnd_v2=0;
+   _rnd_v=0;
    do {
-    double v = getvalue(p,prog);
-    _rnd_v1 += v*1.123364323; dhr_random_u32(); _rnd_v2 -= v*4.136526324; dhr_random_u32(); _rnd_v1 ^= _rnd_v2;//good
-    _rnd_v2 ^= (unsigned long long int)(v * 7176.612621); dhr_random_u32(); //good
+    unsigned long long int v = (unsigned long long int)getvalue(p,prog);
+    _rnd_v = (_rnd_v<<32) ^ v;
     count++;
    } while( count<3 && isvalue( prog->tokens[*p].type ) );
-   _rnd_v2 &= 0xffffffffffff; dhr_random_u32();
   }
   break;
  }
@@ -2847,7 +2845,7 @@ getstringvalue( program *prog, int *pos ){
   return out;
  }//end case block
  case t_rnd_state: {
-  accumulator->len = 28; 
+  accumulator->len = 64; 
   dhr_random__save_state( accumulator->string );
   return *(stringval*)accumulator;
  }
@@ -3193,7 +3191,7 @@ getvalue(int *p, program *prog){
  case t_rnd:
  {
   int n = (int)getvalue(p,prog);
-  unsigned int r = dhr_random_u32();
+  unsigned int r = dhr_random_u32(_rnd_v++);
   switch(n){
    case 0:  return (double)(int)r;
    case 1:  return (double)r / 4294967296.0;
