@@ -318,7 +318,7 @@ void translate_stringvalue(program *prog, int *p){
    *p += 1;
    PrintMain("({ // _rnd_state\n");
    PrintMain("SAL++; int sa_l = SAL; SVR *acc = NewStrAccLevel( sa_l );\n");
-   PrintMain("dhr_random__save_state( acc->buf ); acc->len = 64;\n");
+   PrintMain("dhr_random__save_state( acc->buf ); acc->len = 16;\n");
    PrintMain("if(sa_l == 0) SAL=-1;\n");
    PrintMain("SVRtoSVL( acc ); })");
   } break;

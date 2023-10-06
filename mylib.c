@@ -66,7 +66,7 @@ unsigned int dhr_random_u32(unsigned long long int n){
  return (unsigned int)(v ^ (v>>32));
 }
 
-// 'state' must be a buffer that's at least 65 (64 hex characters and '0' null terminator)
+// 'state' must be a buffer that's at least 17 (16 hex characters and '0' null terminator)
 void dhr_random__save_state( char *state ){
  sprintf(state,"%016llx", _rnd_v);
 }

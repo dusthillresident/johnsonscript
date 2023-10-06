@@ -2845,7 +2845,7 @@ getstringvalue( program *prog, int *pos ){
   return out;
  }//end case block
  case t_rnd_state: {
-  accumulator->len = 64; 
+  accumulator->len = 16; 
   dhr_random__save_state( accumulator->string );
   return *(stringval*)accumulator;
  }
