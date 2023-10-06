@@ -86,7 +86,8 @@ int Rnd(int n){
 #ifndef TimeConflictBullshit
 #include <time.h>
 void SeedRng(){
- _rnd_v = dhr_random_u32( time(NULL) );
+ unsigned long long int t = time(NULL);
+ _rnd_v = ((unsigned long long int)dhr_random_u32(t) << 32) | (unsigned long long int)dhr_random_u32(~t);
 }
 #endif
 
