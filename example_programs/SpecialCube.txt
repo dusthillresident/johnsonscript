@@ -15,12 +15,15 @@
 
 */
 
-# --------------------
-# - Create variables -
-# --------------------
+# -----------------------------------
+# - Create variables and initialise -
+# -----------------------------------
 variable _zx_rnd_b; variable _rng_c _rng_v; zx_randomize 6; 
 stringvar corners cornersR edges noisePoints noisePointsR scaler;
-variable i j a b c sizeMul;
+variable i j a b c v sizeMul rectSize;
+stringvar _rx _ry _rz _r _rTemp;
+startgraphics 500 500
+refreshmode 1
 
 # -------------------------
 # - Create corners matrix -
@@ -58,17 +61,23 @@ set edges vector$
  3 7
 ;
 
-for i 0 2500;
+
+# ------------------------------
+# - Create noise points matrix -
+# ------------------------------
+
+for i 0 1000;
  append$ noisePoints vector$ (+ -1 * 2 zx_rnd) (+ -1 * 2 zx_rnd) (+ -1 * 2 zx_rnd)
 endfor
 set noisePoints cat$ (vector$ 3 (/ vlen$ noisePoints 3)) noisePoints
 
-stringvar _rx _ry _rz _r _rTemp;
-
-startgraphics 500 500
-refreshmode 1
+# -------------
+# - Main loop -
+# -------------
 
 while 1
+
+ while mouseb wait 17 endwhile
  
  # --------------------------------
  # - Change the angle of the cube -
@@ -125,15 +134,22 @@ while 1
  # ---------------------------
  # - Update graphics display -
  # ---------------------------
+ drawmode 3
  cls
+ drawmode 7
 
+ set rectSize | (>> sizeMul 5) (= 0 >> sizeMul 5)
  for i 2 (+ -1 vlen$noisePointsR) 3;
-  pixel	 fnx VnoisePointsR(i)	fny VnoisePointsR(+i 1)
+  set v + 0.5 * 0.5 / VnoisePointsR(+i 2) * 1.7 sizeMul
+  gcol (* v 255) 0 (* v v 255)
+  rectanglef	 fnx VnoisePointsR(i)	fny VnoisePointsR(+i 1) rectSize
  endfor
 
  for i 0 (+ -1 vlen$edges) 2;
-  line	fnx VcornersR(+ 2 * 3 Vedges(i))	fny VcornersR(+ 2 + 1 * 3 Vedges(i))
-	fnx VcornersR(+ 2 * 3 Vedges(+ i 1))	fny VcornersR(+ 2 + 1 * 3 Vedges(+ i 1))
+  set v * 255 / (+ sizeMul sizeMul * 0.5 + VcornersR(+ 4 * 3 Vedges(i)) VcornersR(+ 4 * 3 Vedges(+ 1 i))) * 3.5 sizeMul
+  gcol 0 v v
+  line	fnx VcornersR(+ 2 * 3 Vedges(i))	fny VcornersR(+ 3 * 3 Vedges(i))
+	fnx VcornersR(+ 2 * 3 Vedges(+ i 1))	fny VcornersR(+ 3 * 3 Vedges(+ i 1))
  endfor 
 
  wait 16.6
@@ -148,7 +164,7 @@ function fnx v; return + >> winw 1 v
 function fny v; return + >> winh 1 v
 
 # ---------------------------------------
-# - Functions for operating on matrices -
+# - Functions for working with matrices -
 # ---------------------------------------
 function matrixMultiply a b c local wa ha wb hb i j k _wa _wb _hb product p holdc ii; 
  set wa V$a 0
