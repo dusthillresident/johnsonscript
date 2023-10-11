@@ -20,7 +20,7 @@
 # -----------------------------------
 variable _zx_rnd_b; variable _rng_c _rng_v; zx_randomize 6; 
 stringvar corners cornersR edges noisePoints noisePointsR scaler;
-variable i j a b c v sizeMul rectSize;
+variable i j a b c v sizeMul rectSize reciprocal;
 stringvar _rx _ry _rz _r _rTemp;
 startgraphics 500 500
 refreshmode 1
@@ -76,13 +76,11 @@ set noisePoints cat$ (vector$ 3 (/ vlen$ noisePoints 3)) noisePoints
 # -------------
 
 while 1
-
- while mouseb wait 17 endwhile
  
  # --------------------------------
  # - Change the angle of the cube -
  # --------------------------------
- if 1  /* <--- Change this to 0 if you want to control the angle of the cube with the mouse */
+ if !mouseb  /* <--- Change this to 0 if you want to control the angle of the cube with the mouse */
   set a + a 0.01
   set b + b 0.022566
   set c + c 0.016153
@@ -138,9 +136,10 @@ while 1
  cls
  drawmode 7
 
+ set reciprocal * 0.5 / 1 * 1.7 sizeMul
  set rectSize | (>> sizeMul 5) (= 0 >> sizeMul 5)
  for i 2 (+ -1 vlen$noisePointsR) 3;
-  set v + 0.5 * 0.5 / VnoisePointsR(+i 2) * 1.7 sizeMul
+  set v + 0.5 * reciprocal VnoisePointsR(+i 2)
   gcol (* v 255) 0 (* v v 255)
   rectanglef	 fnx VnoisePointsR(i)	fny VnoisePointsR(+i 1) rectSize
  endfor
