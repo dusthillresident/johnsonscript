@@ -214,7 +214,7 @@ void error(program *prog, int p, char *format, ...);
 stringval getstringvalue( program *prog, int *pos );
 int isstringvalue(TOKENTYPE_TYPE type);
 int isvalue(TOKENTYPE_TYPE type);
-int determine_valueorstringvalue(program *prog, int p);
+int determine_valueorstringvalue(program *prog, int p, int errorIfNeither);
 char* tokenstring(token t);
 void print_sourcetext_location( program *prog, int token_p);
 void stringvar_adjustsizeifnecessary(program *prog, stringvar *sv, size_t bufsize_required, int preserve);
@@ -929,6 +929,7 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_xresource	113	// get an X resource value
 #define opt_startgraphics 114	// start graphics in single threaded mode, where the johnsonscript program itself will manually decide when to update (process events etc)
 #define opt_xupdate	115	// process x events and update display etc
+#define opt_pensize	116	// line width for drawing 
 #endif
 
 void
@@ -944,7 +945,7 @@ option( program *prog, int *p ){
 
  int opt_number=-1;
 
- if(  determine_valueorstringvalue(prog, *p)  ){ // identify option string
+ if(  determine_valueorstringvalue(prog, *p, 1)  ){ // identify option string
   stringval id_string = getstringvalue( prog, p );
   if( id_string.len == 0 ){ opt_number=-1; goto option__identify_option_string_out; } // FUCK OFF! for FUCK'S sake...
   if( !strncmp( "vsize", id_string.string, id_string.len ) ){ opt_number = opt_vsize; goto option__identify_option_string_out;}	//	vsize		Set the size of the variables array
@@ -972,6 +973,7 @@ option( program *prog, int *p ){
   if( !strncmp( "xresource",  id_string.string, id_string.len ) ){ opt_number=opt_xresource;goto option__identify_option_string_out;}// xresource [stringvar ref num] [itemname] [classname]
   if( !strncmp( "startgraphics",  id_string.string, id_string.len ) ){ opt_number=opt_startgraphics;goto option__identify_option_string_out;}// startgraphics [width] [height]
   if( !strncmp( "xupdate",  id_string.string, id_string.len ) ){ opt_number=opt_xupdate;goto option__identify_option_string_out;}// xupdate [enableblocking]
+  if( !strncmp( "pensize",  id_string.string, id_string.len ) ){ opt_number=opt_pensize;goto option__identify_option_string_out;}// pensize [size]
 #endif
   //if( !strncmp( "", id_string.string, id_string.len ) ){ opt_number=;	goto option__identify_option_string_out;}	//	
   // ------ check external options -----
@@ -1052,7 +1054,7 @@ option( program *prog, int *p ){
  }
  case opt_seedrnd: // seed random number generator
  {
-  if( determine_valueorstringvalue(prog, *p) ){
+  if( determine_valueorstringvalue(prog, *p, 1) ){
    stringval state = getstringvalue(prog,p);
    int h = state.string[ state.len ];
    dhr_random__load_state( state.string );
@@ -1214,6 +1216,9 @@ option( program *prog, int *p ){
  case opt_xupdate: {
   NewBase_HandleEvents( isvalue( prog->tokens[*p].type ) ? (int)getvalue(p,prog) : 0 );
   XFlush(Mydisplay);
+ } break;
+ case opt_pensize: {
+  SetLineThickness( (int)getvalue(p,prog) );
  } break;
 #endif
  }
@@ -2927,13 +2932,37 @@ error(program *prog, int p, char *format, ...){
  if( p > -1 ){
   print_sourcetext_location( prog, p );
  }
+ fprintf(stderr, "%s\n",s);
  #ifdef enable_graphics_extension
  if(newbase_is_running){
+  if( newbase_allow_fake_vsync ){
+   if( ! isatty(STDIN_FILENO) ){
+    // if this is a graphical program not running in a terminal (eg. launched from gui file manager)
+    // then display the error message in the graphics window so the user knows something happened
+    int l = strlen(s);
+    graphicsDisplayErrorMessage:
+    wmcloseaction = 0;
+    SetPlottingMode(3);
+    Gcol(0,0,128);
+    RectangleFill(1,1,8*(l < 13 ? 13 : l), 25);
+    Gcol(255,255,255);
+    drawtext_(1,1,0, "Program error");
+    drawtext_(1,9,0, s);
+    drawtext_(1,18,0,"Click to exit");
+    Refresh();
+    while( mouse_b ) Wait(1);
+    while( !mouse_b ){
+     if( exposed ){
+      exposed = 0; goto graphicsDisplayErrorMessage;
+     }
+     Wait(1);
+    }
+   }
+  }
   Wait(1);
   MyCleanup();
  }
  #endif
- fprintf(stderr, "%s\n",s);
  if( prog ) quit_cleanup(prog);
  exit(0); 
 }
@@ -3353,7 +3382,7 @@ getvalue(int *p, program *prog){
    svr = create_new_stringvar(prog,DEFAULT_NEW_STRINGVAR_BUFSIZE);
   }
   if( isvalue( prog->tokens[*p].type ) && isstringvalue( prog->tokens[*p].type ) ){
-   stringgiven = determine_valueorstringvalue(prog, *p);
+   stringgiven = determine_valueorstringvalue(prog, *p, 1);
   }else{
    stringgiven = isstringvalue( prog->tokens[*p].type );
   }
@@ -3902,12 +3931,13 @@ int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-determine_valueorstringvalue(program *prog, int p){// this returns 0 for a value, 1 for a stringvalue, or causes an error if neither is found
+determine_valueorstringvalue(program *prog, int p, int errorIfNeither){// this returns 0 for a value, 1 for a stringvalue, -1 for neither OR causes an error if neither is found
  int i; i=p; while( prog->tokens[i].type == t_leftb ){ i+=1; } // skip past any left brackets
  if( prog->tokens[i].type == t_id ) process_id(prog, &prog->tokens[i]); // process it if it's an id
  if( isstringvalue(prog->tokens[i].type) ) return 1; // return 1 if it's a stringvalue
  if( isvalue(prog->tokens[i].type) ) return 0; // return 0 if it's a value
- error(prog, p, "expected a value or a stringvalue"); // cause an error because we expected a value or a stringvalue
+ if( errorIfNeither ) error(prog, p, "expected a value or a stringvalue"); // cause an error because we expected a value or a stringvalue
+ return -1;
 }
 #define PROCESSCASEOF_RUBBISH 0
 void
@@ -3924,7 +3954,7 @@ _interpreter_processcaseof(program *prog, int p){ int i;
  #endif
 //  determine if this is a caseofV or caseofS, or cause an error if there's an inappropriate token after the caseof.
 //  replace the caseof with caseofV_f or caseofS_f appropriately.
- prog->tokens[caseofpos].type = determine_valueorstringvalue(prog,p+1) ? t_caseofS : t_caseofV;
+ prog->tokens[caseofpos].type = determine_valueorstringvalue(prog,p+1,1) ? t_caseofS : t_caseofV;
 //  count the number of whens.
  int numwhens = caseof_numwhens(prog,p,NULL);
 //  allocate arrays for whens and ';'.
@@ -4141,6 +4171,9 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
  // ---- TO ---------
  *toVal = for_processParam( &thisfor->toValIsConstant, &thisfor->toValExpressionP, &thisfor->toVal );
  // ---- STEP -------
+ if( determine_valueorstringvalue( prog, p, 0 ) == -1 &&  prog->tokens[p].type != t_endstatement ){
+  error( prog, p, "for parameters list must be terminated with ';'" );
+ }
  if( prog->tokens[p].type == t_endstatement ){
   thisfor->stepValIsConstant = 1;
   thisfor->stepVal = 1;
@@ -4630,6 +4663,14 @@ interpreter(int p, program *prog){
     p+=1;
     (*C_CharacterAccess( &p, prog )) += (char)inc;
     break;
+   case t_D:
+    {
+     p+=1;
+     int index = (int)getvalue(&p,prog);
+     if(index<0 || index>=prog->vsize) error(prog, starting_p+1, "increment: bad variable access '%d'",index);
+     prog->vars[index] += inc;
+    }
+    break;
    case t_A:
     {
      p+=1;
@@ -4637,7 +4678,6 @@ interpreter(int p, program *prog){
      if(index<0 || index>=prog->vsize) error(prog, starting_p+1, "increment: bad array access '%d'",index);
      prog->vars[index] += inc;
     }
-    error(prog, p-1, "increment: unimplemented");
     break;
    default:
     error(prog, p-1, "increment: bad argument '%s'",tokenstring(prog->tokens[p]));
@@ -4794,7 +4834,7 @@ interpreter(int p, program *prog){
    }
    memcpy( appendTo->string + appendTo->len, appendString.string, len);
    appendTo->len += len;
-  }while( isstringvalue( prog->tokens[ p ].type ) );
+  }while( determine_valueorstringvalue(prog, p, 0) == 1 );
   break;
  }
  // ========================================================

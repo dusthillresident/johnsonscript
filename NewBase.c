@@ -2048,7 +2048,12 @@ void SetPlottingMode(int function){
 // GXorInverted		0xd		/* NOT src OR dst */
 // GXnand		0xe		/* NOT src OR NOT dst */
 // GXset		0xf		/* 1 */
-
+void SetLineThickness(int width){
+ if(!newbase_is_running)return;
+ if( width < 0 ) width = -width;
+ if( width > 1024 ) width = 1024;
+ XSetLineAttributes(Mydisplay, MyGC, width, LineSolid, CapNotLast, JoinMiter);
+}
 
 void RefreshOn(){
  if(!newbase_is_running) return;
