@@ -18,12 +18,13 @@
 # -----------------------------------
 # - Create variables and initialise -
 # -----------------------------------
-variable _zx_rnd_b; variable _rng_c _rng_v; zx_randomize 6; 
+variable _zx_rnd_b; variable _rng_c _rng_v randu_seed; zx_randomize 6; set randu_seed 1
 stringvar corners cornersR edges noisePoints noisePointsR scaler;
 variable i j a b c v sizeMul rectSize reciprocal;
 stringvar _rx _ry _rz _r _rTemp;
 startgraphics 500 500
 refreshmode 1
+option "pensize" 4
 
 # -------------------------
 # - Create corners matrix -
@@ -67,7 +68,7 @@ set edges vector$
 # ------------------------------
 
 for i 0 1000;
- append$ noisePoints vector$ (+ -1 * 2 zx_rnd) (+ -1 * 2 zx_rnd) (+ -1 * 2 zx_rnd)
+ append$ noisePoints vector$ (+ -1 * 2 randu) (+ -1 * 2 randu) (+ -1 * 2 randu)
 endfor
 set noisePoints cat$ (vector$ 3 (/ vlen$ noisePoints 3)) noisePoints
 
@@ -132,6 +133,7 @@ while 1
  # ---------------------------
  # - Update graphics display -
  # ---------------------------
+ .retry
  drawmode 3
  cls
  drawmode 7
@@ -150,7 +152,8 @@ while 1
   line	fnx VcornersR(+ 2 * 3 Vedges(i))	fny VcornersR(+ 3 * 3 Vedges(i))
 	fnx VcornersR(+ 2 * 3 Vedges(+ i 1))	fny VcornersR(+ 3 * 3 Vedges(+ i 1))
  endfor 
-
+ 
+ if expose goto ".retry" endif
  wait 16.6
  refresh 
  
@@ -274,3 +277,13 @@ return / (- _zx_rnd_b 1) 65536
 function zx_randomize n;
  set _zx_rnd_b + n 1
 endfunction
+
+# ----------------------------------------------
+# - RANDU, one of the greatest PRNGs ever made -
+# ----------------------------------------------
+
+function randu;
+ set randu_seed int fmod (* 65539 randu_seed) 2147483648
+return / randu_seed 2147483648
+
+function randu_ value; return * value randu
