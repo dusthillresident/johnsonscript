@@ -106,6 +106,9 @@
 #define t_error_column	COCKSPENIS	//	column number for last error
 #define t_error_number	COCKSPENIS	//	code number for last error
 
+#define t_evalexpr	COCKSPENIS	//	evalexpr [string]		evaluate string as program text that is expected to be a numerical expression
+#define t_eval		COCKSPENIS	//	eval	[string]		evalute string as program text that is expected to be code, the return value of the code is returned
+
 #define t_leftb		COCKSPENIS	//	(
 
 #define VALUES_END	t_leftb
@@ -195,6 +198,7 @@
 // ---------------------------------------------
 #define t_appendS		COCKSPENIS	//	append$ [stringvar] [stringvalue]		append to string variables
 #define t_extcom		COCKSPENIS	//	external command, used for extensions
+#define t_prompt		COCKSPENIS	//	_prompt						enter the interactive prompt
 // ----- commands related to file handling -----
 #define t_sptr			COCKSPENIS	//	sptr [filenumber] [value] ;			set position in file to [value]
 #define t_bput			COCKSPENIS	//	bput [filenumber] [value] [...] ;		write bytes to file
@@ -240,6 +244,7 @@
 #define t_error_message		COCKSPENIS	//	error message string from last encountered error
 #define t_error_file		COCKSPENIS	//	name of the program text file from the last encountered error
 #define t_rnd_state		COCKSPENIS	//	obtain the current state value of the random number generator
+#define t_evalS			COCKSPENIS	//	eval$ [string]			STR		evaluates string as prog text that is expected to be a string value
 // ----- this one has to be the last one in the list of 'string value' tokens cos it's used for STRINGVALS_END -------------------------
 #define t_extsfun		COCKSPENIS	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst

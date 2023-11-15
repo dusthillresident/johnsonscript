@@ -107,23 +107,26 @@
 #define t_error_column	80	//	column number for last error
 #define t_error_number	81	//	code number for last error
 
-#define t_leftb		82	//	(
+#define t_evalexpr	82	//	evalexpr [string]		evaluate string as program text that is expected to be a numerical expression
+#define t_eval		83	//	eval	[string]		evalute string as program text that is expected to be code, the return value of the code is returned
+
+#define t_leftb		84	//	(
 
 #define VALUES_END	t_leftb
 
 #ifdef enable_graphics_extension
  // graphics extension functions 
- #define t_winw		83		// takes no parameters, returns current window width
- #define t_winh		84		// takes no parameters, returns current window height
- #define t_mousex	85		// takes no parameters, returns current mouse x position	
- #define t_mousey	86		// takes no parameters, returns current mouse y position
- #define t_mousez	87		// takes no parameters, returns a value that changes when the mouse button is scrolled
- #define t_mouseb	88		// takes no parameters, returns bitfield of the mouse buttons currently pressed
- #define t_readkey	89		// takes no parameters, pulls a byte from the keyboard buffer and returns it
- #define t_keypressed	90		// takes one parameter, checks the iskeypressed array and returns info about whether or not that key is currently pressed
- #define t_expose	91		// takes no parameters, returns the state of a flag variable that gets set whenever there's an expose xwindows event, the flag is cleared after reading
- #define t_wmclose	92		// takes no parameters, returns the state of a flag that gets set when the window manager close button has been clicked, flag is cleared after reading
- #define t_keybuffer	93		// return the number of characters in the keyboard buffer
+ #define t_winw		85		// takes no parameters, returns current window width
+ #define t_winh		86		// takes no parameters, returns current window height
+ #define t_mousex	87		// takes no parameters, returns current mouse x position	
+ #define t_mousey	88		// takes no parameters, returns current mouse y position
+ #define t_mousez	89		// takes no parameters, returns a value that changes when the mouse button is scrolled
+ #define t_mouseb	90		// takes no parameters, returns bitfield of the mouse buttons currently pressed
+ #define t_readkey	91		// takes no parameters, pulls a byte from the keyboard buffer and returns it
+ #define t_keypressed	92		// takes one parameter, checks the iskeypressed array and returns info about whether or not that key is currently pressed
+ #define t_expose	93		// takes no parameters, returns the state of a flag variable that gets set whenever there's an expose xwindows event, the flag is cleared after reading
+ #define t_wmclose	94		// takes no parameters, returns the state of a flag that gets set when the window manager close button has been clicked, flag is cleared after reading
+ #define t_keybuffer	95		// return the number of characters in the keyboard buffer
  #undef VALUES_END
  #define VALUES_END t_keybuffer
 #endif
@@ -136,117 +139,119 @@
 
 // misc syntax stuff
 
-#define t_rightb	94		//	)
-#define t_endstatement	95		//	;		end of statement marker
-#define t_comma		96		//	,
+#define t_rightb	96		//	)
+#define t_endstatement	97		//	;		end of statement marker
+#define t_comma		98		//	,
 
-#define t_deffn		97		//	function [F value] ([ P num_params L num_locals] or [ param_id_one param_id_two [...] [local local_id_one local_id_two] ] ) ;
-#define t_local		98		//	local				used with 'function' keyword. ids after this are local variable names
-#define t_ellipsis	99		//	...				used with 'function' keyword. when put at the end of param list, specifies that function takes unlimited parameters.
+#define t_deffn		99		//	function [F value] ([ P num_params L num_locals] or [ param_id_one param_id_two [...] [local local_id_one local_id_two] ] ) ;
+#define t_local		100		//	local				used with 'function' keyword. ids after this are local variable names
+#define t_ellipsis	101		//	...				used with 'function' keyword. when put at the end of param list, specifies that function takes unlimited parameters.
 
 // ---------------------
-#define t_caseof	100
-#define t_when		101
-#define t_otherwise	102
-#define t_endcase	103
+#define t_caseof	102
+#define t_when		103
+#define t_otherwise	104
+#define t_endcase	105
 
-#define t_caseofV	104
-#define t_caseofS	105
+#define t_caseofV	106
+#define t_caseofS	107
 // ---------------------
 
-#define t_label		106		//	.label		place label
+#define t_label		108		//	.label		place label
 
 // ========= commands ========= 
 
-#define t_return		107	//	return
-#define t_while			108	//	while
-#define t_endwhile		109	//	endwhile
-#define t_if			110	//	if
-#define t_else			111	//	else
-#define t_endif			112	//	endif
-#define t_for			113	//	for [variable_name] [start_value] [end_value] [step_value]
-#define t_endfor		114	//	endfor
-#define t_endloop		115	//	endloop ([level])	break out of loops
-#define t_continue		116	//	continue ([level])	skip to the next iteration of a loop
-#define t_restart		117	//	restart ([level])	return to the beginning of a loop
-#define t_set			118	//	set
-#define t_var			119	//	variable [identifier] ([identifier]) ... ;		declare variables	
-#define t_arr			120	//	array [identifier] value;	declare an array
-#define t_const			121	//	constant [identifier] value;	declare a constant
-#define t_stringvar		122	//	stringvar [identifier] ([number]) ... ; declare string variables. Optionally specify the starting bufsize
-#define t_print			123	//	print, will print string constants and/or values until it finds ';'
-#define t_endfn			124	//	endfunction	return from a function without returning a value (will return 0)
-#define t_goto			125	//	goto [string];		will search for a label with matching string and execution will continue from there
-#define t_option		126	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
-#define t_extopt		127	//	a processed form of 'option' that has a pointer to a function, used for extensions
-#define t_wait			128	//	wait [value];		usleep value*1000
-#define t_oscli			129	//	oscli [stringvalue];	system("string");
-#define t_quit			130	//	quit ([value]);		exit(value);
-#define t_unclaim		131	//	unclaim [string reference number];		Unclaim (release) strings so they can be reused by "S"
-#define t_catch			132	//	catch [commands]				run some commands, if an error happens during that then it'll be caught. Also works as a pseudo-value in the same way that oscli does
-#define t_throw			133	//	throw "error message"
-#define t_endcatch		134	//	terminate the code block where errors are being trapped
-#define t_catchf		135	//	processed catch that knows where the corresponding 'endcatch' is
-#define t_increment		136	//	increment [name of numerical variable]		increases variable by 1
-#define t_increment_stackaccess	137	//	processed increment that increments a local variable
-#define t_increment_df		138	//	processed increment that increments a global variable
-#define t_decrement		139	//	decrement [name of numerical variable]		decreases variable by 1
-#define t_decrement_stackaccess	140	//	
-#define t_decrement_df		141
+#define t_return		109	//	return
+#define t_while			110	//	while
+#define t_endwhile		111	//	endwhile
+#define t_if			112	//	if
+#define t_else			113	//	else
+#define t_endif			114	//	endif
+#define t_for			115	//	for [variable_name] [start_value] [end_value] [step_value]
+#define t_endfor		116	//	endfor
+#define t_endloop		117	//	endloop ([level])	break out of loops
+#define t_continue		118	//	continue ([level])	skip to the next iteration of a loop
+#define t_restart		119	//	restart ([level])	return to the beginning of a loop
+#define t_set			120	//	set
+#define t_var			121	//	variable [identifier] ([identifier]) ... ;		declare variables	
+#define t_arr			122	//	array [identifier] value;	declare an array
+#define t_const			123	//	constant [identifier] value;	declare a constant
+#define t_stringvar		124	//	stringvar [identifier] ([number]) ... ; declare string variables. Optionally specify the starting bufsize
+#define t_print			125	//	print, will print string constants and/or values until it finds ';'
+#define t_endfn			126	//	endfunction	return from a function without returning a value (will return 0)
+#define t_goto			127	//	goto [string];		will search for a label with matching string and execution will continue from there
+#define t_option		128	//	option [string] [value] [etc];	this will be used to set options like stack size, variable array size, and possibly other things
+#define t_extopt		129	//	a processed form of 'option' that has a pointer to a function, used for extensions
+#define t_wait			130	//	wait [value];		usleep value*1000
+#define t_oscli			131	//	oscli [stringvalue];	system("string");
+#define t_quit			132	//	quit ([value]);		exit(value);
+#define t_unclaim		133	//	unclaim [string reference number];		Unclaim (release) strings so they can be reused by "S"
+#define t_catch			134	//	catch [commands]				run some commands, if an error happens during that then it'll be caught. Also works as a pseudo-value in the same way that oscli does
+#define t_throw			135	//	throw "error message"
+#define t_endcatch		136	//	terminate the code block where errors are being trapped
+#define t_catchf		137	//	processed catch that knows where the corresponding 'endcatch' is
+#define t_increment		138	//	increment [name of numerical variable]		increases variable by 1
+#define t_increment_stackaccess	139	//	processed increment that increments a local variable
+#define t_increment_df		140	//	processed increment that increments a global variable
+#define t_decrement		141	//	decrement [name of numerical variable]		decreases variable by 1
+#define t_decrement_stackaccess	142	//	
+#define t_decrement_df		143
 // ---------------------------------------------
-#define t_appendS		142	//	append$ [stringvar] [stringvalue]		append to string variables
-#define t_extcom		143	//	external command, used for extensions
+#define t_appendS		144	//	append$ [stringvar] [stringvalue]		append to string variables
+#define t_extcom		145	//	external command, used for extensions
+#define t_prompt		146	//	_prompt						enter the interactive prompt
 // ----- commands related to file handling -----
-#define t_sptr			144	//	sptr [filenumber] [value] ;			set position in file to [value]
-#define t_bput			145	//	bput [filenumber] [value] [...] ;		write bytes to file
-#define t_vput			146	//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
-#define t_sput			147	//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
-#define t_close			148	//	close [filenumber] ;				close an open file
+#define t_sptr			147	//	sptr [filenumber] [value] ;			set position in file to [value]
+#define t_bput			148	//	bput [filenumber] [value] [...] ;		write bytes to file
+#define t_vput			149	//	vput [filenumber] [value] [...] ;		write 8 byte doubles to file
+#define t_sput			150	//	sput [filenumber] [stringvalue] [...] ;		write null terminated strings to file
+#define t_close			151	//	close [filenumber] ;				close an open file
 // ---------------------------------------------
 // ===== end of commands ======
 
 // ===== fast modified versions of loop/control flow commands =====
-#define t_gotof			149	//      jump to position in token.i
-#define t_whilef		150	//	position of matching 'endwhile' in token.i
-#define t_endwhilef		151	//	position of matching 'while'+1 in token.i
-#define t_whileff		152	//	 while loops that were like "while 0" or "while 1" that have been optimised into simple jumps, they are essentially the same as t_gotof
-#define t_endwhileff		153	//	 but they preserve the symbolic info that they represent the start & end of a loop, used by 'endloop' and 'continue'
-#define t_iff			154	//	position of matching else/endif in token.i
-#define t_elsef			155	//	position of matching endif in token.i
-#define t_endiff		156	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
-#define t_forf			157	//	processed 'for' with pointer to forinfo in token.data.pointer
-#define t_endforf		158	//	processed 'endfor' with pointer to forinfo in token.data.pointer
+#define t_gotof			152	//      jump to position in token.i
+#define t_whilef		153	//	position of matching 'endwhile' in token.i
+#define t_endwhilef		154	//	position of matching 'while'+1 in token.i
+#define t_whileff		155	//	 while loops that were like "while 0" or "while 1" that have been optimised into simple jumps, they are essentially the same as t_gotof
+#define t_endwhileff		156	//	 but they preserve the symbolic info that they represent the start & end of a loop, used by 'endloop' and 'continue'
+#define t_iff			157	//	position of matching else/endif in token.i
+#define t_elsef			158	//	position of matching endif in token.i
+#define t_endiff		159	//	matched endifs must be changed to avoid confusing the matching process for other if/else/endif blocks
+#define t_forf			160	//	processed 'for' with pointer to forinfo in token.data.pointer
+#define t_endforf		161	//	processed 'endfor' with pointer to forinfo in token.data.pointer
 // ===================================
 
 // ===== fast modified versions of 'set' =======================
 
-#define t_set_Df		159	//	fast set for t_Df
-#define t_set_stackaccess	160	//	fast set for t_stackaccess
+#define t_set_Df		162	//	fast set for t_Df
+#define t_set_stackaccess	163	//	fast set for t_stackaccess
 
 // ===== string functions & stuff that's a 'string value' ======
 					//		EXAMPLE				RETURNS		DESCRIPTION
-#define t_stringconst		161	//	"string"					string constant
-#define t_stringconstf		162	//							string constant (fast), eliminates the need to call strlen()
-#define t_rightS		163	//	right$ [string] [n]		STR		get the last n characters of string
-#define t_leftS			164	//	left$  [string] [n]		STR		get the first n characters of string
-#define t_midS			165	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
-#define t_chrS			166	//	chr$ [num]			STR		return a string with the character [num]
-#define t_strS			167	//	str$ [num]			STR		return string containing representation of [num]
-#define t_catS			168	//	cat$ [string] [string] ...	STR		concatenate strings
-#define t_stringS		169	//	string$ [number] [string]	STR		Function returning multiple copies of a string.
-#define t_S			170	//	$		string variable dereference
-#define t_Sf			171	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
-#define t_sget			172	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
-#define t_vectorS		173	//	vector$ [num] [...]		STR		return string containing vector string, meant for use with 'V' (vectors)
-#define t_error_message		174	//	error message string from last encountered error
-#define t_error_file		175	//	name of the program text file from the last encountered error
-#define t_rnd_state		176	//	obtain the current state value of the random number generator
+#define t_stringconst		164	//	"string"					string constant
+#define t_stringconstf		165	//							string constant (fast), eliminates the need to call strlen()
+#define t_rightS		166	//	right$ [string] [n]		STR		get the last n characters of string
+#define t_leftS			167	//	left$  [string] [n]		STR		get the first n characters of string
+#define t_midS			168	//	mid$ [string] [pos] [n]		STR		get n characters from string starting at pos
+#define t_chrS			169	//	chr$ [num]			STR		return a string with the character [num]
+#define t_strS			170	//	str$ [num]			STR		return string containing representation of [num]
+#define t_catS			171	//	cat$ [string] [string] ...	STR		concatenate strings
+#define t_stringS		172	//	string$ [number] [string]	STR		Function returning multiple copies of a string.
+#define t_S			173	//	$		string variable dereference
+#define t_Sf			174	//			fast string variable access (like $ but with pointer to stringvar in token.data.pointer)
+#define t_sget			175	//	sget [filenumber] [(num_bytes)]	read strings from files. if num_bytes is not given, it reads until it finds 0x0A
+#define t_vectorS		176	//	vector$ [num] [...]		STR		return string containing vector string, meant for use with 'V' (vectors)
+#define t_error_message		177	//	error message string from last encountered error
+#define t_error_file		178	//	name of the program text file from the last encountered error
+#define t_rnd_state		179	//	obtain the current state value of the random number generator
+#define t_evalS			180	//	eval$ [string]			STR		evaluates string as prog text that is expected to be a string value
 // ----- this one has to be the last one in the list of 'string value' tokens cos it's used for STRINGVALS_END -------------------------
-#define t_extsfun		177	//	external string function, used for extensions
+#define t_extsfun		181	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst
 #define STRINGVALS_END   t_extsfun
 #ifdef enable_graphics_extension // graphics extension stringvalues
- #define t_readkeyS		178	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
+ #define t_readkeyS		182	// takes no parameters, pulls a byte from the keyboard buffer and returns it as a stringval
  #undef STRINGVALS_END
  #define STRINGVALS_END t_readkeyS
 #endif
@@ -257,33 +262,33 @@
 #ifdef enable_graphics_extension
  // ===== graphics extension commands =====
  // commands
- #define t_startgraphics	179	// startgraphics		winwidth winheight ;
- #define t_stopgraphics		180	// stopgraphics			;
- #define t_winsize		181	// winsize			W H ;
- #define t_pixel		182	// pixel			X Y ([X Y] ...) ;
- #define t_line			183	// line				X Y X Y ([X Y] ...) ;
- #define t_circlef		184	// circlef			X Y R ;
- #define t_circle		185	// circle			X Y R ;
- #define t_arcf			186	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
- #define t_arc			187	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
- #define t_rectanglef		188	// rectanglef			X Y W [H] ;
- #define t_rectangle		189	// rectangle			X Y W [H] ;
- #define t_triangle		190	// triangle			X Y X Y X Y ;
- #define t_drawtext		191	// drawtext			X Y S (stringval);
- #define t_drawscaledtext	192	// drawscaledtext		X Y XS YS (stringval);
- #define t_refreshmode		193	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
- #define t_refresh		194	// refresh 			;
- #define t_gcol			195	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
- #define t_bgcol		196	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
- #define t_cls			197	// cls				;
- #define t_drawmode		198	// drawmode			dm ;		set the drawing mode to 'dm'
+ #define t_startgraphics	183	// startgraphics		winwidth winheight ;
+ #define t_stopgraphics		184	// stopgraphics			;
+ #define t_winsize		185	// winsize			W H ;
+ #define t_pixel		186	// pixel			X Y ([X Y] ...) ;
+ #define t_line			187	// line				X Y X Y ([X Y] ...) ;
+ #define t_circlef		188	// circlef			X Y R ;
+ #define t_circle		189	// circle			X Y R ;
+ #define t_arcf			190	// arcf				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_arc			191	// arc				X Y XR YR START_ANGLE EXTENT_ANGLE ;
+ #define t_rectanglef		192	// rectanglef			X Y W [H] ;
+ #define t_rectangle		193	// rectangle			X Y W [H] ;
+ #define t_triangle		194	// triangle			X Y X Y X Y ;
+ #define t_drawtext		195	// drawtext			X Y S (stringval);
+ #define t_drawscaledtext	196	// drawscaledtext		X Y XS YS (stringval);
+ #define t_refreshmode		197	// refreshmode			(mode) ;    (0 refresh on, 1 refresh off)
+ #define t_refresh		198	// refresh 			;
+ #define t_gcol			199	// gcol				(rgb) ;  or it can be like this: (r) (g) (b) ;
+ #define t_bgcol		200	// bgcol			(rgb) ;  or it can be like this: (r) (g) (b) ;  background colour
+ #define t_cls			201	// cls				;
+ #define t_drawmode		202	// drawmode			dm ;		set the drawing mode to 'dm'
 #endif
 
 
 #if allow_debug_commands
- #define t_tb		199	//	testbeep
- #define t_printstackframe 200	//	print everything in the current stack frame
- #define t_printentirestack 201	//	print everything in the stack up to the current stack frame
+ #define t_tb		203	//	testbeep
+ #define t_printstackframe 204	//	print everything in the current stack frame
+ #define t_printentirestack 205	//	print everything in the stack up to the current stack frame
 #endif
 
 #define t_bad		255	//			bad data

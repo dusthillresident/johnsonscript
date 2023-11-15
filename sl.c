@@ -7,6 +7,7 @@
 #include <unistd.h> // usleep
 #include <math.h>
 #include <setjmp.h>
+#include <signal.h>
 
 // Apparently isnan() returns 0 for -nan when GCC optimisations are enabled.
 // So I needed to find my own replacement for isnan() that behaves how I want.
@@ -27,21 +28,21 @@
 #if 0
  void* mymallocfordebug(size_t size    ,int n, char *f,char *fun){
   void *out = malloc(size);
-  printf("line %d,	%s,	%s,	MALLOC	%p\n",n,f,fun,out);
+  fprintf(stderr, "line %d,	%s,	%s,	MALLOC	%p\n",n,f,fun,out);
   return out;
  }
  void* mycallocfordebug(size_t nmemb, size_t size    ,int n, char *f,char *fun){
   void *out = calloc(nmemb,size);
-  printf("line %d,	%s,	%s,	CALLOC	%p\n",n,f,fun,out); 
+  fprintf(stderr, "line %d,	%s,	%s,	CALLOC	%p\n",n,f,fun,out); 
   return out;
  }
  void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun){
   void *out = realloc(ptr,size);
-  printf("line %d,	%s,	%s,	REALLOC	%p (input %p)\n",n,f,fun,out,ptr);
+  fprintf(stderr, "line %d,	%s,	%s,	REALLOC	%p (input %p)\n",n,f,fun,out,ptr);
   return out;
  }
  void myfreefordebug(void *ptr,      int n, char *f,char *fun){
-  printf("line %d,	%s,	%s,	FREEING	%p\n",n,f,fun,ptr);
+  fprintf(stderr, "line %d,	%s,	%s,	FREEING	%p\n",n,f,fun,ptr);
   free(ptr);
  }
  #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__,(char*)__FUNCTION__)
@@ -53,6 +54,8 @@
 #define allow_debug_commands 1
 
 #define TOKENTYPE_TYPE unsigned int
+
+enum eval_action { eval_interpreter, eval_getvalue, eval_getstringvalue };
 
 struct token {
  TOKENTYPE_TYPE type;
@@ -141,6 +144,22 @@ void stringslist_addstring(stringslist *s,char *string){
  s->next = calloc(1,sizeof(stringslist));
  s->next->string = string;
 }
+stringslist* stringslist_gettail(stringslist *s){
+ if( ! s ) return NULL;
+ if( ! s->next ) return s;
+ return stringslist_gettail( s->next );
+}
+void stringslist_debug_show_contents(stringslist *s){
+ if( ! s ){
+  fprintf( stderr, "null...\n");
+ }
+ int count = 0;
+ fprintf( stderr, "stringslist contents: \n");
+ while( s ){
+  fprintf(stderr, " item %d, %p contains:	%p\n",count++,s,s->string);
+  s=s->next;
+ }
+}
 //--------------------------
 
 //--------------------------
@@ -228,6 +247,7 @@ int oscli(program *prog, int *p);
 int catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue );
 void copy_stringval_to_stringvar(program *prog, stringvar *dest, stringval src);
 void process_catch(program *prog, int p);
+int interpreter_eval( program *prog,  int action, void *return_value, unsigned char *text );
 
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
@@ -1043,9 +1063,9 @@ option( program *prog, int *p ){
    error(prog, starting_p, "import: couldn't open file '%s'",fname);
   }
   // resize array and append new code
-  prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length)*sizeof(token));
-  memcpy(prog->tokens + prog->maxlen, tokens, sizeof(token) * tokens_length);
-  prog->length += tokens_length; prog->maxlen+=tokens_length;
+  prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length + 1)*sizeof(token));
+  memcpy(prog->tokens + prog->maxlen + 1, tokens, sizeof(token) * tokens_length);
+  prog->length += tokens_length+1; prog->maxlen+=tokens_length+1;
   // process function definitions for imported code
   process_function_definitions(prog,prog->maxlen - tokens_length);
   // cleanup
@@ -1268,7 +1288,7 @@ wordmatch_plus_whitespace(int *pos, unsigned char *word, unsigned char *text){
  if( result ){
   //tb();
   //fprintf(stderr,"fuckin shit %d\n",*pos);
-  if( isspace(text[*pos]) || ispunct(text[*pos]) || !text[*pos] ) return 1;
+  if( isspace(text[*pos]) || (ispunct(text[*pos]) && text[*pos]!='_') || !text[*pos] ) return 1;
   *pos = holdpos;
  }
  return 0;
@@ -1350,7 +1370,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  // if it's a test run, the token will be discarded, so strings must not be allocated
  stringslist *progstrings = prog->program_strings;
 
- token out;
+ token out; out.type = t_nul;
 
  gettoken_start:
  _gettoken_skippastcomments(pos,text);
@@ -1643,12 +1663,32 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   out = maketoken( t_getref ); goto gettoken_normalout;
  }
 
+ // string constant specified using QUOTE()
+ if( wordmatch(pos, "QUOTE(", text) ){
+  int l=0; int level=1;
+  while( level ){
+   if( !text[*pos] ) error( prog, -1, "QUOTE(): missing )" );
+   if( text[*pos] == ')' ){
+    level -= 1;
+   }
+   *pos += 1; l += 1;
+  }
+  if(!test_run){
+   _gettoken_setstring(progstrings, &out,text+*pos-l,l-1);
+  }
+  out.type = t_stringconst;
+  goto gettoken_normalout;
+ }
+
  // string constant
  if( text[*pos]=='"' ){
   *pos += 1;
   l=0;
-  while( text[*pos]!='"' ){
+  int escaped=0; int backslash_used=0; 
+  while( text[*pos]!='"' || escaped ){
+   escaped = 0;
    switch( text[*pos] ){
+   case '\\': escaped=1; backslash_used=1; break;
    case 0: error(prog, -1, "missing \"");
    //case 10: error(prog, "missing \" on this line");
    }//endswitch
@@ -1657,7 +1697,20 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   }//endwhile
   *pos += 1;
   out.type = t_stringconst;
-  if(!test_run) _gettoken_setstring(progstrings, &out,text+*pos-l-1,l);
+  if(!test_run){
+   _gettoken_setstring(progstrings, &out,text+*pos-l-1,l);
+   if( backslash_used ){
+    char *str = out.data.pointer;
+    for( int i=0; i<l; i++ ){
+     if( str[i]=='\\' ){
+      for( int j=i; j<l; j++ ){
+       str[j]=str[j+1];
+      } // next j
+      l -= 1;
+     } // endif
+    } // next i
+   } // endif
+  } // endif
   goto gettoken_normalout;
  }//endif
 
@@ -1734,6 +1787,18 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
  if( wordmatch_plus_whitespace( pos,"throw", text) ){	//	
   out = maketoken( t_throw ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"eval$", text) ){	//	
+  out = maketoken( t_evalS ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"evalexpr", text) ){	//	
+  out = maketoken( t_evalexpr ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"eval", text) ){	//	
+  out = maketoken( t_eval ); goto gettoken_normalout;
+ }
+ if( wordmatch_plus_whitespace( pos,"_prompt", text) ){	//	
+  out = maketoken( t_prompt ); goto gettoken_normalout;
  }
 
  if( wordmatch_plus_whitespace( pos,"_error_line", text) ){	//	
@@ -2028,7 +2093,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
 // fprintf(stderr,"*pos == %d: %d '%c'\n",*pos,text[*pos],text[*pos]);
 // if(text[*pos])goto gettoken_start;
 
- if(!text[*pos]) fprintf(stderr,"FUCK OFF!\n"); // this should never FUCKING happen
+ if( out.type != t_nul ) fprintf(stderr,"FUCK OFF!\n"); // this should never FUCKING happen
+
+ if( !text[*pos] ){ out.type = t_nul; goto gettoken_normalout; }
 
  gettoken_failout:
  if(prog) fprintf(stderr,"WARNING: garbage in input: \"");
@@ -2273,6 +2340,8 @@ tokenstring(token t){
    snprintf(tokenstringbuf,sizeof(tokenstringbuf),"%.2f",t.data.number);
    return tokenstringbuf;
   }
+ case t_eval:	return "eval"; case t_evalS: return "eval$";
+ case t_prompt: return "_prompt";
  case t_extfun: return "t_extfun";
  case t_extsfun: return "t_extsfun";
  case t_extcom: return "t_extcom";
@@ -2812,6 +2881,16 @@ getstringvalue( program *prog, int *pos ){
   out.string=accumulator->string;
   return out;
  }
+ case t_evalS:
+ {
+  stringval v;
+  stringval s = getstringvalue(prog,pos);
+  int h = s.string[s.len]; s.string[s.len]=0;
+  int result = interpreter_eval( prog, eval_getstringvalue, &v, s.string );
+  s.string[s.len]=h;
+  if( result ) error( prog, *pos, prog->_error_message->string );
+  return v;
+ }
  case t_sget: // sget [fp] ([optional parameter n])
  {            // If n is greater than 0, it represents the number of bytes to be read. Else, it represents a specific string terminating value. (n <= -256) will read until EOF
   file *f = getfile(prog, getvalue(pos,prog), 1,0);
@@ -2984,7 +3063,7 @@ C_CharacterAccess(int *p, program *prog){
  svl = getstringvalue(prog,p);
  index = getvalue(p,prog);
  if(index<0 || index >= svl.len ){
-  error(prog, *p-1, "C (characteraccess): index '%d' out of range",index);
+  error(prog, *p-1, "C (string character / byte array access): index '%d' out of range",index);
  }//endif
  return svl.string + index;
 }//endproc
@@ -2998,7 +3077,7 @@ V_ValueAccess(int *p, program *prog){
  svl = getstringvalue(prog,p);
  index = getvalue(p,prog);
  if(index<0 || index >= (svl.len>>3)){
-  error(prog, *p-1, "V (valueaccess): index '%d' out of range",index);
+  error(prog, *p-1, "V (vector access): index '%d' out of range",index);
  }
  return ((double*)svl.string) + index;
 }
@@ -3705,6 +3784,18 @@ getvalue(int *p, program *prog){
  case t_error_line:	return prog->_error_line;
  case t_error_column:	return prog->_error_column;
  case t_error_number:	return prog->_error_number;
+ // =======================================================================
+ // ======= EVAL ==========================================================
+ // =======================================================================
+ case t_eval: case t_evalexpr: {
+  double v;
+  stringval s = getstringvalue(prog,p);
+  int h = s.string[s.len]; s.string[s.len]=0;
+  int result = interpreter_eval( prog, t.type==t_evalexpr ? eval_getvalue : eval_interpreter, &v, s.string );
+  s.string[s.len]=h;
+  if( result ) error( prog, *p, prog->_error_message->string );
+  return v;
+ }
  // ==================================================================================
  // ======= 'pseudo values' ==========================================================
  // ==================================================================================
@@ -3760,6 +3851,33 @@ process_catch(program *prog, int p){
  prog->tokens[p].data.i = pp+1;
 }
 
+
+typedef
+struct {
+ jmp_buf *hold_error_handler;
+ func_info *hold_current_function;
+ int hold_getstringvalue_level;
+ int hold_sp;
+ int hold_spo;
+}
+saved_interpreter_state;
+
+void interpreter_save_state( program *prog, saved_interpreter_state *state ){
+ state->hold_error_handler = prog->error_handler;
+ state->hold_current_function = prog->current_function;
+ state->hold_getstringvalue_level = prog->getstringvalue_level;
+ state->hold_sp = prog->sp;
+ state->hold_spo = prog->spo;
+}
+
+void interpreter_load_state( program *prog, saved_interpreter_state *state ){
+ prog->error_handler = state->hold_error_handler;
+ prog->current_function = state->hold_current_function;
+ prog->getstringvalue_level = state->hold_getstringvalue_level;
+ prog->sp = state->hold_sp;
+ prog->spo = state->hold_spo;
+}
+
 int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
@@ -3767,11 +3885,8 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue ){
 
  // save current interpreter state information
- volatile jmp_buf *hold_error_handler = (volatile jmp_buf *)prog->error_handler;
- volatile func_info *hold_current_function = (volatile func_info *)prog->current_function;
- volatile int hold_getstringvalue_level = prog->getstringvalue_level;
- volatile int hold_sp = prog->sp;
- volatile int hold_spo = prog->spo;
+ saved_interpreter_state state;
+ interpreter_save_state( prog, &state );
  
  // prepare setjmp
  prog->error_handler = malloc(sizeof(jmp_buf));
@@ -3799,15 +3914,15 @@ catch( program *prog, int *p, int action, double *returnValue, stringval *return
  // tidy away the setjmp
  free( prog->error_handler );
  // and restore the previous interpreter state information
- prog->error_handler = (jmp_buf*)hold_error_handler;
- prog->current_function = (func_info*)hold_current_function;
- prog->getstringvalue_level = hold_getstringvalue_level;
- prog->sp = hold_sp;
- prog->spo = hold_spo;
+ interpreter_load_state( prog, &state );
 
  // return value is 0 if no error was caught, and 1 if an error was caught
  return setjmp_retval;
 }
+
+// ===========
+// == OSCLI ==
+// ===========
 
 int oscli(program *prog, int *p){
  stringval sv = getstringvalue( prog, p );
@@ -3819,6 +3934,155 @@ int oscli(program *prog, int *p){
  return SystemReturnValue;
 }
 
+// ==========
+// == EVAL ==
+// ==========
+
+int
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+interpreter_eval( program *prog, int action, void *return_value, unsigned char *text ){
+ // . save some existing data to be restored later
+ stringslist *tail = stringslist_gettail( prog->program_strings );
+ TTP hold_ttp = *(TTP*)prog->program_strings->string;
+ // . get program text string
+ // . process it
+ token *tokens; int tokens_length; 
+ tokens = tokenise(prog,text,&tokens_length,"[eval string]");
+ //  make space for new tokens if necessary
+ if( prog->maxlen < prog->length + tokens_length + 1 ){
+  prog->tokens = realloc( prog->tokens, (prog->length + tokens_length + 2)*sizeof(token) );
+  prog->maxlen += tokens_length+1;
+  if( ! prog->tokens ){ // if realloc failed, fatal error
+   fprintf(stderr, "eval: fatal error: realloc failed when making space for new tokens\n");
+   exit(1);
+  }
+ }
+ // append tokens
+ int starting_p = prog->length+1;
+ memcpy( prog->tokens + prog->length+1, tokens, sizeof(token) * tokens_length );
+ prog->length += tokens_length+1;
+ prog->tokens[prog->length].type = t_nul;
+ // prepare error handler
+ saved_interpreter_state state;
+ interpreter_save_state( prog, &state );
+ prog->error_handler = malloc(sizeof(jmp_buf));
+ int setjmp_retval = setjmp( *prog->error_handler );
+ // execute interpreter
+ if( ! setjmp_retval ){
+  switch( action ){
+   case eval_interpreter: {
+    double v = interpreter( starting_p, prog );
+    if( return_value ) *(double*)return_value = v;
+   } break;
+   case eval_getvalue: {
+    int p = starting_p;
+    double v = getvalue( &p, prog );
+    if( return_value ) *(double*)return_value = v;
+   } break;
+   case eval_getstringvalue: {
+    int p = starting_p;
+    stringval v = getstringvalue( prog, &p );
+    if( return_value ) *(stringval*)return_value = v;
+   } break;
+  }
+ }
+ // free error handler
+ free( prog->error_handler );
+ interpreter_load_state( prog, &state );
+ // restore program original length and do some tidying
+ prog->length -= tokens_length+1;
+ // free program strings created for this eval
+ free_stringslist( tail->next->next );
+ tail->next = NULL;
+ // restore previous TTP state
+ *(TTP*)prog->program_strings->string = hold_ttp;
+ // the return value is whether or not there was an error
+ return setjmp_retval;
+}
+
+// ===================================
+// == INTERACTIVE PROMPT =============
+// ===================================
+
+void
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+interactive_prompt(program *prog){
+ fprintf(stderr, "Johnsonscript prompt\n");
+ fprintf(stderr, " Type 'calc mode' for expression evaluator mode,\n");
+ fprintf(stderr, " 'string mode' for string expression evaluator mode,\n");
+ fprintf(stderr, " or 'normal mode' for command/script evaluator mode. (default)\n");
+ fprintf(stderr, " Type exit to leave the prompt\n");
+ const int bufsize = 1024*1024;
+ char *buf = calloc(1,bufsize+1);
+ int mode = eval_interpreter;
+ int len = prog->length;
+ void prompt_sigint_handler(int signum){
+  fprintf(stderr, "Ctrl+C pressed (SIGINT)\n");
+  for(int i=len; i<=prog->length; i++){
+   prog->tokens[i].type=t_nul;
+  }
+ }
+ while(1){
+  signal(SIGINT, SIG_DFL); // restore default behaviour so that Ctrl+C quits
+  printf("> ");
+  char *retval = fgets(buf, bufsize, stdin);
+  if( feof(stdin) ){
+   fprintf( stderr, "\n" );
+   return;
+  }
+  if( !strcmp( "normal mode\n", buf ) ){
+   fprintf(stderr, "Entering command/script evaluator mode\n");
+   mode = eval_interpreter;
+  }else if( !strcmp( "calc mode\n", buf ) ){
+   fprintf(stderr, "Entering numeric expression evaluator mode\n");
+   mode = eval_getvalue;
+  }else if( !strcmp( "string mode\n", buf ) ){
+   fprintf(stderr, "Entering string expression evaluator mode\n");
+   mode = eval_getstringvalue;
+  }else if( !strcmp( "exit\n", buf ) ){
+   fprintf(stderr, "Exiting prompt\n");
+   return;
+  }else {
+   signal(SIGINT, prompt_sigint_handler); // set our handler so that Ctrl+C can break out of loops and stuff
+   switch( mode ){
+    case eval_interpreter: {
+     if( interpreter_eval( prog, mode, NULL, buf ) ){
+      fprintf( stderr, "%s\n", prog->_error_message->string );
+     }
+    } break;
+    case eval_getvalue: {
+     double v;
+     if( interpreter_eval( prog, mode, &v, buf ) )
+      fprintf( stderr, "%s\n", prog->_error_message->string );
+     else{
+      if( !MyIsnan(v) && (long long int)v == v )
+       fprintf( stderr, "%lld\n", (long long int)v );
+      else
+       fprintf( stderr, "%.16f\n", v );
+     }
+    } break;
+    case eval_getstringvalue: {
+     stringval v;
+     if( interpreter_eval( prog, mode, &v, buf ) )
+      fprintf( stderr, "%s\n", prog->_error_message->string );
+     else {
+      for( int i=0; i<v.len; i++ ) fprintf(stderr, "%c", v.string[i]);
+      fprintf( stderr, "\n" );
+     }
+    } break;
+   }
+  }
+ }
+}
+
+// ===================================
+// == IF SEARCH ======================
+// ===================================
+
 int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
@@ -3827,9 +4091,20 @@ _interpreter_ifsearch(int p, program *prog){
  int starting_p = p;
  int levelcount=1;
  while(levelcount){
-  if(p>=prog->length) error(prog, starting_p, "interpreter: missing endif or otherwise bad ifs");
+  if(p>=prog->length || prog->tokens[p].type == t_deffn) error(prog, starting_p, "interpreter: missing endif or otherwise bad ifs");
   switch(prog->tokens[p].type){
   case t_else:
+   { // catch extraneous 'else'
+    int pp = p+1;
+    while( pp < prog->length ){
+     if( prog->tokens[pp].type == t_else ){
+      error( prog, pp, "interpreter: extraneous 'else'" );
+     }else if( prog->tokens[pp].type == t_if || prog->tokens[pp].type == t_endif || prog->tokens[pp].type == t_deffn ){
+      break;
+     }
+     pp += 1;
+    }
+   }
    if(levelcount==1){
     levelcount -=1;
    }
@@ -4733,6 +5008,26 @@ interpreter(int p, program *prog){
   error(prog, pp, msg);
  }
  // ========================================================
+ // ======= EVAL ===========================================
+ // ========================================================
+ case t_eval: {
+  int starting_p = p;
+  p+=1;
+  double v;
+  stringval s = getstringvalue(prog,&p);
+  int h = s.string[s.len]; s.string[s.len]=0;
+  int result = interpreter_eval( prog, eval_interpreter, &v, s.string );
+  s.string[s.len]=h;
+  if( result ) error( prog, starting_p, prog->_error_message->string );
+ } break;
+ // ========================================================
+ // ======= INTERACTIVE PROMPT =============================
+ // ========================================================
+ case t_prompt: {
+  p+=1;
+  interactive_prompt(prog);
+ } break;
+ // ========================================================
  // =========  CREATING VARIABLES ETC  =====================
  // ========================================================
  case t_var: // create a variable
@@ -5334,6 +5629,7 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
   fprintf(stderr,"Johnsonscript interpreter, built on %s, %s\nhttps://github.com/dusthillresident/JohnsonScript/\n", __DATE__, __TIME__);
   if( extra_version_info ) fprintf(stderr,"%s",extra_version_info);
   fprintf(stderr,"Usage:\n%s [program text or path to a file containing program text]\n",argv[0]);
+  fprintf(stderr,"To enter the interactive prompt:\n%s _prompt\n",argv[0]);
   return 0;
  }
 
