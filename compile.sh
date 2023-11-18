@@ -21,7 +21,7 @@ function CheckExist {
 JohnsonscriptInterpreterExecutable=gfxbin
 JohnsonscriptTranscompilerExecutable=convertbin
 echo -n "Building johnsonscript interpreter (executable '"$JohnsonscriptInterpreterExecutable"'): "
-gcc -Ofast $1 -Denable_graphics_extension sl.c  -lm -lXext -lX11 -lpthread -o $JohnsonscriptInterpreterExecutable
+gcc -O2 $1 -Denable_graphics_extension sl.c  -lm -lXext -lX11 -lpthread -o $JohnsonscriptInterpreterExecutable
 CheckExist $JohnsonscriptInterpreterExecutable
 echo -n "Building johnsonscript->C transcompiler (executable '"$JohnsonscriptTranscompilerExecutable"'): "
 gcc $1 -Denable_graphics_extension transpiler.c  -lm -lXext -lX11 -lpthread -o convertbin

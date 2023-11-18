@@ -57,6 +57,7 @@
 #define t_vlenS		COCKSPENIS	//	vlen$ [string]			NUM		return length of string div 8, for use with vectors aka V (value access)
 #define t_cmpS		COCKSPENIS	//	cmp$ [string] [string]		NUM		strcmp 
 #define t_instrS	COCKSPENIS	//	instr$ [stringa] [stringb]	NUM		return the position of stringb in stringa or -1 if not found
+#define t_equalS	COCKSPENIS	//	equal$ [stringa] [stringb]	NUM		1 if strings are the same
 // =========================================================
 
 #define t_rnd		COCKSPENIS	//	rnd [number]	built in function: pseudo random numbers	takes one parameter
@@ -173,7 +174,7 @@
 #define t_restart		COCKSPENIS	//	restart ([level])	return to the beginning of a loop
 #define t_set			COCKSPENIS	//	set
 #define t_var			COCKSPENIS	//	variable [identifier] ([identifier]) ... ;		declare variables	
-#define t_arr			COCKSPENIS	//	array [identifier] value;	declare an array
+//#define t_arr			COCKSPENIS	//	array [identifier] value;	declare an array
 #define t_const			COCKSPENIS	//	constant [identifier] value;	declare a constant
 #define t_stringvar		COCKSPENIS	//	stringvar [identifier] ([number]) ... ; declare string variables. Optionally specify the starting bufsize
 #define t_print			COCKSPENIS	//	print, will print string constants and/or values until it finds ';'
@@ -245,6 +246,9 @@
 #define t_error_file		COCKSPENIS	//	name of the program text file from the last encountered error
 #define t_rnd_state		COCKSPENIS	//	obtain the current state value of the random number generator
 #define t_evalS			COCKSPENIS	//	eval$ [string]			STR		evaluates string as prog text that is expected to be a string value
+//#define t_lowerS		COCKSPENIS	//	lower$ [string]			STR		convert to lowercase
+//#define t_upperS		COCKSPENIS	//	upper$ [string]			STR		convert to uppercase
+//#define t_reverseS		COCKSPENIS	//	reverse$ [string]		STR		reverse string
 // ----- this one has to be the last one in the list of 'string value' tokens cos it's used for STRINGVALS_END -------------------------
 #define t_extsfun		COCKSPENIS	//	external string function, used for extensions
 #define STRINGVALS_START t_stringconst

@@ -38,7 +38,7 @@
  }
  void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun){
   void *out = realloc(ptr,size);
-  fprintf(stderr, "line %d,	%s,	%s,	REALLOC	%p (input %p)\n",n,f,fun,out,ptr);
+  fprintf(stderr, "line %d,	%s,	%s,	REALLOC	%p ( input %p )\n",n,f,fun,out,ptr);
   return out;
  }
  void myfreefordebug(void *ptr,      int n, char *f,char *fun){
@@ -51,7 +51,7 @@
  #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__)
 #endif
 
-#define allow_debug_commands 1
+#define allow_debug_commands 0
 
 #define TOKENTYPE_TYPE unsigned int
 
@@ -140,7 +140,10 @@ void free_stringslist(stringslist *s){
  free(s);
 }
 void stringslist_addstring(stringslist *s,char *string){
- if(s->next) stringslist_addstring(s->next,string);
+ if(s->next){
+  stringslist_addstring(s->next,string);
+  return;
+ }
  s->next = calloc(1,sizeof(stringslist));
  s->next->string = string;
 }
@@ -149,6 +152,7 @@ stringslist* stringslist_gettail(stringslist *s){
  if( ! s->next ) return s;
  return stringslist_gettail( s->next );
 }
+#if 0
 void stringslist_debug_show_contents(stringslist *s){
  if( ! s ){
   fprintf( stderr, "null...\n");
@@ -160,6 +164,7 @@ void stringslist_debug_show_contents(stringslist *s){
   s=s->next;
  }
 }
+#endif
 //--------------------------
 
 //--------------------------
@@ -550,6 +555,9 @@ unloadprog(program *prog){
  // free extension-related IDs
  free_ids(prog->external_options);
  free_ids(prog->extensions);
+ // free error-related string vars
+ free( prog->_error_message->string); free( prog->_error_message );
+ free( prog->_error_file->string); free( prog->_error_file );
  // free the program struct itself
  free( prog );
 }
@@ -1671,6 +1679,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
    if( text[*pos] == ')' ){
     level -= 1;
    }
+   if( text[*pos] == '(' ){
+    level += 1;
+   }
    *pos += 1; l += 1;
   }
   if(!test_run){
@@ -1759,6 +1770,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
  if( wordmatch( pos,"instr$", text) ){	//	instr$
   out = maketoken( t_instrS ); goto gettoken_normalout;
+ }
+ if( wordmatch( pos,"equal$", text) ){	//	cmp$ (strcmp)
+  out = maketoken( t_equalS ); goto gettoken_normalout;
  }
 
  if( wordmatch_plus_whitespace( pos,"_rnd_state", text) ){	//	_rnd_state
@@ -2389,7 +2403,8 @@ tokenstring(token t){
  case t_vlenS:		return "vlen$";
  case t_cmpS:		return "cmp$";
  case t_instrS:		return "instr$";
- case t_vectorS:		return "vector$";
+ case t_vectorS:	return "vector$";
+ case t_equalS:		return "equal$";
  case t_for: case t_forf: return "for";
  case t_endfor: case t_endforf: return "endfor";
 
@@ -3421,6 +3436,20 @@ getvalue(int *p, program *prog){
   }
   return result;
  }
+ case t_equalS:
+ {
+  stringval sv1 = getstringvalue(prog,p);
+  prog->getstringvalue_level += 1;
+  stringval sv2 = getstringvalue(prog,p);
+  prog->getstringvalue_level -= 1;
+  return ( (sv1.len==sv2.len)
+            &&
+           (sv1.string[sv1.len-1] == sv2.string[sv2.len-1])
+            &&
+           (*sv1.string == *sv2.string)
+            &&
+           (!strncmp( sv1.string+1, sv2.string+1, sv1.len-2)) );
+ }
  case t_instrS:
  {
   stringval sv1 = getstringvalue(prog,p);
@@ -3862,7 +3891,9 @@ struct {
 }
 saved_interpreter_state;
 
-void interpreter_save_state( program *prog, saved_interpreter_state *state ){
+void
+__attribute__((noinline))
+interpreter_save_state( program *prog, saved_interpreter_state *state ){
  state->hold_error_handler = prog->error_handler;
  state->hold_current_function = prog->current_function;
  state->hold_getstringvalue_level = prog->getstringvalue_level;
@@ -3870,7 +3901,9 @@ void interpreter_save_state( program *prog, saved_interpreter_state *state ){
  state->hold_spo = prog->spo;
 }
 
-void interpreter_load_state( program *prog, saved_interpreter_state *state ){
+void
+__attribute__((noinline))
+interpreter_load_state( program *prog, saved_interpreter_state *state ){
  prog->error_handler = state->hold_error_handler;
  prog->current_function = state->hold_current_function;
  prog->getstringvalue_level = state->hold_getstringvalue_level;
@@ -3882,6 +3915,7 @@ int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
+__attribute__((noinline))
 catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue ){
 
  // save current interpreter state information
@@ -3942,6 +3976,7 @@ int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
+__attribute__ ((noinline))
 interpreter_eval( program *prog, int action, void *return_value, unsigned char *text ){
  // . save some existing data to be restored later
  stringslist *tail = stringslist_gettail( prog->program_strings );
@@ -3964,6 +3999,8 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
  memcpy( prog->tokens + prog->length+1, tokens, sizeof(token) * tokens_length );
  prog->length += tokens_length+1;
  prog->tokens[prog->length].type = t_nul;
+ // finished with this now
+ free( tokens );
  // prepare error handler
  saved_interpreter_state state;
  interpreter_save_state( prog, &state );
@@ -3994,7 +4031,7 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
  // restore program original length and do some tidying
  prog->length -= tokens_length+1;
  // free program strings created for this eval
- free_stringslist( tail->next->next );
+ free_stringslist( tail->next );
  tail->next = NULL;
  // restore previous TTP state
  *(TTP*)prog->program_strings->string = hold_ttp;
@@ -4006,15 +4043,20 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
 // == INTERACTIVE PROMPT =============
 // ===================================
 
-void
-#ifndef DISABLE_ALIGN_STUFF
-__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#ifdef ENABLE_HELP
+ #include "help.c"
 #endif
+
+void
+__attribute__ ((noinline))
 interactive_prompt(program *prog){
  fprintf(stderr, "Johnsonscript prompt\n");
  fprintf(stderr, " Type 'calc mode' for expression evaluator mode,\n");
  fprintf(stderr, " 'string mode' for string expression evaluator mode,\n");
  fprintf(stderr, " or 'normal mode' for command/script evaluator mode. (default)\n");
+ #ifdef ENABLE_HELP
+ fprintf(stderr, " Type 'help' or 'help [keyword]' for help information.\n");
+ #endif
  fprintf(stderr, " Type exit to leave the prompt\n");
  const int bufsize = 1024*1024;
  char *buf = calloc(1,bufsize+1);
@@ -4046,6 +4088,11 @@ interactive_prompt(program *prog){
   }else if( !strcmp( "exit\n", buf ) ){
    fprintf(stderr, "Exiting prompt\n");
    return;
+#ifdef ENABLE_HELP
+  }else if( !strcmp( "help\n", buf ) || !strncmp( "help ", buf, 5 ) ){
+   interactive_help( buf );
+   //fprintf( stderr, "do help stuff here\n" );
+#endif
   }else {
    signal(SIGINT, prompt_sigint_handler); // set our handler so that Ctrl+C can break out of loops and stuff
    switch( mode ){
@@ -4091,14 +4138,14 @@ _interpreter_ifsearch(int p, program *prog){
  int starting_p = p;
  int levelcount=1;
  while(levelcount){
-  if(p>=prog->length || prog->tokens[p].type == t_deffn) error(prog, starting_p, "interpreter: missing endif or otherwise bad ifs");
+  if(p>=prog->length || prog->tokens[p].type == t_deffn) error(prog, starting_p, "missing endif or otherwise bad ifs");
   switch(prog->tokens[p].type){
   case t_else:
    { // catch extraneous 'else'
     int pp = p+1;
     while( pp < prog->length ){
      if( prog->tokens[pp].type == t_else ){
-      error( prog, pp, "interpreter: extraneous 'else'" );
+      error( prog, pp, "extraneous 'else'" );
      }else if( prog->tokens[pp].type == t_if || prog->tokens[pp].type == t_endif || prog->tokens[pp].type == t_deffn ){
       break;
      }
@@ -4130,7 +4177,7 @@ _interpreter_labelsearch(program *prog,char *labelstring, int labelstringlen){
    return i+1;
   }//endif
  }//next
- error(prog, -1, "interpreter: goto: couldn't find label '%s'",labelstring);
+ error(prog, -1, "goto: couldn't find label '%s'",labelstring);
  return 0;
 }//endproc
 
@@ -4302,6 +4349,7 @@ expressionIsSimple(program *prog, int p){
   case t_ascS: case t_valS: case t_lenS: case t_cmpS: case t_instrS: case t_rnd: case t_alloc:
   case t_openin: case t_openout: case t_openup: case t_eof: case t_bget: case t_vget: case t_ptr: case t_ext:
   case t_extfun:
+  case t_evalexpr: case t_eval: case t_equalS:
   #ifdef enable_graphics_extension
   case t_winw: case t_winh: case t_mousex: case t_mousey: case t_mousez: case t_readkey: case t_keypressed: case t_expose: case t_wmclose: case t_keybuffer:
   #endif
@@ -4618,7 +4666,7 @@ interpreter(int p, program *prog){
   // search for matching endwhile
   int levelcount=1;
   while(levelcount){
-   if(p>=prog->length) error(prog, s_pos, "interpreter: missing endwhile");
+   if(p>=prog->length) error(prog, s_pos, "missing 'endwhile'");
    switch( prog->tokens[p].type ){
    case t_while: levelcount+=1; break;
    case t_endwhile: levelcount-=1; break;
@@ -4659,7 +4707,7 @@ interpreter(int p, program *prog){
   int levelcount=1;
   while(levelcount){
    p-=1;
-   if(p<0) error(prog, starting_p, "interpreter: can't find while for this endwhile");
+   if(p<0) error(prog, starting_p, "can't find 'while' for this 'endwhile'");
    switch( prog->tokens[p].type ){
    case t_while: levelcount-=1; break;
    case t_endwhile: levelcount+=1; break;
@@ -4823,7 +4871,7 @@ interpreter(int p, program *prog){
   {
    index = (int)getvalue(&p, prog);
    //fprintf(stderr,"  set index: %d\n",index);
-   if(index<0 || index>=prog->vsize) error(prog, p-1, "interpreter: set: bad variable access '%d'",index);
+   if(index<0 || index>=prog->vsize) error(prog, p-1, "set: bad variable access '%d'",index);
    prog->vars[index] = getvalue(&p, prog);
    break;
   }
@@ -4838,7 +4886,7 @@ interpreter(int p, program *prog){
   }
   case t_A:
    index = (int)getvalue(&p,prog) + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->vsize) error(prog, p-1, "interpreter: set: bad array access '%d'",index);
+   if(index<0 || index>=prog->vsize) error(prog, p-1, "set: bad array access '%d'",index);
    prog->vars[index] = getvalue(&p, prog);
    break;
   case t_C:
@@ -4855,12 +4903,12 @@ interpreter(int p, program *prog){
    break;
   case t_P:
    index = prog->sp + prog->current_function->num_locals + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->ssize) error(prog, p-1, "interpreter: set: bad parameter access");
+   if(index<0 || index>=prog->ssize) error(prog, p-1, "set: bad parameter access");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_L:
    index = prog->sp + (int)getvalue(&p,prog);
-   if(index<0 || index>=prog->ssize) error(prog, p-1, "interpreter: set: bad parameter access");
+   if(index<0 || index>=prog->ssize) error(prog, p-1, "set: bad parameter access");
    prog->stack[index] = getvalue(&p, prog);
    break;
   case t_stackaccess:
@@ -4879,7 +4927,7 @@ interpreter(int p, program *prog){
   case t_S:
   {
    int string_number = getvalue(&p,prog);
-   if(string_number<0 || string_number>=prog->max_stringvars) error(prog, p-1, "interpreter: set: bad stringvar access '%d'",string_number);
+   if(string_number<0 || string_number>=prog->max_stringvars) error(prog, p-1, "set: bad stringvar access '%d'",string_number);
    stringvar *svr = prog->stringvars[string_number];
    copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, &p) );
    break;
@@ -4891,7 +4939,7 @@ interpreter(int p, program *prog){
    break;
   }
   default:
-   error(prog, p-2, "interpreter: set: bad use of 'set' command");
+   error(prog, p-2, "bad 'set' command");
   }
   break; // Sat 14 Sep 12:35 - is this break necessary?
  }
@@ -5035,10 +5083,10 @@ interpreter(int p, program *prog){
   p+=1;
   while( prog->tokens[p].type != t_endstatement ){
    if( prog->tokens[p].type != t_id ){ 
-    error(prog, p, "interpreter: bad 'variable' command");
+    error(prog, p, "bad 'variable' command or missing ';'");
    }
    //if( find_id(prog->ids,     (char*)prog->tokens[p].data.pointer) ) error(prog, -1, "interpreter: variable: this identifier is already used");
-   add_id__error_if_fail( prog, p, "variable: the id for this variable is already used",
+   add_id__error_if_fail( prog, p, "the id for this variable is already used",
                           prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
    p+=1;
   }
@@ -5048,12 +5096,12 @@ interpreter(int p, program *prog){
  {
   p+=1;
   if( prog->tokens[p].type != t_id ){
-   error(prog, p, "interpreter: bad 'constant' command");
+   error(prog, p, "bad 'constant' command");
   }
   char *idstring = (char*)prog->tokens[p].data.pointer;
   //if( find_id(prog->ids, idstring) ) error(prog, -1, "interpreter: constant: this identifier is already used");
   p+=1;
-  add_id__error_if_fail( prog, p, "constant: the id for this constant is already used",
+  add_id__error_if_fail( prog, p, "the id for this constant is already used",
           prog->ids, make_id( idstring, maketoken_num( getvalue(&p, prog) ) ) );
   break;
  }
@@ -5066,7 +5114,7 @@ interpreter(int p, program *prog){
   // get id for new string variable
   idt = prog->tokens[p]; 
   if( idt.type != t_id ){
-   error(prog, p, "interpreter: bad 'stringvar' command");
+   error(prog, p, "bad 'stringvar' command or missing ';'");
   }
   p+=1;
   // ------- DISABLED: obsolete feature that was never used -------
@@ -5076,7 +5124,7 @@ interpreter(int p, program *prog){
   //}
   // --------------------------------------------------------------
   // create id for new string variable
-  add_id__error_if_fail( prog, p, "stringvar: the id for this stringvar is already used",
+  add_id__error_if_fail( prog, p, "the id for this stringvar is already used",
           prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( create_new_stringvar(prog,bufsize) ) ) );
   if( prog->tokens[p].type != t_endstatement ) goto t_stringvar_start;
   p+=1;
