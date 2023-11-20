@@ -292,6 +292,7 @@
  #define t_tb		COCKSPENIS	//	testbeep
  #define t_printstackframe COCKSPENIS	//	print everything in the current stack frame
  #define t_printentirestack COCKSPENIS	//	print everything in the stack up to the current stack frame
+ #define t_listallids COCKSPENIS
 #endif
 
 #define t_bad		255	//			bad data

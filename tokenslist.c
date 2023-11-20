@@ -293,6 +293,7 @@
  #define t_tb		207	//	testbeep
  #define t_printstackframe 208	//	print everything in the current stack frame
  #define t_printentirestack 209	//	print everything in the stack up to the current stack frame
+ #define t_listallids 210
 #endif
 
 #define t_bad		255	//			bad data

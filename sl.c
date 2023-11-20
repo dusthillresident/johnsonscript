@@ -51,7 +51,7 @@
  #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__)
 #endif
 
-#define allow_debug_commands 0
+#define allow_debug_commands 1
 
 #define TOKENTYPE_TYPE unsigned int
 
@@ -144,6 +144,7 @@ void stringslist_addstring(stringslist *s,char *string){
   stringslist_addstring(s->next,string);
   return;
  }
+ //fprintf(stderr, "stringslist_addstring: %s\n",string);
  s->next = calloc(1,sizeof(stringslist));
  s->next->string = string;
 }
@@ -684,7 +685,9 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 make_id(char *id_string, token t){
  id_info *out = calloc(1, sizeof(id_info));
  out->t = t;
- out->name = id_string;
+ size_t l = strlen(id_string);
+ char *name_permanent_address = malloc(l+1); strcpy(name_permanent_address, id_string);
+ out->name = name_permanent_address;
  return out;
 }
 
@@ -695,6 +698,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 free_ids(id_info *ids){
  if(ids == NULL ) return;
  free_ids(ids->next);
+ free(ids->name);
  free(ids);
 }
 
@@ -939,6 +943,10 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_unclaim	4	// unclaim a string (so it can be re-used by 'S')
 #define opt_cleanup	5	// free unused memory from all stringvars and string accs
 #define opt_randomise	6	// get a new random seed based on the current clock time in seconds
+//#define	opt_importreplace 7	// import, but existing functions with the same name are replaced
+//#define opt_evalimport	8	// import, but treating string argument as code containing function definitions
+//#define opt_evalimportreplace 9 // see above
+//#define opt_clear	10	// forget all variables
 
 #ifdef enable_graphics_extension
 #define opt_wmclose	100	// specify action to take when the window close button is pressed
@@ -1391,6 +1399,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  int l;
 
 #if allow_debug_commands
+ if( wordmatch_plus_whitespace( pos,"listallids", text) ){	//	
+  out = maketoken( t_listallids ); goto gettoken_normalout;
+ }
  if( wordmatch_plus_whitespace( pos,"testbeep", text) ){	//	
   out = maketoken( t_tb ); goto gettoken_normalout;
  }
@@ -2475,6 +2486,7 @@ tokenstring(token t){
  case t_tb:	return "testbeep";
  case t_printstackframe: return "printstackframe";
  case t_printentirestack: return "printentirestack";
+ case t_listallids: return "listallids";
 #endif
  
  case t_Df:
@@ -5592,6 +5604,12 @@ interpreter(int p, program *prog){
  // ============================================================================================
  #endif
 #if allow_debug_commands
+ case t_listallids:
+ {
+  p+=1;
+  list_all_ids(prog);
+  break;
+ }
  case t_printentirestack:
  {
   fprintf(stderr,"---- STACK ----\n");
