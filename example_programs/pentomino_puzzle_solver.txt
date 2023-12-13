@@ -81,31 +81,27 @@ endwhile
 function configure_board w h local i;
  set Dboard w
  set Aboard(1) h
- set ww getw board; set wwm1 - ww 1;
- set hh geth board; set hhm1 - hh 1; 
- set board_end + b2 * ww hh;
- set i b2
- while < i board_end 
+ set ww getw board; set wwm1 - ww 1
+ set hh geth board; set hhm1 - hh 1
+ set board_end + b2 * ww hh
+ for i b2 - board_end 1;
   set Di 0
-  set i + i 1
- endwhile
- set bspaces countspaces board;
+ endfor
+ set bspaces countspaces board
 endfunction
 
 function getw piece;
-return A piece 0;
+return A piece 0
 function geth piece;
-return A piece 1;
+return A piece 1
 
 function countspaces piece local i l c;
- set l * Apiece(0) Apiece(1)
+ set l + -1 * Apiece(0) Apiece(1)
  set piece + piece 2
  set c 0
- set i 0
- while < i l
+ for i 0 l;
   set c + c ! A piece i
-  set i + i 1
- endwhile
+ endfor
 return c;
 
 function ffill x y p local r ;
@@ -123,13 +119,11 @@ function ffill x y p local r ;
 return r
 
 function _isstupid_clr local p;
- set p b2
- while < p board_end
+ for p b2 - board_end 1;
   if = Dp -2
    set Dp 0
   endif
-  set p + p 1
- endwhile
+ endfor
 endfunction 
 
 function _ispossible_ffill x y p;
@@ -151,14 +145,12 @@ endfunction
 
 function ispossible local x y p i chk v ; 
  set chk 0
- set y 0
  set p b2
- while < y hh
-  set x 0
-  while < x ww
+ for y 0 - hh 1;
+  for x 0 - ww 1;
    if !Dp
     set v ffill x y p
-    if % v 5;
+    if % v 5
      _isstupid_clr
      endfunction
     endif
@@ -166,8 +158,7 @@ function ispossible local x y p i chk v ;
      set _ip_minx x
      set _ip_miny y
      _ispossible_ffill x y p
-     set i 0
-     while < i num_pieces
+     for i 0 - num_pieces 1;
       if canput A pieces i _ip_minx _ip_miny i
        set v << 1 >> i 3
        if & v chk;
@@ -179,37 +170,30 @@ function ispossible local x y p i chk v ;
        put A pieces i _ip_minx _ip_miny -2
        goto ".ispossible_next"
       endif #canput
-      set i + i 1
-     endwhile # pieces
+     endfor # pieces
      _isstupid_clr
      endfunction
     endif # v is 5
    endif # !Dp
    .ispossible_next
    set p + p 1
-   set x + x 1
-  endwhile
-  set y + y 1
- endwhile
+  endfor # x
+ endfor # y
  _isstupid_clr
 return 1
 
 function firstempty_yl_xl fe yl xl local x y pp;
- set y 0
- while < y hh
-  set x 0
-  while < x ww
+ for y 0 - hh 1;
+  for x 0 - ww 1;
    set pp + b2 x * y ww
    if ! D pp
     set Dfe pp
-    set Dyl + y 1
-    set Dxl + x 1
+    set Dyl y
+    set Dxl x
     endfunction
    endif
-   set x + x 1
-  endwhile
-  set y + y 1
- endwhile
+  endfor
+ endfor
 endfunction
 
 function min a b;
@@ -220,25 +204,23 @@ if < a b return b endif
 return a
 
 function newsolve piecenum local i x y fe yl xl yL xL ; if cancel endfunction endif
- firstempty_yl_xl @fe @yl @xl
- set yL - yl 6 if < yL 0 set yL 0 endif
- set xL - xl 6 if < xL 0 set xL 0 endif
- set i 0
- while < i num_pieces
+ firstempty_yl_xl @fe @y @xl
+ set xL - xl DApieces piecenum if < xL 0 set xL 0 endif
+ for i 0 - num_pieces 1;
   if ! Aisinuse >> i 3
    if ! A alreadytried i
     # find availble place for this piece
-    set y yL
-    while < y yl
-     set x xL
-     while < x xl
+     for x xL xl;
 
       if canput Apieces i x y i
        put Apieces i x y piecenum
+       #put Apieces i x y + 1 >> i 3
        set Aisinuse >> i 3 1
+
        if ! D fe
         goto ".skip"
        endif
+
        if ispossible
 
         set bspaces - bspaces 5
@@ -258,7 +240,7 @@ function newsolve piecenum local i x y fe yl xl yL xL ; if cancel endfunction en
     
         if cancel endfunction endif
  
-        goto ".newsolve_next"
+        continue 2
 
        endif
 
@@ -268,28 +250,20 @@ function newsolve piecenum local i x y fe yl xl yL xL ; if cancel endfunction en
 
       endif #canput
 
-      set x + x 1
-     endwhile
-     set y + y 1
-    endwhile
-   
+     endfor # x
+  
    endif # alreadytried
   endif # isinuse
   
-  .newsolve_next
-  
-  set i + i 1
- endwhile
+ endfor
 endfunction
 
 
 function freespaces local p out;
  set out 0
- set p b2
- while < p board_end
+ for p b2 - board_end 1;
   set out + out ! Dp
-  set p + p 1
- endwhile
+ endfor
 return out
 
 function canput src px py n local x y w h p ;
@@ -305,20 +279,14 @@ function canput src px py n local x y w h p ;
   endfunction
  endif
  set p + src 2
- set y 0
- while < y h
-  set x 0
-  while < x w
-   if D p
-    if D + b2 (+ px x) * ww + py y
-     endfunction
-    endif
+ for y 0 - h 1;
+  for x 0 - w 1;
+   if && Dp D + b2 (+ px x) * ww + py y
+    endfunction
    endif
    set p + p 1
-   set x + x 1
-  endwhile 
-  set y + y 1
- endwhile
+  endfor
+ endfor
 return 1
 
 function pindex piece x y;
@@ -327,19 +295,15 @@ return + piece 2 x * y Dpiece;
 function put src px py _setto local x y w h p ;
  set w D src
  set h A src 1
- set y 0
  set p + src 2
- while < y h
-  set x 0
-  while < x w
+ for y 0 - h 1;
+  for x 0 - w 1;
    if D p
     set D (+ b2 px x * ww + py y) _setto
    endif
    set p + p 1
-   set x + x 1
-  endwhile 
-  set y + y 1
- endwhile
+  endfor
+ endfor
 endfunction
 
 function addpiece piece;
@@ -349,17 +313,13 @@ endfunction
 
 function _addpiece piece local i;
  addpiece piece
- set i 0 
- while < i 3
+ for i 1 3;
   addpiece createrotated Apieces(- num_pieces 1)
-  set i + i 1
- endwhile
+ endfor
  addpiece createflipped piece
- set i 0 
- while < i 3
+ for i 1 3;
   addpiece createrotated Apieces(- num_pieces 1)
-  set i + i 1
- endwhile
+ endfor
 endfunction
 
 function swap a b local c;
@@ -375,15 +335,11 @@ function createrotated piece local out x y w h;
  set out  alloc + 2 * w h
  set Aout(0) w
  set Aout(1) h
- set y 0
- while < y h
-  set x 0
-  while < x w
+ for y 0 - h 1;
+  for x 0 - w 1;
    set Dpindex out x y  Dpindex piece y (- getw out x 1 )
-   set x + x 1
-  endwhile 
-  set y + y 1
- endwhile
+  endfor
+ endfor
 return out;
 
 function createflipped piece local out x y w h;
@@ -392,16 +348,12 @@ function createflipped piece local out x y w h;
  set out  alloc + 2 * w h
  set Aout(0) w
  set Aout(1) h
- set y 0
- while < y h
-  set x 0
-  while < x w
+ for y 0 - h 1;
+  for x 0 - w 1;
    set Dpindex out x y  Dpindex piece (- w x 1 ) y 
-   set x + x 1
-  endwhile 
-  set y + y 1
- endwhile
-return out;
+  endfor
+ endfor
+return out
 
 
 function createpiece w h ... local out x y p;
@@ -409,20 +361,16 @@ function createpiece w h ... local out x y p;
  set Aout(0) w
  set Aout(1) h
  set p 2
- set y 0
  if ! = ( - _num_params 2 ) * w h
-  print "FUCK";
+  print "createpiece: not given correct number of arguments for this width X height";
   quit
  endif
- while < y h
-  set x 0
-  while < x w
+ for y 0 - h 1;
+  for x 0 - w 1;
    set Aout(+ 2 x * y w ) Pp
    set p + p 1
-   set x + x 1
-  endwhile 
-  set y + y 1
- endwhile
+  endfor
+ endfor
 return out
 
 function blankpiece w h local out;
@@ -436,10 +384,8 @@ function _printpiece piece local x y w h cc;
  set h Apiece(1)
  print;
  print "Width: " w chr$10 "Height: " h;
- set y 0
- while < y h
-  set x 0
-  while < x w
+ for y 0 - h 1;
+  for x 0 - w 1;
    #bput _stdout Ap ( !! Apiece( + 2 x * y w ) )
    set cc Apiece( + 2 x * y w ) 
    if cc
@@ -448,11 +394,9 @@ function _printpiece piece local x y w h cc;
     set cc asc$"."
    endif
    bput _stdout cc
-   set x + x 1
-  endwhile
+  endfor
   print;
-  set y + y 1
- endwhile
+ endfor
 endfunction
 
 function __addpiece s;
@@ -794,10 +738,8 @@ endcase
 function drawpiece piece sx sy sc border local x y w h c chr;
  set w Dpiece
  set h Apiece 1
- set x 0
- while < x w
-  set y 0
-  while < y h
+ for x 0 - w 1;
+  for y 0 - h 1;
    if expose set gui_reqrd 1 endfunction endif
    set chr D pindex piece x y
    if > chr 0
@@ -811,23 +753,19 @@ function drawpiece piece sx sy sc border local x y w h c chr;
     gcol & 0x404040 neg < chr 0 
     rectanglef (+ sx * sc x) (+ sy * sc y) sc
    endif
-   set y + y 1
-  endwhile
-  set x + x 1
- endwhile
+  endfor
+ endfor
  if border gcol gui_fg rectangle (- sx 1) (- sy 1) (+ 1 * sc w ) + 1 * sc h endif
 endfunction
 
 function drawavailable x y sc local i;
- set i 0
  gcol 0 
  rectanglef x y (* sc 6 >> num_pieces 3) * sc 5;
- while < i num_pieces
+ for i 0 (- num_pieces 1) 8;
   if !Aisinuse >> i 3
    drawpiece Apieces i (+ x * >> i 3 sc 6 ) y sc 0
-  endif 
-  set i + i 8
- endwhile
+  endif
+ endfor
 endfunction 
 # -----------------------------------------
 
@@ -862,16 +800,17 @@ return 1
 
 # ---------------------------------------------------------------------------------------
 
-function xResourceColourLookup xResourceName defaultColour local s;
+function xResourceColourLookup xResourceName defaultColour local s result;
  set s S;
  option "xresource" s $xResourceName ""
- option "unclaim" s
  if ! len$ $s
-  return defaultColour
- #else
- # print "Successfully obtained value '" $s "' for X resource name '" $xResourceName "'";
+  set result defaultColour
+ else
+  #print "Successfully obtained value '" $s "' for X resource name '" $xResourceName "'";
+  set result val$ cat$ "0x" right$ $s - len$ $s 1
  endif
-return val$ cat$ "0x" right$ $s - len$ $s 1
+ unclaim s
+return result
 
 function guiinit;
  constant gui_pad 8;
@@ -955,7 +894,7 @@ function gui_intbox x y v local s l;
  endif
  button (+ x gui_pad 8) y s
  .gui_intbox_exit
- option "unclaim" s
+ unclaim s
 return gui_reqrd
 
 function gui_ibw v local l; set l len$str$v return + gui_btnw (+ l = l 1) * 2 gui_btnw 1
@@ -963,7 +902,7 @@ function gui_ibw v local l; set l len$str$v return + gui_btnw (+ l = l 1) * 2 gu
 function leaktest local crap;
  set crap S;
  print crap;
- option "unclaim" crap;
+ unclaim crap;
 endfunction
 
 # ------------------------------
