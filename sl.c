@@ -36,19 +36,19 @@
   fprintf(stderr, "line %d,	%s,	%s,	CALLOC	%p\n",n,f,fun,out); 
   return out;
  }
- void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun){
+ void* myreallocfordebug(void *ptr, size_t size    ,int n, char *f,char *fun,char *name){
   void *out = realloc(ptr,size);
-  fprintf(stderr, "line %d,	%s,	%s,	REALLOC	%p ( input %p )\n",n,f,fun,out,ptr);
+  fprintf(stderr, "line %d,	%s,	%s,	REALLOC	%p ( input %p )	'%s'\n",n,f,fun,out,ptr,name);
   return out;
  }
- void myfreefordebug(void *ptr,      int n, char *f,char *fun){
-  fprintf(stderr, "line %d,	%s,	%s,	FREEING	%p\n",n,f,fun,ptr);
+ void myfreefordebug(void *ptr,      int n, char *f,char *fun,char *name){
+  fprintf(stderr, "line %d,	%s,	%s,	FREEING	%p	'%s'\n",n,f,fun,ptr,name);
   free(ptr);
  }
  #define malloc(a) mymallocfordebug(a,__LINE__,__FILE__,(char*)__FUNCTION__)
  #define calloc(a,b) mycallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__)
- #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__)
- #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__)
+ #define realloc(a,b) myreallocfordebug(a,b,__LINE__,__FILE__,(char*)__FUNCTION__,#a)
+ #define free(p) myfreefordebug(p,__LINE__,__FILE__,(char*)__FUNCTION__,#p)
 #endif
 
 #define allow_debug_commands 1
@@ -56,6 +56,7 @@
 #define TOKENTYPE_TYPE unsigned int
 
 enum eval_action { eval_interpreter, eval_getvalue, eval_getstringvalue };
+enum determined_retval { determined_neither = -1, determined_value = 0, determined_stringvalue = 1 };
 
 struct token {
  TOKENTYPE_TYPE type;
@@ -116,10 +117,10 @@ struct stringval { // string value
 };
 typedef struct stringval stringval;
 // ----
-stringvar* newstringvar(size_t bufsize){
+stringvar* newstringvar(){
  stringvar *out = calloc(1,sizeof(stringvar));
- out->string = calloc(bufsize,sizeof(char));
- out->bufsize = bufsize;
+ out->string = calloc(DEFAULT_NEW_STRINGVAR_BUFSIZE,sizeof(char));
+ out->bufsize = DEFAULT_NEW_STRINGVAR_BUFSIZE;
  return out;
 }
 //--------------------------
@@ -140,18 +141,15 @@ void free_stringslist(stringslist *s){
  free(s);
 }
 void stringslist_addstring(stringslist *s,char *string){
- if(s->next){
-  stringslist_addstring(s->next,string);
-  return;
- }
+ while(s->next) s=s->next;
  //fprintf(stderr, "stringslist_addstring: %s\n",string);
  s->next = calloc(1,sizeof(stringslist));
  s->next->string = string;
 }
 stringslist* stringslist_gettail(stringslist *s){
  if( ! s ) return NULL;
- if( ! s->next ) return s;
- return stringslist_gettail( s->next );
+ while( s->next ) s=s->next;
+ return s;
 }
 #if 0
 void stringslist_debug_show_contents(stringslist *s){
@@ -220,7 +218,11 @@ struct program {
  stringvar *_error_file;
  int _error_line;
  int _error_column;
- int _error_number;
+ //int _error_number;
+ // -----------------
+ #ifdef enable_debugger
+ //void *dbg;
+ #endif
 };
 typedef struct program program;
 //--------------------------
@@ -254,7 +256,14 @@ int catch( program *prog, int *p, int action, double *returnValue, stringval *re
 void copy_stringval_to_stringvar(program *prog, stringvar *dest, stringval src);
 void process_catch(program *prog, int p);
 int interpreter_eval( program *prog,  int action, void *return_value, unsigned char *text );
+token gettoken(program *prog, int test_run, int *pos, unsigned char *text);
+void interactive_prompt(program *prog);
 
+// -------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
+#ifdef enable_debugger
+#include "_sl_debugger.c"
+#endif
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
 
@@ -284,7 +293,7 @@ newprog(int maxlen, int vsize, int ssize){
  out->string_accumulator = calloc(DEFAULT_STRING_ACCUMULATOR_LEVELS,sizeof(void*));
  int i;
  for(i=0; i<DEFAULT_STRING_ACCUMULATOR_LEVELS; i++){
-  out->string_accumulator[ i ] = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE);
+  out->string_accumulator[ i ] = newstringvar();
  }
  // initialise file array
  out->max_files = DEFAULT_MAX_FILES;
@@ -300,8 +309,8 @@ newprog(int maxlen, int vsize, int ssize){
  // initialise stringslist
  out->program_strings = calloc(1,sizeof(stringslist));
  // initialise error info
- out->_error_message = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE); 
- out->_error_file    = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE);
+ out->_error_message = newstringvar(); 
+ out->_error_file    = newstringvar();
  copy_stringval_to_stringvar(out, out->_error_message, (stringval){"(C)2023 Johnsonscript",21} );
  return out;
 }
@@ -654,19 +663,17 @@ int
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 add_id(id_info *ids, id_info *new_id){
- // check if this id name is already used in this id list
- if( ids->name && !strcmp(new_id->name, ids->name) ){
-  //fprintf(stderr,"add_id: id was '%s'\n",new_id->name);
-  //error(NULL, "add_id: this id is already used in this id list");
-  return 0;
+ while( ids->next ){
+  // check if this id name is already used in this id list
+  if( ids->name && !strcmp(new_id->name, ids->name) ){
+   //fprintf(stderr,"add_id: id was '%s'\n",new_id->name);
+   //error(NULL, "add_id: this id is already used in this id list");
+   return 0;
+  }
+  ids=ids->next;
  }
- // ----------
- if( ids->next == NULL){
-  ids->next = new_id;
-  return 1;
- }else{
-  return add_id( ids->next, new_id);
- }
+ ids->next = new_id;
+ return 1;
 }
 void
 #ifndef DISABLE_ALIGN_STUFF
@@ -1284,12 +1291,12 @@ int
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 wordmatch(int *pos, unsigned char *word, unsigned char *text){
- int i,l;
- l=strlen(word);
- for(i=0; i<l; i++){
-  if( text[*pos + i] != word[i] ) return 0;
+ int i=0;
+ int p=*pos;
+ while( word[i] ){
+  if( text[p++] != word[i++] ) return 0;
  }
- *pos += l;
+ *pos = p;
  return 1;
 }
 
@@ -1315,13 +1322,13 @@ int
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 patternmatch(int pos, unsigned char *chars, unsigned char *text){
- int i,l,L,p, check;
+ int i,p, check;
  p=pos;
- l=strlen(chars);
  while(1){
   check=1;
-  for(i=0; i<l; i++){
-   if( text[p] == chars[i] ){
+  i=0;
+  while(chars[i]){
+   if( text[p] == chars[i++] ){
     check=0;
     break;
    }//endif
@@ -1331,17 +1338,18 @@ patternmatch(int pos, unsigned char *chars, unsigned char *text){
  }//endwhile
 }//endproc
 
+/*
 int
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 patterncontains(int pos, unsigned char *chars, unsigned char *text){
- int i,l,L,p, check;
+ int i,l,p, check;
  p=pos;
- l=strlen(chars);
  while( text[p] && !isspace(text[p]) ){
-  for(i=0; i<l; i++){
-   if( text[p] == chars[i] ){
+  i=0;
+  while( chars[i] ){
+   if( text[p] == chars[i++] ){
     return 1;
    }//endif
   }//next
@@ -1349,6 +1357,7 @@ patterncontains(int pos, unsigned char *chars, unsigned char *text){
  }//endwhile
  return 0;
 }//endproc
+*/
 
 void
 #ifndef DISABLE_ALIGN_STUFF
@@ -1366,17 +1375,19 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-_gettoken_skippastcomments(int *pos, unsigned char *text){
+_gettoken_skippastcomments(program *prog, int *pos, unsigned char *text){
  if( isspace(text[*pos]) ) return;
  // block comment
- if( wordmatch( pos,"/*", text) ){		
-  while( !wordmatch( pos,"*/", text) ){
+ if( text[*pos]=='/' && text[*pos+1]=='*' ){
+  *pos += 2;		
+  while( !(text[*pos] == '*' && text[*pos+1] == '/') ){
    *pos += 1;
-   if( !text[*pos] ) error(NULL, -1, "missing */");
+   if( !text[*pos] ) error(prog, -1, "missing */");
   }//endwhile
+  *pos += 2;
  }//endif
  // line comment
- if( wordmatch( pos,"REM", text) || wordmatch( pos,"#", text) ){	
+ if( text[*pos]=='#' || (text[*pos]=='R' && wordmatch( pos,"REM", text)) ){	
   while( text[*pos] && text[*pos]!=10 ){
    *pos += 1;
   }//endwhile
@@ -1389,10 +1400,10 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  token out; out.type = t_nul;
 
  gettoken_start:
- _gettoken_skippastcomments(pos,text);
+ _gettoken_skippastcomments(prog,pos,text);
  while( isspace(text[*pos]) ){
   *pos+=1;
-  _gettoken_skippastcomments(pos,text);
+  _gettoken_skippastcomments(prog,pos,text);
  }
  //fprintf(stderr,"COCK ROCK %c\n",text[*pos]);
 
@@ -1467,25 +1478,24 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  }
  
  // number literal/constant
+ if( (text[*pos]>='0' && text[*pos]<='9') || ( text[*pos]=='-' && (text[*pos+1]>='0' && text[*pos+1]<='9') ) ){
+  int l=0;
+  if( text[*pos]=='-' ){ l+=1; *pos+=1; }
+  while( (text[*pos]>='0' && text[*pos]<='9') || (text[*pos] == '.') ){
+   *pos += 1;
+   l += 1;
+  }
+  out = maketoken_num( strtod(text + *pos - l, NULL) );
+  goto gettoken_normalout;
+ }
+ /*
  l = patternmatch( *pos,"-123456789.0", text);
  if( l && !(l==1 && text[*pos] == '-') && patterncontains( *pos,"1234567890", text) ){	
   out=maketoken_num( strtod(text+*pos, NULL) );
   *pos += l;
   goto gettoken_normalout;
  }
-
- if( wordmatch( pos,"%", text) ){	//	%
-  out = maketoken( t_mod ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"<<", text) ){	//	<<
-  out = maketoken( t_shiftleft ); goto gettoken_normalout;
- }
- if( wordmatch( pos,">>>", text) ){	//	>>>
-  out = maketoken( t_lshiftright ); goto gettoken_normalout;
- }
- if( wordmatch( pos,">>", text) ){	//	>>
-  out = maketoken( t_shiftright ); goto gettoken_normalout;
- }
+ */
 
  if( wordmatch( pos,"&&", text) ){	//	&&
   out =  maketoken( t_land ); goto gettoken_normalout;
@@ -1493,197 +1503,524 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  if( wordmatch( pos,"||", text) ){	//	||
   out =  maketoken( t_lor ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"!", text) ){	//	!
-  out =  maketoken( t_lnot ); goto gettoken_normalout;
- }
-
- if( wordmatch( pos,"+", text) ){	//	+
-  out =  maketoken( t_plus ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"-", text) ){	//	-
-  out =  maketoken( t_minus ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"/", text) ){	//	/
-  out =  maketoken( t_slash ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"*", text) ){	//	*
-  out =  maketoken( t_star ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"&", text) ){	//	&
-  out =  maketoken( t_and ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"|", text) ){	//	|
-  out =  maketoken( t_or ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"^", text) ){	//	^
-  out =  maketoken( t_eor ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"~", text) ){	//	~
-  out =  maketoken( t_not ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"abs", text) ){	//	abs
-  out =  maketoken( t_abs ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"int", text) ){	//	int
-  out =  maketoken( t_int ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"sgn", text) ){	//	sgn
-  out =  maketoken( t_sgn ); goto gettoken_normalout;
- }
  if( wordmatch_plus_whitespace( pos,"neg", text) ){	//	neg
   out =  maketoken( t_neg ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"<=", text) ){	//	<=
-  out =  maketoken( t_lesseq ); goto gettoken_normalout;
+
+ // -------------------------------------------------------------------------------------------------------------
+ // ----  single character wordmatch  ---------------------------------------------------------------------------
+ // -------------------------------------------------------------------------------------------------------------
+ if( text[*pos]=='%' ){	//	%
+  *pos+=1;
+  out = maketoken( t_mod ); goto gettoken_normalout;
  }
- if( wordmatch( pos,">=", text) ){	//	>=
-  out =  maketoken( t_moreeq ); goto gettoken_normalout;
+
+ if( text[*pos]=='!' ){	//	!
+  *pos+=1;
+  out =  maketoken( t_lnot ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"<", text) ){	//	<
-  out =  maketoken( t_lessthan ); goto gettoken_normalout;
+
+ if( text[*pos]=='+' ){	//	+
+  *pos+=1;
+  out =  maketoken( t_plus ); goto gettoken_normalout;
  }
- if( wordmatch( pos,">", text) ){	//	>
-  out =  maketoken( t_morethan ); goto gettoken_normalout;
+ if( text[*pos]=='-' ){	//	-
+  *pos+=1;
+  out =  maketoken( t_minus ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"=", text) ){	//	=
+ if( text[*pos]=='/' ){	//	/
+  *pos+=1;
+  out =  maketoken( t_slash ); goto gettoken_normalout;
+ }
+ if( text[*pos]=='*' ){	//	*
+  *pos+=1;
+  out =  maketoken( t_star ); goto gettoken_normalout;
+ }
+ if( text[*pos]=='&' ){	//	&
+  *pos+=1;
+  out =  maketoken( t_and ); goto gettoken_normalout;
+ }
+ if( text[*pos]=='|' ){	//	|
+  *pos+=1;
+  out =  maketoken( t_or ); goto gettoken_normalout;
+ }
+ if( text[*pos]=='^' ){	//	^
+  *pos+=1;
+  out =  maketoken( t_eor ); goto gettoken_normalout;
+ }
+ if( text[*pos]=='~' ){	//	~
+  *pos+=1;
+  out =  maketoken( t_not ); goto gettoken_normalout;
+ }
+ if( text[*pos]=='=' ){	//	=
+  *pos+=1;
   out =  maketoken( t_equal ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"D", text) ){	//	D ('data', 'dereference' - indirect access)
+ if( text[*pos]=='D' ){	//	D ('data', 'dereference' - indirect access)
+  *pos+=1;
   out =  maketoken( t_D ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"A", text) ){	//	A ('array' - indexed indirect access)
+ if( text[*pos]=='A' ){	//	A ('array' - indexed indirect access)
+  *pos+=1;
   out =  maketoken( t_A ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"C", text) ){	//	C ('character' - byte array access with strings)
+ if( text[*pos]=='C' ){	//	C ('character' - byte array access with strings)
+  *pos+=1;
   out =  maketoken( t_C ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"V", text) ){	//	V ('value' - value array access with strings)
+ if( text[*pos]=='V' ){	//	V ('value' - value array access with strings)
+  *pos+=1;
   out =  maketoken( t_V ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"L", text) ){	//	L ('local' - indexed local variable access)
+ if( text[*pos]=='L' ){	//	L ('local' - indexed local variable access)
+  *pos+=1;
   out =  maketoken( t_L ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"P", text) ){	//	P ('param' - indexed function parameter access)
+ if( text[*pos]=='P' ){	//	P ('param' - indexed function parameter access)
+  *pos+=1;
   out =  maketoken( t_P ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"F", text) ){	//	F (function dereference)
+ if( text[*pos]=='F' ){	//	F (function dereference)
+  *pos+=1;
   out =  maketoken( t_F ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"$", text) ){	//	$ (stringvariable dereference)
+ if( text[*pos]=='$' ){	//	$ (stringvariable dereference)
+  *pos+=1;
   out =  maketoken( t_S ); goto gettoken_normalout;
  }
- if( wordmatch( pos,"S", text) ){	//	S (create temporary stringvariable)
+ if( text[*pos]=='S' ){	//	S (create temporary stringvariable)
+  *pos+=1;
   out =  maketoken( t_SS ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,";", text) ){	//	;
-  out =  maketoken( t_endstatement ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"(", text) ){	//	(
-  out =  maketoken( t_leftb ); goto gettoken_normalout;
- }
- if( wordmatch( pos,")", text) ){	//	)
-  out =  maketoken( t_rightb ); goto gettoken_normalout;
+ if( text[*pos]=='@' ){	//  @, get reference
+  *pos+=1;
+  out = maketoken( t_getref ); goto gettoken_normalout;
  }
 
- if( wordmatch_plus_whitespace( pos,"return", text) ){	//	
-  out = maketoken( t_return ); goto gettoken_normalout;
+ if( text[*pos]==';' ){	//	;
+  *pos+=1;
+  out =  maketoken( t_endstatement ); goto gettoken_normalout;
  }
- if( wordmatch_plus_whitespace( pos,"endwhile", text) ){	//	
-  out = maketoken( t_endwhile ); goto gettoken_normalout;
+ if( text[*pos]=='(' ){	//	(
+  *pos+=1;
+  out =  maketoken( t_leftb ); goto gettoken_normalout;
  }
- if( wordmatch_plus_whitespace( pos,"while", text) ){	//	
-  out = maketoken( t_while ); goto gettoken_normalout;
+ if( text[*pos]==')' ){	//	)
+  *pos+=1;
+  out =  maketoken( t_rightb ); goto gettoken_normalout;
  }
- if( wordmatch_plus_whitespace( pos,"endif", text) ){	//	
-  out = maketoken( t_endif ); goto gettoken_normalout;
+ // -------------------------------------------------------------------------------------------------------------
+
+ // -------------------------------------------------------------------------------------------------------------
+ // -------------------- speednutting ---------------------------------------------------------------------------
+ // -------------------------------------------------------------------------------------------------------------
+
+ if( text[*pos]=='<' ){ // == < =================================================================================
+  if( wordmatch( pos,"<<", text) ){	//	<<
+   out = maketoken( t_shiftleft ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"<=", text) ){	//	<=
+   out =  maketoken( t_lesseq ); goto gettoken_normalout;
+  }
+  *pos += 1;
+  out =  maketoken( t_lessthan ); goto gettoken_normalout;
  }
- if( wordmatch_plus_whitespace( pos,"if", text) ){	//	
-  out = maketoken( t_if ); goto gettoken_normalout;
+
+ if( text[*pos]=='>' ){ // == > =================================================================================
+  if( wordmatch( pos,">>>", text) ){	//	>>>
+   out = maketoken( t_lshiftright ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,">>", text) ){	//	>>
+   out = maketoken( t_shiftright ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,">=", text) ){	//	>=
+   out =  maketoken( t_moreeq ); goto gettoken_normalout;
+  }
+  *pos += 1;
+  out =  maketoken( t_morethan ); goto gettoken_normalout;
+ } 
+
+ if( text[*pos]=='a' ){ // == A =================================================================================
+  if( wordmatch_plus_whitespace( pos,"abs", text) ){	//	abs
+   out =  maketoken( t_abs ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"append$", text) ){	//	
+   out = maketoken( t_appendS ); goto gettoken_normalout;
+  }
+
+  if( wordmatch( pos,"asc$", text) ){	//	asc$
+   out = maketoken( t_ascS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"alloc", text) ){	//	
+   out = maketoken( t_alloc ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"atan2", text) ){	//	
+   out = maketoken( t_atan2 ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"atan", text) ){	//	
+   out = maketoken( t_atan ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"acos", text) ){	//	
+   out = maketoken( t_acos ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"asin", text) ){	//	
+   out = maketoken( t_asin ); goto gettoken_normalout;
+  }
+
  }
- if( wordmatch_plus_whitespace( pos,"else", text) ){	//	
-  out = maketoken( t_else ); goto gettoken_normalout;
+
+ if( text[*pos]=='b' ){ // == B =================================================================================
+
+  if( wordmatch_plus_whitespace( pos,"bget", text) ){	//	
+   out = maketoken( t_bget ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"bput", text) ){	//	
+   out = maketoken( t_bput ); goto gettoken_normalout;
+  }
+
  }
- if( wordmatch_plus_whitespace( pos,"set", text) ){	//	
-  out = maketoken( t_set ); goto gettoken_normalout;
+
+ if( text[*pos]=='c' ){ // == C =================================================================================
+  if( wordmatch_plus_whitespace( pos,"constant", text) ){	//	
+   out = maketoken( t_const ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"continue", text) ){ //	continue
+   out = maketoken( t_continue ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"chr$", text) ){	//	chr$
+   out = maketoken( t_chrS ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"cat$", text) ){	//	cat$
+   out = maketoken( t_catS ); goto gettoken_normalout;
+  }
+
+  if( wordmatch_plus_whitespace( pos,"close", text) ){	//	
+   out = maketoken( t_close ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"cmp$", text) ){	//	cmp$ (strcmp)
+   out = maketoken( t_cmpS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"catch", text) ){	//	
+   out = maketoken( t_catch ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"caseof", text) ){	//	
+   out = maketoken( t_caseof ); goto gettoken_normalout;
+  }
+
+  if( wordmatch_plus_whitespace( pos,"cosh", text) ){	//	
+   out = maketoken( t_cosh ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"cos", text) ){	//	
+   out = maketoken( t_cos ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"ceil", text) ){	//	
+   out = maketoken( t_ceil ); goto gettoken_normalout;
+  }
+
  }
- if( wordmatch_plus_whitespace( pos,"append$", text) ){	//	
-  out = maketoken( t_appendS ); goto gettoken_normalout;
+
+ if( text[*pos]=='f' ){ // == F =================================================================================
+
+  if( wordmatch_plus_whitespace( pos,"function", text) ){	//	
+   out = maketoken( t_deffn ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"for", text) ){	//	for
+   out = maketoken( t_for ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"floor", text) ){	//	
+   out = maketoken( t_floor ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"fmod", text) ){	//	
+   out = maketoken( t_fmod ); goto gettoken_normalout;
+  }
+
  }
+
+ if( text[*pos]=='r' ){ // == R =================================================================================
+  if( wordmatch_plus_whitespace( pos,"return", text) ){	//	
+   out = maketoken( t_return ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"right$", text) ){	//	right$
+   out = maketoken( t_rightS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"restart", text) ){	//	restart
+   out = maketoken( t_restart ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"rnd", text) ){	//	rnd
+   out = maketoken( t_rnd ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='i' ){ // == I =================================================================================
+  if( wordmatch_plus_whitespace( pos,"if", text) ){	//	
+   out = maketoken( t_if ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"increment", text) ){	//	
+   out = maketoken( t_increment ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"int", text) ){	//	int
+   out =  maketoken( t_int ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"instr$", text) ){	//	instr$
+   out = maketoken( t_instrS ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='w' ){ // == W =================================================================================
+  if( wordmatch_plus_whitespace( pos,"while", text) ){	//	
+   out = maketoken( t_while ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"wait", text) ){	//	
+   out = maketoken( t_wait ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"when", text) ){	//	
+   out = maketoken( t_when ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='v' ){ // == V =================================================================================
+
+  if( wordmatch_plus_whitespace( pos,"variable", text) ){	//	
+   out = maketoken( t_var ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"val$", text) ){	//	val$
+   out = maketoken( t_valS ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"vlen$", text) ){	//	vlen$
+   out = maketoken( t_vlenS ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"vector$", text) ){	//	vlen$
+   out = maketoken( t_vectorS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"vget", text) ){	//	
+   out = maketoken( t_vget ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"vput", text) ){	//	
+   out = maketoken( t_vput ); goto gettoken_normalout;
+  }
+
+ }
+
+ if( text[*pos]=='e' ){ // == E =================================================================================
+  if( wordmatch_plus_whitespace( pos,"endwhile", text) ){	//	
+   out = maketoken( t_endwhile ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"endif", text) ){	//	
+   out = maketoken( t_endif ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"else", text) ){	//	
+   out = maketoken( t_else ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"endfunction", text) ){	//	endfunction
+   out = maketoken( t_endfn ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"endfor", text) ){	//	endfor
+   out = maketoken( t_endfor ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"endloop", text) ){	 //	endloop
+   out = maketoken( t_endloop ); goto gettoken_normalout;
+  }
+
+  if( wordmatch( pos,"equal$", text) ){	//	cmp$ (strcmp)
+   out = maketoken( t_equalS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"endcatch", text) ){	//	
+   out = maketoken( t_endcatch ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"eval$", text) ){	//	
+   out = maketoken( t_evalS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"evalexpr", text) ){	//	
+   out = maketoken( t_evalexpr ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"eval", text) ){	//	
+   out = maketoken( t_eval ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"exp", text) ){	//	
+   out = maketoken( t_exp ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"eof", text) ){	//	
+   out = maketoken( t_eof ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"ext", text) ){	//	
+   out = maketoken( t_ext ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"endcase", text) ){	//	
+   out = maketoken( t_endcase ); goto gettoken_normalout;
+  }
+
+ }
+
+ if( text[*pos]=='s' ){ // == S =================================================================================
+  if( wordmatch_plus_whitespace( pos,"sgn", text) ){	//	sgn
+   out =  maketoken( t_sgn ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"set", text) ){	//	
+   out = maketoken( t_set ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"stringvar", text) ){	//	
+   out = maketoken( t_stringvar ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"str$", text) ){	//	str$
+   out = maketoken( t_strS ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"string$", text) ){	//	string$
+   out = maketoken( t_stringS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"sinh", text) ){	//	
+   out = maketoken( t_sinh ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"sin", text) ){	//	
+   out = maketoken( t_sin ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"sqr", text) ){	//	
+   out = maketoken( t_sqr ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"sget", text) ){	//	
+   out = maketoken( t_sget ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"sptr", text) ){	//	
+   out = maketoken( t_sptr ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"sput", text) ){	//	
+   out = maketoken( t_sput ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='o' ){ // == O =================================================================================
+  if( wordmatch( pos,"oscli", text) ){	//	
+   out = maketoken( t_oscli ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"option", text) ){	//	
+   out = maketoken( t_option ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"openin", text) ){	//	
+   out = maketoken( t_openin ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"openout", text) ){	//	
+   out = maketoken( t_openout ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"openup", text) ){	//	
+   out = maketoken( t_openup ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"otherwise", text) ){	//	
+   out = maketoken( t_otherwise ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='l' ){ // == L =================================================================================
+  if( wordmatch_plus_whitespace( pos,"local", text) ){	//	
+   out = maketoken( t_local ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"left$", text) ){	//	left$
+   out = maketoken( t_leftS ); goto gettoken_normalout;
+  }
+  if( wordmatch( pos,"len$", text) ){	//	len$
+   out = maketoken( t_lenS ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"log10", text) ){	//	
+   out = maketoken( t_log10 ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"log2", text) ){	//	
+   out = maketoken( t_log2 ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"log", text) ){	//	
+   out = maketoken( t_log ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='_' ){ // == _ =================================================================================
+  // '_num_params', alias for L0, which is the parameter telling you the number of parameters a function has
+  if( wordmatch( pos,"_num_params", text) ){	//	
+   out = maketoken_stackaccess( 0 ); goto gettoken_normalout;
+  }
+  // '_stdin', alias for '1'. '1' reserved as the file reference number for stdin
+  if( wordmatch( pos,"_stdin", text) ){
+   out = maketoken_num( 1 ); goto gettoken_normalout;
+  }
+  // '_stdout', alias for '2'. '2' reserved as the file reference number for stdout
+  if( wordmatch( pos,"_stdout", text) ){
+   out = maketoken_num( 2 ); goto gettoken_normalout;
+  }
+  // '_stderr', alias for '3'. '3' reserved as the file reference number for stderr
+  if( wordmatch( pos,"_stderr", text) ){
+   out = maketoken_num( 3 ); goto gettoken_normalout;
+  }
+  // '_pi', alias for '3.141592653589793238462643383279502884197169399375105820974944'
+  if( wordmatch( pos,"_pi", text) ){
+   out = maketoken_num( 3.141592653589793238462643383279502884197169399375105820974944 ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"_rnd_state", text) ){	//	_rnd_state
+   out = maketoken( t_rnd_state ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"_prompt", text) ){	//	
+   out = maketoken( t_prompt ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"_error_line", text) ){	//	
+   out = maketoken( t_error_line ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"_error_column", text) ){	//	
+   out = maketoken( t_error_column ); goto gettoken_normalout;
+  }
+  //if( wordmatch_plus_whitespace( pos,"_error_number", text) ){	//	
+  // out = maketoken( t_error_number ); goto gettoken_normalout;
+  //}
+  if( wordmatch_plus_whitespace( pos,"_error_file", text) ){	//	
+   out = maketoken( t_error_file ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"_error_message", text) ){	//	
+   out = maketoken( t_error_message ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='t' ){ // == T =================================================================================
+  if( wordmatch_plus_whitespace( pos,"throw", text) ){	//	
+   out = maketoken( t_throw ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"tanh", text) ){	//	
+   out = maketoken( t_tanh ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"tan", text) ){	//	
+   out = maketoken( t_tan ); goto gettoken_normalout;
+  }
+ }
+
+ if( text[*pos]=='p' ){ // == P =================================================================================
+  if( wordmatch_plus_whitespace( pos,"print", text) ){		
+   out = maketoken( t_print ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"pow", text) ){	//	
+   out = maketoken( t_pow ); goto gettoken_normalout;
+  }
+  if( wordmatch_plus_whitespace( pos,"ptr", text) ){	//	
+   out = maketoken( t_ptr ); goto gettoken_normalout;
+  }
+ }
+
+ // -------------------------------------------------------------------------------------------------------------
+ // -------------------------------------------------------------------------------------------------------------
+ // -------------------------------------------------------------------------------------------------------------
+
  if( wordmatch_plus_whitespace( pos,"unclaim", text) ){	//	unclaim [string reference number], release strings. Mainly used when working with temporary strings provided by 'S'
   out = maketoken( t_unclaim ); goto gettoken_normalout;
  }
- if( wordmatch_plus_whitespace( pos,"function", text) ){	//	
-  out = maketoken( t_deffn ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"local", text) ){	//	
-  out = maketoken( t_local ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"variable", text) ){	//	
-  out = maketoken( t_var ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"constant", text) ){	//	
-  out = maketoken( t_const ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"stringvar", text) ){	//	
-  out = maketoken( t_stringvar ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"endfunction", text) ){	//	endfunction
-  out = maketoken( t_endfn ); goto gettoken_normalout;
- }
 
- if( wordmatch_plus_whitespace( pos,"for", text) ){	//	for
-  out = maketoken( t_for ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"endfor", text) ){	//	endfor
-  out = maketoken( t_endfor ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"endloop", text) ){	 //	endloop
-  out = maketoken( t_endloop ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"continue", text) ){ //	continue
-  out = maketoken( t_continue ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"restart", text) ){	//	restart
-  out = maketoken( t_restart ); goto gettoken_normalout;
- }
  if( wordmatch_plus_whitespace( pos,"goto", text) ){	//	
   out = maketoken( t_goto ); goto gettoken_normalout;
  }
 
- if( wordmatch( pos,"oscli", text) ){	//	
-  out = maketoken( t_oscli ); goto gettoken_normalout;
+ if( wordmatch_plus_whitespace( pos,"quit", text) ){	//	
+  out = maketoken( t_quit ); goto gettoken_normalout;
  }
 
- // '_num_params', alias for L0, which is the parameter telling you the number of parameters a function has
- if( wordmatch( pos,"_num_params", text) ){	//	
-  out = maketoken_stackaccess( 0 ); goto gettoken_normalout;
- }
- // '_stdin', alias for '1'. '1' reserved as the file reference number for stdin
- if( wordmatch( pos,"_stdin", text) ){
-  out = maketoken_num( 1 ); goto gettoken_normalout;
- }
- // '_stdout', alias for '2'. '2' reserved as the file reference number for stdout
- if( wordmatch( pos,"_stdout", text) ){
-  out = maketoken_num( 2 ); goto gettoken_normalout;
- }
- // '_stderr', alias for '3'. '3' reserved as the file reference number for stderr
- if( wordmatch( pos,"_stderr", text) ){
-  out = maketoken_num( 3 ); goto gettoken_normalout;
- }
- // '_pi', alias for '3.14159265358979323846264338327950288'
- if( wordmatch( pos,"_pi", text) ){
-  out = maketoken_num( 3.14159265358979323846264338327950288 ); goto gettoken_normalout;
- }
-
- if( wordmatch( pos,"@", text) ){	//	getref shorthand '@'
-  out = maketoken( t_getref ); goto gettoken_normalout;
+ if( wordmatch_plus_whitespace( pos,"decrement", text) ){	//	
+  out = maketoken( t_decrement ); goto gettoken_normalout;
  }
 
  // string constant specified using QUOTE()
- if( wordmatch(pos, "QUOTE(", text) ){
+ if( text[*pos]=='Q' && wordmatch(pos, "QUOTE(", text) ){
   int l=0; int level=1;
   while( level ){
    if( !text[*pos] ) error( prog, -1, "QUOTE(): missing )" );
@@ -1736,110 +2073,8 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   goto gettoken_normalout;
  }//endif
 
- if( wordmatch_plus_whitespace( pos,"print", text) ){		
-  out = maketoken( t_print ); goto gettoken_normalout;
- }
-
- if( wordmatch( pos,"right$", text) ){	//	right$
-  out = maketoken( t_rightS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"left$", text) ){	//	left$
-  out = maketoken( t_leftS ); goto gettoken_normalout;
- }
  if( wordmatch( pos,"mid$", text) ){	//	mid$
   out = maketoken( t_midS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"chr$", text) ){	//	chr$
-  out = maketoken( t_chrS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"str$", text) ){	//	str$
-  out = maketoken( t_strS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"cat$", text) ){	//	cat$
-  out = maketoken( t_catS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"string$", text) ){	//	string$
-  out = maketoken( t_stringS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"asc$", text) ){	//	asc$
-  out = maketoken( t_ascS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"val$", text) ){	//	val$
-  out = maketoken( t_valS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"len$", text) ){	//	len$
-  out = maketoken( t_lenS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"vlen$", text) ){	//	vlen$
-  out = maketoken( t_vlenS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"vector$", text) ){	//	vlen$
-  out = maketoken( t_vectorS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"cmp$", text) ){	//	cmp$ (strcmp)
-  out = maketoken( t_cmpS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"instr$", text) ){	//	instr$
-  out = maketoken( t_instrS ); goto gettoken_normalout;
- }
- if( wordmatch( pos,"equal$", text) ){	//	cmp$ (strcmp)
-  out = maketoken( t_equalS ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"_rnd_state", text) ){	//	_rnd_state
-  out = maketoken( t_rnd_state ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"rnd", text) ){	//	rnd
-  out = maketoken( t_rnd ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"wait", text) ){	//	
-  out = maketoken( t_wait ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"alloc", text) ){	//	
-  out = maketoken( t_alloc ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"option", text) ){	//	
-  out = maketoken( t_option ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"catch", text) ){	//	
-  out = maketoken( t_catch ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"endcatch", text) ){	//	
-  out = maketoken( t_endcatch ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"throw", text) ){	//	
-  out = maketoken( t_throw ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"eval$", text) ){	//	
-  out = maketoken( t_evalS ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"evalexpr", text) ){	//	
-  out = maketoken( t_evalexpr ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"eval", text) ){	//	
-  out = maketoken( t_eval ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"_prompt", text) ){	//	
-  out = maketoken( t_prompt ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"_error_line", text) ){	//	
-  out = maketoken( t_error_line ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"_error_column", text) ){	//	
-  out = maketoken( t_error_column ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"_error_number", text) ){	//	
-  out = maketoken( t_error_number ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"_error_file", text) ){	//	
-  out = maketoken( t_error_file ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"_error_message", text) ){	//	
-  out = maketoken( t_error_message ); goto gettoken_normalout;
  }
 
  #ifdef enable_graphics_extension 
@@ -1949,137 +2184,6 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  // ============================================================================================
  #endif
 
- // ========= maths ==========
- if( wordmatch_plus_whitespace( pos,"tanh", text) ){	//	
-  out = maketoken( t_tanh ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"tan", text) ){	//	
-  out = maketoken( t_tan ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"atan2", text) ){	//	
-  out = maketoken( t_atan2 ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"atan", text) ){	//	
-  out = maketoken( t_atan ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"acos", text) ){	//	
-  out = maketoken( t_acos ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"cosh", text) ){	//	
-  out = maketoken( t_cosh ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"cos", text) ){	//	
-  out = maketoken( t_cos ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"asin", text) ){	//	
-  out = maketoken( t_asin ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"sinh", text) ){	//	
-  out = maketoken( t_sinh ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"sin", text) ){	//	
-  out = maketoken( t_sin ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"exp", text) ){	//	
-  out = maketoken( t_exp ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"log10", text) ){	//	
-  out = maketoken( t_log10 ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"log2", text) ){	//	
-  out = maketoken( t_log2 ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"log", text) ){	//	
-  out = maketoken( t_log ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"pow", text) ){	//	
-  out = maketoken( t_pow ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"sqr", text) ){	//	
-  out = maketoken( t_sqr ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"ceil", text) ){	//	
-  out = maketoken( t_ceil ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"floor", text) ){	//	
-  out = maketoken( t_floor ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"fmod", text) ){	//	
-  out = maketoken( t_fmod ); goto gettoken_normalout;
- }
- // ========= end of maths ========
-
- // ========= file related keywords ==========
- if( wordmatch_plus_whitespace( pos,"openin", text) ){	//	
-  out = maketoken( t_openin ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"openout", text) ){	//	
-  out = maketoken( t_openout ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"openup", text) ){	//	
-  out = maketoken( t_openup ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"eof", text) ){	//	
-  out = maketoken( t_eof ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"bget", text) ){	//	
-  out = maketoken( t_bget ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"vget", text) ){	//	
-  out = maketoken( t_vget ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"ptr", text) ){	//	
-  out = maketoken( t_ptr ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"ext", text) ){	//	
-  out = maketoken( t_ext ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"sget", text) ){	//	
-  out = maketoken( t_sget ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"sptr", text) ){	//	
-  out = maketoken( t_sptr ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"bput", text) ){	//	
-  out = maketoken( t_bput ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"vput", text) ){	//	
-  out = maketoken( t_vput ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"sput", text) ){	//	
-  out = maketoken( t_sput ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"close", text) ){	//	
-  out = maketoken( t_close ); goto gettoken_normalout;
- }
- // ====== end of file related keywords ======
-
- if( wordmatch_plus_whitespace( pos,"caseof", text) ){	//	
-  out = maketoken( t_caseof ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"when", text) ){	//	
-  out = maketoken( t_when ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"otherwise", text) ){	//	
-  out = maketoken( t_otherwise ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"endcase", text) ){	//	
-  out = maketoken( t_endcase ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"quit", text) ){	//	
-  out = maketoken( t_quit ); goto gettoken_normalout;
- }
-
- if( wordmatch_plus_whitespace( pos,"increment", text) ){	//	
-  out = maketoken( t_increment ); goto gettoken_normalout;
- }
- if( wordmatch_plus_whitespace( pos,"decrement", text) ){	//	
-  out = maketoken( t_decrement ); goto gettoken_normalout;
- }
-
  // ----------------------------------------------
  // ------- IDENTIFIER ---------------------------
  // ----------------------------------------------
@@ -2135,9 +2239,12 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  return maketoken( t_bad );
 
  gettoken_normalout:
+ #if 0
+ if(!test_run) fprintf( stderr, "reached gettoken_normal out with %s\n",tokenstring( out) );
+ #endif
  while( text[*pos] && isspace(text[*pos]) ){
   *pos+=1;
-  _gettoken_skippastcomments(pos,text);
+  _gettoken_skippastcomments(prog,pos,text);
  }
 
  // -------- replacements by extensions ----------
@@ -2180,6 +2287,7 @@ get_line_end_array(unsigned char *text){
   p++;
  }
  out[linep]=(int)(p-text);
+ //fprintf(stderr, "help %d, %d\n",nlines, linep);
  return out; 
 }
 
@@ -2192,7 +2300,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 gettokens(program *prog, token *tokens_return, int len, unsigned char *text, unsigned char *name_of_source_file ){
  stringslist *progstrings = prog->program_strings;
  int *line_end_array=NULL; TTP *TextPosses = NULL; int linep=0;
- if(tokens_return){
+ if(tokens_return && name_of_source_file && progstrings && progstrings->string){
   //tb();
   line_end_array = get_line_end_array(text);
   TextPosses = (TTP*)progstrings->string;
@@ -2223,7 +2331,7 @@ gettokens(program *prog, token *tokens_return, int len, unsigned char *text, uns
   t = gettoken(prog,!tokens_return,&pos,text); if(tokens_return)tokens_return[count]=t;
   count +=1;
  }
- if(line_end_array) free( (line_end_array-1) );
+ if(line_end_array) { free( (line_end_array-1) ); }
  if(TextPosses){ // update and trim the TTP array
   if( ttp_lastindex ){
    TextPosses->lastindex = ttp_lastindex + count;
@@ -2262,6 +2370,9 @@ tokenise(program *prog, char *text, int *length_return, char *name_of_source_fil
  }
  gettokens(prog,out,len,text,name_of_source_file_permanent_address);
  if(length_return)*length_return = count;
+ #ifdef enable_debugger
+ dbg__add_tokens(prog, text);
+ #endif
  return out;
 }
 
@@ -2287,12 +2398,13 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 get_sourcetext_location_info( program *prog, int token_p,  int *line, int *column, char **file){
  if( prog->program_strings->string == NULL || ( token_p<0 || token_p>=prog->length )  ){
+  get_sourcetext_location_info_failure:
   *line = -1;
   *column = -1;
   *file = "[unspecified]";
   return;
  }
- TTP *ttp = (TTP*)prog->program_strings->string;
+ TTP *ttp = (TTP*)prog->program_strings->string; if( token_p >= ttp->lastindex ){ goto get_sourcetext_location_info_failure; }
  *line = ttp[token_p].line;
  *column = ttp[token_p].column;
  *file = ttp[token_p].file == NULL ? "[unspecified]" : ttp[token_p].file;
@@ -2307,8 +2419,8 @@ print_sourcetext_location( program *prog, int token_p){
  if( prog->program_strings->string == NULL ) return;
  TTP *ttp = (TTP*)prog->program_strings->string;
  //fprintf(stderr,"hmm, ttp==%p\n",ttp); printf("ttp->arraysize==%d, ttp->lastindex==%d\n",ttp->arraysize,ttp->lastindex); //test
- if( token_p<0 || token_p>=prog->length ){
-  fprintf(stderr, "print_sourcetext_location: token_p out of range\n");
+ if( token_p<0 || token_p>=prog->length || token_p>=ttp->lastindex ){
+  //fprintf(stderr, "print_sourcetext_location: token_p out of range\n");
  }else{
   fprintf(stderr, ":::: At line %d, column %d, in file '%s' ::::\n", ttp[token_p].line, ttp[token_p].column, ttp[token_p].file == NULL ? "null" : ttp[token_p].file );
  }
@@ -2425,7 +2537,7 @@ tokenstring(token t){
 
  case t_error_line:	return "_error_line";
  case t_error_column:	return "_error_column";
- case t_error_number:	return "_error_number";
+ //case t_error_number:	return "_error_number";
  case t_error_file:	return "_error_file";
  case t_error_message:	return "_error_message";
 
@@ -2590,6 +2702,7 @@ tokenstring(token t){
 }
 // end of tokenstring
 
+/*
 void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
@@ -2601,6 +2714,7 @@ detokenise(program *prog, int mark_position){
   printf( (prog->tokens[i].type==t_endstatement || prog->tokens[i].type==t_label) ? "%s\n":"%s ", tokenstring( prog->tokens[i] ) );
  }
 }
+*/
 
 // ----------------------------------------------------------------------------------------------------------------
 // -------------------- STRING HANDLING ---------------------------------------------------------------------------
@@ -2715,11 +2829,14 @@ getstringvalue( program *prog, int *pos ){
  // check if there's a string accumulator for this level & if not, prepare one 
  if(level >= prog->max_string_accumulator_levels){
   prog->string_accumulator = realloc((void*)prog->string_accumulator, sizeof(void*)*(prog->max_string_accumulator_levels+1));
-  prog->string_accumulator[prog->max_string_accumulator_levels] = newstringvar(DEFAULT_NEW_STRINGVAR_BUFSIZE);
+  prog->string_accumulator[prog->max_string_accumulator_levels] = newstringvar();
   prog->max_string_accumulator_levels += 1;
  }
  stringvar *accumulator = prog->string_accumulator[level];
  token t;
+ #ifdef enable_debugger
+ dbg__tick_getstringvalue(prog, *pos);
+ #endif
  getstringvalue_start:
  t = prog->tokens[ *pos ]; *pos += 1;
  switch( t.type ){
@@ -2987,14 +3104,29 @@ stringvar*
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-create_new_stringvar(program *prog,int bufsize){
- if( bufsize <= 0 ) error(prog, -1, "create_new_stringvar: requested buffer size is less than or equal to 0");
+create_new_stringvar(program *prog){
  int svnum = prog->max_stringvars;
  prog->stringvars = realloc(prog->stringvars, sizeof(void*)*(svnum+1));
- prog->stringvars[svnum] = newstringvar(bufsize);
+ prog->stringvars[svnum] = newstringvar();
  prog->stringvars[svnum]->string_variable_number = svnum; // used by 'getref'
  prog->max_stringvars += 1;
  return prog->stringvars[svnum];
+}
+
+stringvar*
+#ifndef DISABLE_ALIGN_STUFF
+__attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
+#endif
+__attribute__((noinline))
+obtain_new_stringvar(program *prog){
+ for( int i=0; i<prog->max_stringvars; i++ ){
+  if(prog->stringvars[i]->unclaimed){
+   prog->stringvars[i]->unclaimed = 0;
+   prog->stringvars[i]->len=0;
+   return prog->stringvars[i];
+  }
+ }
+ return create_new_stringvar(prog);
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -3035,6 +3167,9 @@ error(program *prog, int p, char *format, ...){
   longjmp(*prog->error_handler, 1);
  }
  // ------ default error response --------
+ #ifdef enable_debugger
+ dbg__quit( prog, p, reason_errored );
+ #endif
  if( p > -1 ){
   print_sourcetext_location( prog, p );
  }
@@ -3121,6 +3256,9 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 getvalue(int *p, program *prog){
  token t;
  getvalue_start:
+ #ifdef enable_debugger
+ dbg__tick_getvalue(prog, *p);
+ #endif
  t = prog->tokens[*p]; *p += 1;
  switch( t.type ){
  case t_number:
@@ -3486,30 +3624,9 @@ getvalue(int *p, program *prog){
  case t_SS:
  {
   int i;
-  int stringgiven=0;
-//  stringvar *svr = (stringvar*)t.data.pointer;
-//  copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, &p) );
-  stringvar *svr = NULL;
-  for( i = prog->max_stringvars-1; i>=0; i-- ){
-
-   if( prog->stringvars[i]->unclaimed ){ 
-    prog->stringvars[i]->unclaimed = 0;
-    svr = prog->stringvars[i];
-    break;
-   }
-  }
-  if( svr == NULL ){
-   svr = create_new_stringvar(prog,DEFAULT_NEW_STRINGVAR_BUFSIZE);
-  }
-  if( isvalue( prog->tokens[*p].type ) && isstringvalue( prog->tokens[*p].type ) ){
-   stringgiven = determine_valueorstringvalue(prog, *p, 1);
-  }else{
-   stringgiven = isstringvalue( prog->tokens[*p].type );
-  }
-  if( stringgiven ){
+  stringvar *svr = obtain_new_stringvar(prog);
+  if( determine_valueorstringvalue(prog, *p, 0) == determined_stringvalue ){
    copy_stringval_to_stringvar(prog, svr, getstringvalue(prog, p) );
-  }else{
-   svr->len = 0;
   }
   return svr->string_variable_number;
  }
@@ -3676,7 +3793,7 @@ getvalue(int *p, program *prog){
     // move p back so the current token is the string constant
     *p-=1;
     // create new string variable and copy the string constant to it
-    stringvar *referred_string_constant = create_new_stringvar(prog,DEFAULT_NEW_STRINGVAR_BUFSIZE);
+    stringvar *referred_string_constant = obtain_new_stringvar(prog);
     copy_stringval_to_stringvar(prog, referred_string_constant, getstringvalue(prog, p) );
     // replace the getref token with a referredstringconst
     prog->tokens[*p-2].type = t_referredstringconst;
@@ -3824,7 +3941,7 @@ getvalue(int *p, program *prog){
  #endif
  case t_error_line:	return prog->_error_line;
  case t_error_column:	return prog->_error_column;
- case t_error_number:	return prog->_error_number;
+ //case t_error_number:	return prog->_error_number;
  // =======================================================================
  // ======= EVAL ==========================================================
  // =======================================================================
@@ -3989,36 +4106,55 @@ int
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 __attribute__ ((noinline))
-interpreter_eval( program *prog, int action, void *return_value, unsigned char *text ){
+interpreter_eval( program *prog, int action, void *return_value, unsigned char *text ){ //fprintf(stderr, "prog->maxlen	%d	%d\n",prog->maxlen,prog->length);
+ int setjmp_retval; int tokens_length; int starting_p;
  // . save some existing data to be restored later
  stringslist *tail = stringslist_gettail( prog->program_strings );
- TTP hold_ttp = *(TTP*)prog->program_strings->string;
- // . get program text string
- // . process it
- token *tokens; int tokens_length; 
- tokens = tokenise(prog,text,&tokens_length,"[eval string]");
- //  make space for new tokens if necessary
- if( prog->maxlen < prog->length + tokens_length + 1 ){
-  prog->tokens = realloc( prog->tokens, (prog->length + tokens_length + 2)*sizeof(token) );
-  prog->maxlen += tokens_length+1;
-  if( ! prog->tokens ){ // if realloc failed, fatal error
-   fprintf(stderr, "eval: fatal error: realloc failed when making space for new tokens\n");
-   exit(1);
-  }
- }
- // append tokens
- int starting_p = prog->length+1;
- memcpy( prog->tokens + prog->length+1, tokens, sizeof(token) * tokens_length );
- prog->length += tokens_length+1;
- prog->tokens[prog->length].type = t_nul;
- // finished with this now
- free( tokens );
+ //TTP hold_ttp = *(TTP*)prog->program_strings->string;
+ saved_interpreter_state state; interpreter_save_state( prog, &state );
+ int hold_length = prog->length;
  // prepare error handler
- saved_interpreter_state state;
- interpreter_save_state( prog, &state );
  prog->error_handler = malloc(sizeof(jmp_buf));
- int setjmp_retval = setjmp( *prog->error_handler );
- // execute interpreter
+ // catch errors
+ setjmp_retval = setjmp( *prog->error_handler );
+ // here: ---------------------------------------------------------------------------------
+ //  . get program text string
+ //  . process it
+ //  . append tokens
+ if( ! setjmp_retval ){
+  size_t len = strlen( text );
+  tokens_length = gettokens(prog,NULL,len,text,NULL);
+  //fprintf(stderr, "s.... %d, %d		%d\n",prog->length,tokens_length,prog->maxlen);
+  // handle the scenario where no tokens are generated
+  if( !tokens_length ){
+   goto text_processing_error_exit;
+  }
+  // make space for new tokens if necessary
+  if( prog->maxlen < prog->length + tokens_length + 2  ){
+   prog->maxlen += tokens_length+2;
+   prog->tokens = realloc( prog->tokens, prog->maxlen*sizeof(token) );
+   if( ! prog->tokens ){ // if realloc failed, fatal error
+    fprintf(stderr, "eval: fatal error: realloc failed when making space for new tokens\n");
+    exit(1);
+   }
+  }
+  // append tokens
+  starting_p = prog->length+1;
+  gettokens(prog,prog->tokens + (prog->length+1),len,text,NULL);
+  prog->length += tokens_length+1;
+  prog->tokens[prog->length].type = t_nul;
+  // cement
+  #ifdef enable_debugger
+  dbg__add_tokens(prog, text);
+  #endif
+ }else{
+  // there was a problem when processing the text...
+  goto text_processing_error_exit;
+ }
+ // here: ---------------------------------------------------------------------------------
+ //  . execute interpreter
+ // catch errors
+ setjmp_retval = setjmp( *prog->error_handler );
  if( ! setjmp_retval ){
   switch( action ){
    case eval_interpreter: {
@@ -4037,16 +4173,24 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
    } break;
   }
  }
+ // here: ---------------------------------------------------------------------------------
+ //  . clean up and return
+ // restore program original length
+ prog->length = hold_length;
+ #ifdef enable_debugger
+ dbg__remove_tokens(prog);
+ #endif
+ // exit from here if there was a text processing error...
+ text_processing_error_exit:
  // free error handler
  free( prog->error_handler );
+ // restore state
  interpreter_load_state( prog, &state );
- // restore program original length and do some tidying
- prog->length -= tokens_length+1;
  // free program strings created for this eval
  free_stringslist( tail->next );
  tail->next = NULL;
- // restore previous TTP state
- *(TTP*)prog->program_strings->string = hold_ttp;
+ // restore TTP state
+ //*(TTP*)prog->program_strings->string = hold_ttp;
  // the return value is whether or not there was an error
  return setjmp_retval;
 }
@@ -4059,9 +4203,21 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
  #include "help.c"
 #endif
 
+
+// regrettably, I can't find a nice way of avoiding the use of global variables for this part of the interpreter
+int prompt__len;
+program *prompt__prog;
+void prompt_sigint_handler(int signum){
+ fprintf(stderr, "Ctrl+C pressed (SIGINT)\n");
+ for(int i=prompt__len; i<=prompt__prog->length; i++){
+  prompt__prog->tokens[i].type=t_nul;
+ }
+}
+
 void
 __attribute__ ((noinline))
 interactive_prompt(program *prog){
+ prompt__prog = prog;
  fprintf(stderr, "Johnsonscript prompt\n");
  fprintf(stderr, " Type 'calc mode' for expression evaluator mode,\n");
  fprintf(stderr, " 'string mode' for string expression evaluator mode,\n");
@@ -4073,13 +4229,7 @@ interactive_prompt(program *prog){
  const int bufsize = 1024*1024;
  char *buf = calloc(1,bufsize+1);
  int mode = eval_interpreter;
- int len = prog->length;
- void prompt_sigint_handler(int signum){
-  fprintf(stderr, "Ctrl+C pressed (SIGINT)\n");
-  for(int i=len; i<=prog->length; i++){
-   prog->tokens[i].type=t_nul;
-  }
- }
+ int len = prog->length; prompt__len = len;
  while(1){
   signal(SIGINT, SIG_DFL); // restore default behaviour so that Ctrl+C quits
   printf("> ");
@@ -4506,7 +4656,7 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
  // ---- TO ---------
  *toVal = for_processParam( &thisfor->toValIsConstant, &thisfor->toValExpressionP, &thisfor->toVal );
  // ---- STEP -------
- if( determine_valueorstringvalue( prog, p, 0 ) == -1 &&  prog->tokens[p].type != t_endstatement ){
+ if( determine_valueorstringvalue( prog, p, 0 ) == determined_neither &&  prog->tokens[p].type != t_endstatement ){
   error( prog, p, "for parameters list must be terminated with ';'" );
  }
  if( prog->tokens[p].type == t_endstatement ){
@@ -4628,6 +4778,9 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 interpreter(int p, program *prog){
  token t;
  interpreter_start:
+ #ifdef enable_debugger
+ dbg__tick_interpreter(prog, p);
+ #endif
  t = prog->tokens[p];
  switch( t.type ){
  case t_return:
@@ -5102,6 +5255,7 @@ interpreter(int p, program *prog){
                           prog->ids, make_id( (char*)prog->tokens[p].data.pointer, maketoken_Df( prog->vars + allocate_variable_data(prog, 1) ) ) );
    p+=1;
   }
+  p+=1;
   break;
  }
  case t_const: // create a constant
@@ -5122,22 +5276,15 @@ interpreter(int p, program *prog){
   size_t bufsize; token idt;
   p+=1;
   t_stringvar_start:
-  bufsize = DEFAULT_NEW_STRINGVAR_BUFSIZE;
   // get id for new string variable
   idt = prog->tokens[p]; 
   if( idt.type != t_id ){
    error(prog, p, "bad 'stringvar' command or missing ';'");
   }
   p+=1;
-  // ------- DISABLED: obsolete feature that was never used -------
-  // if the optional bufsize parameter is present, then get it
-  //if( prog->tokens[p].type!=t_id && isvalue( prog->tokens[p].type ) ){
-  // bufsize = getvalue(&p,prog);
-  //}
-  // --------------------------------------------------------------
   // create id for new string variable
   add_id__error_if_fail( prog, p, "the id for this stringvar is already used",
-          prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( create_new_stringvar(prog,bufsize) ) ) );
+          prog->ids, make_id( (char*)idt.data.pointer, maketoken_Sf( obtain_new_stringvar(prog) ) ) );
   if( prog->tokens[p].type != t_endstatement ) goto t_stringvar_start;
   p+=1;
   break;
@@ -5189,7 +5336,7 @@ interpreter(int p, program *prog){
    }
    memcpy( appendTo->string + appendTo->len, appendString.string, len);
    appendTo->len += len;
-  }while( determine_valueorstringvalue(prog, p, 0) == 1 );
+  }while( determine_valueorstringvalue(prog, p, 0) == determined_stringvalue );
   break;
  }
  // ========================================================
@@ -5400,6 +5547,9 @@ interpreter(int p, program *prog){
  // ========================================================
  case t_quit:
   {
+   #ifdef enable_debugger
+   dbg__quit(prog, p, reason_quitted);
+   #endif
    p+=1;
    #ifdef enable_graphics_extension
    if(newbase_is_running){
@@ -5632,6 +5782,11 @@ interpreter(int p, program *prog){
  case t_tb: tb(); p+=1; break;
 #endif
  case t_nul: {
+  #ifdef enable_debugger
+  if( prog->current_function == &prog->initial_function && ! prog->error_handler ){
+   dbg__quit(prog, p, reason_ended);
+  }
+  #endif
   /*
   if( prog->current_function != &prog->initial_function ){
    error(prog,-1,"unexpected end of program");
@@ -5661,7 +5816,7 @@ sl_c__parse_argc_argv(program *prg, int argc, char **argv){
                         prg->ids, make_id( "_argc", maketoken_num( argc-2 ) ) );
  int i;
  for(i=2; i<argc; i++){
-  copy_stringval_to_stringvar( prg,  create_new_stringvar(prg,strlen( argv[i] ) ), (stringval) { argv[i], strlen(argv[i]) } );
+  copy_stringval_to_stringvar( prg,  create_new_stringvar(prg), (stringval) { argv[i], strlen(argv[i]) } );
  }
 
  char errormessage[] = "main: failed to create _argv0 constant, this should never happen\n";
@@ -5671,7 +5826,7 @@ sl_c__parse_argc_argv(program *prg, int argc, char **argv){
   errormessage[28]='0'+i;
   char *varname_permanent_address = calloc(8,sizeof(char));
   strcpy(varname_permanent_address, varname);
-  stringvar *svr = create_new_stringvar(prg,256);
+  stringvar *svr = create_new_stringvar(prg);
   copy_stringval_to_stringvar( prg, svr, (stringval) { argv[i], strlen(argv[i])} );
   add_id__error_if_fail( prg, -1, errormessage,
                          prg->ids, make_id( varname_permanent_address, maketoken_Sf( svr ) ) );
@@ -5735,6 +5890,9 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
  unloadprog(prg);
 #if main_printstuff
  printf("ended\n");
+#endif
+#ifdef enable_debugger
+ interactive_prompt(prg);
 #endif
  quit_cleanup(prg);
  return (int)result;
