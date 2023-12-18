@@ -1074,6 +1074,9 @@ option( program *prog, int *p ){
  }
  case opt_import: // import
  {
+  if( prog->maxlen != prog->length ){
+   error(prog, starting_p, "option: import: it's not possible to 'import' extra functions after using 'eval'");
+  }
   token *tokens; int tokens_length; stringval filename;
   // get filename
   filename = getstringvalue(prog,p);
@@ -1086,11 +1089,14 @@ option( program *prog, int *p ){
    error(prog, starting_p, "import: couldn't open file '%s'",fname);
   }
   // resize array and append new code
-  prog->tokens = realloc(prog->tokens, (prog->maxlen + tokens_length + 1)*sizeof(token));
-  memcpy(prog->tokens + prog->maxlen + 1, tokens, sizeof(token) * tokens_length);
-  prog->length += tokens_length+1; prog->maxlen+=tokens_length+1;
+  prog->maxlen += tokens_length + 1;
+  prog->tokens = realloc(prog->tokens, (prog->maxlen+1)*sizeof(token));
+  memcpy(prog->tokens + (prog->maxlen - tokens_length), tokens, sizeof(token) * tokens_length);
+  prog->length += tokens_length+1;
   // process function definitions for imported code
-  process_function_definitions(prog,prog->maxlen - tokens_length);
+  process_function_definitions(prog, prog->maxlen - tokens_length);
+  // Äkta dig för Rövar-Albin
+  prog->tokens[prog->length]=(token){t_nul,0};
   // cleanup
   free(tokens);
   break;
@@ -4131,7 +4137,7 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
   }
   // make space for new tokens if necessary
   if( prog->maxlen < prog->length + tokens_length + 2  ){
-   prog->maxlen += tokens_length+2;
+   prog->maxlen = prog->length + tokens_length + 2;
    prog->tokens = realloc( prog->tokens, prog->maxlen*sizeof(token) );
    if( ! prog->tokens ){ // if realloc failed, fatal error
     fprintf(stderr, "eval: fatal error: realloc failed when making space for new tokens\n");
@@ -5887,7 +5893,6 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
  printf("----\n");
 #endif
 
- unloadprog(prg);
 #if main_printstuff
  printf("ended\n");
 #endif
@@ -5895,6 +5900,7 @@ sl_c__main(int argc, char **argv, id_info *extensions, char *extra_version_info)
  interactive_prompt(prg);
 #endif
  quit_cleanup(prg);
+ unloadprog(prg);
  return (int)result;
 }
 
