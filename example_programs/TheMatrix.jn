@@ -1,0 +1,69 @@
+
+# Recreation of the effect from the 1999 science fiction action film "The Matrix"
+
+startgraphics 640 512
+
+stringvar columns;
+variable x scrheight;
+
+while 1
+ set scrheight ceil / winh 16
+ set x 0
+ while < x >> winw 4
+  if = x vlen$ columns
+   append$ columns  vector$ newColumn
+  endif
+  column (V columns x) x
+  increment x
+ endwhile
+ wait 16.6
+endwhile
+
+function newColumn;
+return S vector$ rnd scrheight rnd scrheight rnd scrheight
+
+function movePoint p limit;
+ if  ||  < rnd 10 4  = Dp - limit 1
+  endfunction
+ endif
+ set Dp % (+ Dp 1) scrheight
+return 1
+ 
+function cell x y action;
+ caseof action;
+  when 0;
+   rectanglef << x 4 << y 4 16
+  when 1;
+   drawtext << x 4 << y 4 3 chr$ + 65 rnd 61
+ endcase
+endfunction 
+
+function column v x local erasePoint dimPoint writePoint oldWritePoint;
+ set erasePoint V$v 0
+ set dimPoint V$v 1
+ set writePoint V$v 2
+
+ set oldWritePoint writePoint
+ if movePoint @writePoint erasePoint
+  drawmode 1
+  gcol 0xff00;
+  cell x oldWritePoint 0
+  drawmode 15
+  cell x writePoint 1
+ endif
+  
+ if movePoint @dimPoint writePoint
+  drawmode 1
+  gcol 0x7f00;
+  cell x dimPoint 0
+ endif
+
+ if movePoint @erasePoint dimPoint
+  drawmode 0
+  cell x erasePoint 0
+ endif
+
+ set V$v 0 erasePoint
+ set V$v 1 dimPoint
+ set V$v 2 writePoint
+endfunction
