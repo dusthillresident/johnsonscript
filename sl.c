@@ -2443,6 +2443,7 @@ __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 tokenstring(token t){
  switch(t.type){
  //case 0 : return "NUL";
+ case t_nul: return "(end of program body)";
  case t_plus:		return "+";
  case t_minus:		return "-";
  case t_slash:		return "/";
@@ -3014,6 +3015,7 @@ getstringvalue( program *prog, int *pos ){
  }
  case t_vectorS:
  {
+  prog->getstringvalue_level += 1;
   double *vectorp = (double*)accumulator->string;
   accumulator->len = 8;
   *vectorp++ = getvalue(pos, prog);
@@ -3029,6 +3031,7 @@ getstringvalue( program *prog, int *pos ){
   stringval out;
   out.len=accumulator->len;
   out.string=accumulator->string;
+  prog->getstringvalue_level -= 1;
   return out;
  }
  case t_evalS:
@@ -4514,7 +4517,7 @@ expressionIsSimple(program *prog, int p){
   case t_leftb:  parenLevel++; break;
   case t_rightb: parenLevel--; break;
   case t_D: case t_A: case t_L: case t_P: case t_F: case t_Ff: case t_Df: case t_SS: case t_Af: case t_stackaccess: case t_getref: case t_S: case t_Sf: case t_C: case t_V:
-  case t_ascS: case t_valS: case t_lenS: case t_cmpS: case t_instrS: case t_rnd: case t_alloc:
+  case t_ascS: case t_valS: case t_lenS: case t_vlenS: case t_cmpS: case t_instrS: case t_rnd: case t_alloc:
   case t_openin: case t_openout: case t_openup: case t_eof: case t_bget: case t_vget: case t_ptr: case t_ext:
   case t_extfun:
   case t_evalexpr: case t_eval: case t_equalS:
