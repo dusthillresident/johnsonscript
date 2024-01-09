@@ -1,15 +1,15 @@
 
-option "vsize" 2148;
+option "vsize" 2648;
 option "ssize" 2048;
 
 startgraphics 360 349; option "wintitle" "Pentomino puzzle solver"; refreshmode 1
 guiinit;
 
 constant max_pieces * 8 32;
-variable pieces isinuse num_pieces board ww hh wwm1 hhm1 bspaces board_end;
+variable pieces isinuse xplacementoffsets alreadytried num_pieces board ww hh wwm1 hhm1 bspaces board_end;
 set pieces alloc max_pieces;
 set isinuse alloc int / max_pieces 8;
-variable alreadytried;
+set xplacementoffsets alloc max_pieces;
 set alreadytried alloc max_pieces;
 
 variable
@@ -33,6 +33,7 @@ __addpiece @"Q";
 __addpiece @"S";
 __addpiece @"|";
 symmetry_check;
+calculate_x_placement_offsets;
 
 variable www hhh opx opy animate currentstylenum stylenames paused cancel solutions maxspaces pauseforsol; set pauseforsol 1;
 set opx -1 set opy -1;
@@ -40,7 +41,8 @@ set maxspaces * 5 12;
 set www getw board
 set hhh geth board
 
-set stylenames alloc 6
+constant num_styles 6
+set stylenames alloc num_styles
 set Astylenames(0) @"Style: 3D   "
 set Astylenames(1) @"Style: Flat "
 set Astylenames(2) @"Style: Round"
@@ -55,7 +57,7 @@ while 1
  drawtext 25 25 1 "Please wait" refresh
  cls
  _controlbox
- newsolve 1
+ newsolve 1 0
  set gui_reqrd 1
  if ! cancel
   .solmessage
@@ -64,7 +66,7 @@ while 1
     gcol gui_fg
     drawtext gui_pad gui_pad 0 cat$ str$ solutions " solutions found"
    endif
-  if ! button gui_pad (+gui_pad 16 gui_pad) @"thanks"; goto ".solmessage" endif
+  if ! button gui_pad (+gui_pad 16 gui_pad) @"Return"; goto ".solmessage" endif
  endif
  set cancel 0
  set solutions 0
@@ -182,20 +184,6 @@ function ispossible local x y p i chk v ;
  _isstupid_clr
 return 1
 
-function firstempty_yl_xl fe yl xl local x y pp;
- for y 0 - hh 1;
-  for x 0 - ww 1;
-   set pp + b2 x * y ww
-   if ! D pp
-    set Dfe pp
-    set Dyl y
-    set Dxl x
-    endfunction
-   endif
-  endfor
- endfor
-endfunction
-
 function min a b;
 if > a b return b endif
 return a
@@ -203,54 +191,59 @@ function max a b;
 if < a b return b endif
 return a
 
-function newsolve piecenum local i x y fe yl xl yL xL ; if cancel endfunction endif
- firstempty_yl_xl @fe @y @xl
- set xL - xl DApieces piecenum if < xL 0 set xL 0 endif
+function newsolve piecenum y local i x xp p; if cancel endfunction endif
+ #  find the first empty square
+ set p + b2 * ww y
+ for y y - hh 1;
+  for xp 0 - ww 1;
+   if ! D p
+    endloop 2
+   endif
+   increment p
+  endfor
+ endfor
+ #  see if we can fit one of the available pieces there
  for i 0 - num_pieces 1;
   if ! Aisinuse >> i 3
-   if ! A alreadytried i
-    # find availble place for this piece
-     for x xL xl;
+   if ! A alreadytried i 
 
-      if canput Apieces i x y i
-       put Apieces i x y piecenum
-       #put Apieces i x y + 1 >> i 3
-       set Aisinuse >> i 3 1
+    set x - xp A xplacementoffsets i
+    if < x 0 continue endif
+     
+    set p A pieces i
 
-       if ! D fe
-        goto ".skip"
+    if canput p x y i
+     #put p x y piecenum
+     put p x y + 1 >> i 3
+     set Aisinuse >> i 3 1
+
+     if ispossible
+
+      set bspaces - bspaces 5
+      if ! bspaces
+       if pauseforsol
+        set paused 1
        endif
+       set solutions + solutions 1
+       set gui_reqrd 1
+      endif
+      _controlbox 
+      if ! cancel newsolve (+ piecenum 1) y endif
 
-       if ispossible
-
-        set bspaces - bspaces 5
-        if ! bspaces
-         if pauseforsol
-          set paused 1
-         endif
-         set solutions + solutions 1
-         set gui_reqrd 1
-        endif
-        _controlbox 
-        if ! cancel newsolve + piecenum 1 endif
-
-        put Apieces i x y 0
-        set Aisinuse >> i 3 0
-        set bspaces + bspaces 5
+      put p x y 0
+      set Aisinuse >> i 3 0
+      set bspaces + bspaces 5
     
-        if cancel endfunction endif
+      if cancel endfunction endif
  
-        continue 2
+      continue 
 
-       endif
+     endif
 
-       .skip
-       put Apieces i x y 0
-       set Aisinuse >> i 3 0
+     put p x y 0
+     set Aisinuse >> i 3 0
 
-      endif #canput
-
-     endfor # x
+    endif #canput
   
    endif # alreadytried
   endif # isinuse
@@ -497,21 +490,16 @@ function _12cols c;
   when 8; return 0x8080ff
   when 9; return 0x80ff80
   when 10; return 0xdeef90
-  when 11; return 0xff8080
+  when 11; return 0xf05070
   when 12; return 0xffffff
  endcase
 return 0x404040
 
-function _mulcol c m;
- set c * (& c 255) m
- if > c 255 return 255 endif
- if < c 0 endfunction endif
-return c
 function mulcol c m;
 return  |
-_mulcol c m
-<< _mulcol (>> c 8) m 8
-<< _mulcol (>> c 16) m 16;
+(* m & 0xff c)
+<< (* m & 0xff >> c 8) 8
+<< (* m >> c 16) 16
 
 /*
  'borders' is a bitmask where the top/left/bottom/right sides are represented like this:
@@ -522,12 +510,10 @@ _mulcol c m
 
 function _dp_square_3d x y sc col borders local t_left t_right t_top t_bottom x1 x2 y1 y2 c1 c2 c3 c4;
 
- set col _12cols col
-
- set c1 mulcol col 1
- set c2 mulcol col 0.78
- set c3 mulcol col 0.525
- set c4 mulcol col 0.4
+ set c1 _12cols col
+ set c2 mulcol c1 0.78
+ set c3 mulcol c1 0.525
+ set c4 mulcol c1 0.4
 
  set t_left & borders 1
  set t_right & borders 4
@@ -538,6 +524,19 @@ function _dp_square_3d x y sc col borders local t_left t_right t_top t_bottom x1
  set x2 + x sc
  set y1 + y int * sc 0.5
  set y2 + y sc
+
+ if & borders 1
+  increment x
+ endif
+ if & borders 2
+  increment y
+ endif
+ if & borders 4
+  decrement x2
+ endif
+ if & borders 8
+  decrement y2
+ endif
 
  # top left, left
  if t_left
@@ -607,8 +606,6 @@ function _dp_square_flat x y sc col borders local t_left t_right t_top t_bottom;
  set t_top & borders 2
  set t_bottom & borders 8
 
- gcol 0
- rectangle x y - sc 1
  gcol (& _12cols col 0xf0f0f0)
  rectanglef (+ x !!t_left) (+ y !!t_top) (- sc !!t_left !!t_right) (- sc !!t_top !!t_bottom)
 
@@ -629,8 +626,6 @@ function _dp_square_round x y sc col borders local t_left t_right t_top t_bottom
   
  set c1 & _12cols col 0xf0f0f0
 
- gcol 0
- rectangle x y - sc 1
  gcol c1
  rectanglef (+ x !!t_left) (+ y !!t_top) (- sc !!t_left !!t_right) (- sc !!t_top !!t_bottom)
  
@@ -685,8 +680,6 @@ function _dp_square_neon x y sc col borders;
 endfunction
 
 function _dp_square_grid x y sc col borders;
- gcol 0
- rectanglef x y sc
  gcol _12cols col
  rectanglef (+ x 1) (+ y 1) - sc 2
 endfunction
@@ -735,24 +728,25 @@ caseof currentstylenum
  otherwise return _dp_square_plain a b c d e
 endcase
 
-function drawpiece piece sx sy sc border local x y w h c chr;
+function drawpiece piece sx sy sc border background local x y w h c;
  set w Dpiece
  set h Apiece 1
+ if background gcol 0 rectanglef sx sy (* sc w) (* sc h) endif
  for x 0 - w 1;
   for y 0 - h 1;
    if expose set gui_reqrd 1 endfunction endif
-   set chr D pindex piece x y
-   if > chr 0
-    stylefn (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
-     |
-     << ( !_dp_surrounds piece x y 0 1 ) 3 # underneath
-     << ( !_dp_surrounds piece x y  1  0 ) 2  # right
-     << ( !_dp_surrounds piece x y  0  -1 ) 1 # above
-          ! _dp_surrounds piece x y  -1  0   # left
-   else
-    gcol & 0x404040 neg < chr 0 
-    rectanglef (+ sx * sc x) (+ sy * sc y) sc
-   endif
+   caseof sgn D pindex piece x y
+    when 1;
+     stylefn (+ sx * sc x) (+ sy * sc y) sc D pindex piece x y
+      |
+      << ( !_dp_surrounds piece x y 0 1 ) 3 # underneath
+      << ( !_dp_surrounds piece x y  1  0 ) 2  # right
+      << ( !_dp_surrounds piece x y  0  -1 ) 1 # above
+           ! _dp_surrounds piece x y  -1  0   # left
+    when -1;
+     gcol 0x404040
+     rectanglef (+ sx * sc x) (+ sy * sc y) sc
+   endcase
   endfor
  endfor
  if border gcol gui_fg rectangle (- sx 1) (- sy 1) (+ 1 * sc w ) + 1 * sc h endif
@@ -763,7 +757,7 @@ function drawavailable x y sc local i;
  rectanglef x y (* sc 6 >> num_pieces 3) * sc 5;
  for i 0 (- num_pieces 1) 8;
   if !Aisinuse >> i 3
-   drawpiece Apieces i (+ x * >> i 3 sc 6 ) y sc 0
+   drawpiece Apieces i (+ x * >> i 3 sc 6 ) y sc 0 1
   endif
  endfor
 endfunction 
@@ -797,6 +791,21 @@ function pieceisthesame a b local l;
   set b + b 1
  endwhile
 return 1
+
+# ---------------------------------------------------------------------------------------
+
+function calculate_x_placement_offsets local i x w p;
+ for i 0 - num_pieces 1;
+  set p A pieces i
+  set w D p
+  for x 0 - w 1;
+   if A p + 2 x
+    set A xplacementoffsets i  x
+    continue 2
+   endif
+  endfor
+ endfor
+endfunction
 
 # ---------------------------------------------------------------------------------------
 
@@ -971,7 +980,7 @@ function __piece_switch x y n local w h;
    gcol >> (& gui_fg 0xfefefe) 1
   endif
   rectangle x y w h;
-  drawpiece Apieces(* n 8) (+x gui_pad) (+y gui_pad )  4 0
+  drawpiece Apieces(* n 8) (+x gui_pad) (+y gui_pad )  4 0 0
  endif
  if && ! gui_omb gui_mb
   if boxchk x y w h mousex mousey
@@ -985,7 +994,7 @@ endfunction
 
 function _options_screen_stylebutton x y;
  if button x y Astylenames(currentstylenum)
-  set currentstylenum % (+ currentstylenum 1) 6
+  set currentstylenum % (+ currentstylenum 1) num_styles
   set gui_reqrd 1
   return 1
  endif
@@ -1023,7 +1032,7 @@ function _options_screen local i squarer_x squarer_y squarer_sc;
   gui_tickbox (+ gui_pad gui_btnw 12 gui_pad 10) (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 ) @animate @"animate"
   gui_tickbox (+ gui_pad gui_btnw 12 gui_pad 100) (+ gui_pad gui_btnh gui_pad 40 gui_pad 8 ) @pauseforsol @"autopause"
   if && gui_redraw ! gui_reqrd;
-   drawpiece board squarer_x squarer_y squarer_sc 1
+   drawpiece board squarer_x squarer_y squarer_sc 1 1
   endif
 
   set i 0
@@ -1061,7 +1070,7 @@ function _controlbox local s;
 endfunction 
 
 function graphics_display;
- drawpiece board (+ 1 gui_pad) (+ 1 gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1
+ drawpiece board (+ 1 gui_pad) (+ 1 gui_pad gui_btnh gui_pad) int (min (/ (- winw gui_pad gui_pad) ww) (/(- winh gui_pad gui_btnh gui_pad gui_pad ) hh)) 1 1
  refresh
 endfunction
  
