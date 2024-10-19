@@ -55,6 +55,7 @@
 #define t_valS		COCKSPENIS	//	val$ [string]			NUM		return value of number in string
 #define t_lenS		COCKSPENIS	//	len$ [string]			NUM		return length of string
 #define t_vlenS		COCKSPENIS	//	vlen$ [string]			NUM		return length of string div 8, for use with vectors aka V (value access)
+#define t_ulenS		COCKSPENIS	//	ulen$ [string]			NUM		returns the length of a unicode string
 #define t_cmpS		COCKSPENIS	//	cmp$ [string] [string]		NUM		strcmp 
 #define t_instrS	COCKSPENIS	//	instr$ [stringa] [stringb]	NUM		return the position of stringb in stringa or -1 if not found
 #define t_equalS	COCKSPENIS	//	equal$ [stringa] [stringb]	NUM		1 if strings are the same

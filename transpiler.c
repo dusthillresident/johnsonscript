@@ -2563,11 +2563,12 @@ void translate_command(program *prog, int *p){
     prog->current_function = (func_info*)t.data.pointer; trans_fn = prog->current_function->function_number;
    } 
 
-   if(trans_fn == 0){
-    PrintMain("printf(\"\\nJOHNSONSCRIPT WARNING: Reached end of main(). This should not normally happen\\n\");\n}\n\n");
-   }else{
+   //if(trans_fn == 0){
+   // PrintMain("printf(\"\\nJOHNSONSCRIPT WARNING: Reached end of main(). This should not normally happen\\n\");\n}\n\n");
+   //}else{
     PrintMain("}\n\n");
-   }
+   //}
+
    PrintMain("double FN_%s(", (char*)prog->tokens[ *p ].data.pointer );
    *p += 1; // move past fn's ID
    if(CurTok.type == t_P || CurTok.type == t_L){

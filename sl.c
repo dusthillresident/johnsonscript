@@ -21,7 +21,7 @@
 
 #ifndef DISABLE_ALIGN_STUFF
  // this is for testing. I discovered that messing with __attribute__((aligned(x))) can make a difference to how fast things run
- #define ALIGN_ATTRIB_CONSTANT 16
+ #define ALIGN_ATTRIB_CONSTANT 8
 #endif
 
 // memory problem debugging stuff
@@ -131,7 +131,7 @@ stringvar* newstringvar(){
 struct stringslist;
 typedef struct stringslist stringslist;
 struct stringslist {
- char *string;
+ char *string;  int p;
  stringslist *next; // linked list
 };
 void free_stringslist(stringslist *s){
@@ -140,16 +140,36 @@ void free_stringslist(stringslist *s){
  if(s->string != NULL) free(s->string);
  free(s);
 }
-void stringslist_addstring(stringslist *s,char *string){
+void free_stringslist_from_p(stringslist *s, stringslist *prev, int from_p){
+ if(s == NULL) return;
+ if( s->p <= from_p ){
+  free_stringslist_from_p(s->next, s, from_p);
+ }else{
+  if(prev){ prev->next = s->next; }
+  if(s->next) free_stringslist_from_p( s->next, prev, from_p);
+  free(s->string);
+  free(s);
+ }
+}
+void stringslist_addstring_with_p(stringslist *s,char *string,int p){
  while(s->next) s=s->next;
  //fprintf(stderr, "stringslist_addstring: %s\n",string);
  s->next = calloc(1,sizeof(stringslist));
  s->next->string = string;
+ s->next->p = p;
 }
+void stringslist_addstring(stringslist *s,char *string){ stringslist_addstring_with_p(s,string,0); }
 stringslist* stringslist_gettail(stringslist *s){
  if( ! s ) return NULL;
  while( s->next ) s=s->next;
  return s;
+}
+int stringslist_list_length(stringslist *s){
+ int count = 0;
+ while( s->next ){
+  s = s->next;  count++;
+ }
+ return count;
 }
 #if 0
 void stringslist_debug_show_contents(stringslist *s){
@@ -255,10 +275,22 @@ int oscli(program *prog, int *p);
 int catch( program *prog, int *p, int action, double *returnValue, stringval *returnStringValue );
 void copy_stringval_to_stringvar(program *prog, stringvar *dest, stringval src);
 void process_catch(program *prog, int p);
-int interpreter_eval( program *prog,  int action, void *return_value, unsigned char *text );
-token gettoken(program *prog, int test_run, int *pos, unsigned char *text);
+int interpreter_eval( program *prog,  int action, void *return_value, stringval text );
+token gettoken(program *prog, int *p, int test_run, int *pos, unsigned char *text, int len);
 void interactive_prompt(program *prog);
 
+// -------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
+// MISC RUBBISH
+unsigned int 
+__attribute__((noinline))
+unicode_string_length( stringval sv ){
+ unsigned int length = 0;
+ for( size_t i=0; i < sv.len; i++){
+  if( sv.string[i] && (sv.string[i] & 0b11000000) != 0b10000000 ) length++;
+ }
+ return length;
+}
 // -------------------------------------------------------------------------------------------
 // -------------------------------------------------------------------------------------------
 #ifdef enable_debugger
@@ -334,13 +366,13 @@ get_free_fileslot(program *prog){
  prog->files[prog->max_files-1] = calloc(1,sizeof(file));
  return prog->max_files-1;
 }
-file* getfile(program *prog, int file_reference_number, int read, int write){
+file* getfile(program *prog, int p, int file_reference_number, int read, int write){
  int fileindex = file_reference_number - 1;
- if( fileindex<0 || fileindex>=prog->max_files ) error(prog, -1, "bad file access (filenumber out of range)");
+ if( fileindex<0 || fileindex>=prog->max_files ) error(prog, p, "bad file access (filenumber out of range)");
  file *out = prog->files[fileindex];
- if( ! out->open ) error(prog, -1, "bad file access (not open)");
- if( read  && ! out->read_access  ) error(prog, -1, "bad file access (not readable)");
- if( write && ! out->write_access ) error(prog, -1, "bad file access (not writable)");
+ if( ! out->open ) error(prog, p, "bad file access (not open)");
+ if( read  && ! out->read_access  ) error(prog, p, "bad file access (not readable)");
+ if( write && ! out->write_access ) error(prog, p, "bad file access (not writable)");
  return out;
 }
 // -------------------------------------------------------------------------------------------
@@ -648,14 +680,13 @@ allocate_variable_data(program *prog, int amount ){
 // ----------------------------------------------------------------------------------------------------------------
 
 id_info* find_id(id_info *ids, char *id_string){
- if(ids == NULL){
-  return NULL;
+ while( ids ){
+  if( ids->name && !strcmp(id_string, ids->name) ){
+   return ids; 
+  }
+  ids = ids->next;
  }
- if( ids->name && !strcmp(id_string, ids->name) ){
-  return ids; 
- }else{
-  return find_id(ids->next,id_string);
- }
+ return NULL;
 }
 
 int
@@ -1369,47 +1400,59 @@ void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-_gettoken_setstring(stringslist *progstrings, token *t, unsigned char *text, int l){
+_gettoken_setstring(stringslist *progstrings, program *prog, int *p, token *t, unsigned char *text, int l){
  //fprintf(stderr,"FUCK PENIS FUCK\n");
  // allocate memory for string and copy string to it
  t->data.pointer = calloc(l+1,sizeof(char));
  strncpy((char*)t->data.pointer, (char*)text, l);
  // keep track of this string so it can be freed later when the program is unloaded
- if(progstrings != NULL)stringslist_addstring(progstrings,(char*)t->data.pointer);
+ if(progstrings != NULL){
+  if( prog && p ){
+   //fprintf(stderr,"prog->length + *p == %d;	%d \n",prog->length + *p, prog->length);
+   stringslist_addstring_with_p(progstrings,(char*)t->data.pointer,prog->length + *p);
+  }else{
+   stringslist_addstring(progstrings,(char*)t->data.pointer);
+  }
+ }
 }
 void
 #ifndef DISABLE_ALIGN_STUFF
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
-_gettoken_skippastcomments(program *prog, int *pos, unsigned char *text){
+_gettoken_skippastcomments(program *prog, int *pos, unsigned char *text, int len){
  if( isspace(text[*pos]) ) return;
  // block comment
  if( text[*pos]=='/' && text[*pos+1]=='*' ){
   *pos += 2;		
   while( !(text[*pos] == '*' && text[*pos+1] == '/') ){
    *pos += 1;
-   if( !text[*pos] ) error(prog, -1, "missing */");
+   if( *pos >= len ) error(prog, -1, "missing */");
   }//endwhile
   *pos += 2;
  }//endif
  // line comment
  if( text[*pos]=='#' || (text[*pos]=='R' && wordmatch( pos,"REM", text)) ){	
-  while( text[*pos] && text[*pos]!=10 ){
+  while( *pos<len && text[*pos]!=10 ){
    *pos += 1;
   }//endwhile
  }//endif
 }//endproc
-token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
+
+// =========================
+// ==== GETTOKEN ===========
+// =========================
+
+token gettoken(program *prog, int *p, int test_run, int *pos, unsigned char *text, int len){
  // if it's a test run, the token will be discarded, so strings must not be allocated
  stringslist *progstrings = prog->program_strings;
 
  token out; out.type = t_nul;
 
  gettoken_start:
- _gettoken_skippastcomments(prog,pos,text);
+ _gettoken_skippastcomments(prog,pos,text,len);
  while( isspace(text[*pos]) ){
   *pos+=1;
-  _gettoken_skippastcomments(prog,pos,text);
+  _gettoken_skippastcomments(prog,pos,text,len);
  }
  //fprintf(stderr,"COCK ROCK %c\n",text[*pos]);
 
@@ -1442,7 +1485,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   if(l){
    // put here: allocate memory for identifier string and store it wherever
    out.type = t_label;
-   if(!test_run) _gettoken_setstring(progstrings, &out,text+*pos,l+1);
+   if(!test_run) _gettoken_setstring(progstrings, prog,p, &out,text+*pos,l+1);
    *pos += l+1;
    goto gettoken_normalout;
   }
@@ -1786,6 +1829,12 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   }
  }
 
+ if( text[*pos]=='u' ){ // == U =================================================================================
+  if( wordmatch( pos,"ulen$", text) ){	//	
+   out = maketoken( t_ulenS ); goto gettoken_normalout;
+  }
+ }
+
  if( text[*pos]=='v' ){ // == V =================================================================================
 
   if( wordmatch_plus_whitespace( pos,"variable", text) ){	//	
@@ -1979,6 +2028,9 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   if( wordmatch_plus_whitespace( pos,"_error_message", text) ){	//	
    out = maketoken( t_error_message ); goto gettoken_normalout;
   }
+  if( wordmatch_plus_whitespace( pos,"_STOP_TOKENISER", text) ){	//	control keyword that stops parsing text
+   *pos = len; goto gettoken_normalout;
+  }
  }
 
  if( text[*pos]=='t' ){ // == T =================================================================================
@@ -2029,7 +2081,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
  if( text[*pos]=='Q' && wordmatch(pos, "QUOTE(", text) ){
   int l=0; int level=1;
   while( level ){
-   if( !text[*pos] ) error( prog, -1, "QUOTE(): missing )" );
+   if( *pos>=len ) error( prog, -1, "QUOTE(): missing )" );
    if( text[*pos] == ')' ){
     level -= 1;
    }
@@ -2039,7 +2091,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
    *pos += 1; l += 1;
   }
   if(!test_run){
-   _gettoken_setstring(progstrings, &out,text+*pos-l,l-1);
+   _gettoken_setstring(progstrings, prog,p, &out,text+*pos-l,l-1);
   }
   out.type = t_stringconst;
   goto gettoken_normalout;
@@ -2054,16 +2106,17 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
    escaped = 0;
    switch( text[*pos] ){
    case '\\': escaped=1; backslash_used=1; break;
-   case 0: error(prog, -1, "missing \"");
+   //case 0: error(prog, -1, "missing \"");
    //case 10: error(prog, "missing \" on this line");
    }//endswitch
    l+=1;
    *pos += 1;
+   if( *pos>=len ) error(prog, -1, "missing \"");
   }//endwhile
   *pos += 1;
   out.type = t_stringconst;
   if(!test_run){
-   _gettoken_setstring(progstrings, &out,text+*pos-l-1,l);
+   _gettoken_setstring(progstrings, prog,p, &out,text+*pos-l-1,l);
    if( backslash_used ){
     char *str = out.data.pointer;
     for( int i=0; i<l; i++ ){
@@ -2201,7 +2254,7 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
    // put here: allocate memory for identifier string and store it wherever
    out.type = t_id;
    // ----
-   if(!test_run) _gettoken_setstring(progstrings, &out,text+*pos,l+1);
+   if(!test_run) _gettoken_setstring(progstrings, prog,p, &out,text+*pos,l+1);
    // here: we check the list of extensions, and if this id matches one of those, we change the token accordingly
    //fprintf(stderr,"fuck %p\n",prog->extensions);
    // ----
@@ -2217,40 +2270,27 @@ token gettoken(program *prog, int test_run, int *pos, unsigned char *text){
   //}
  }
 
-/*
- if( wordmatch( pos,"", text) ){	//	
-  out = maketoken( t_ ); goto gettoken_normalout;
- }
-*/
-
- //fprintf(stderr,"FUCK (%c) %d   pos %d\n",text[*pos],text[*pos], *pos);
-
-// fprintf(stderr,"*pos == %d: %d '%c'\n",*pos,text[*pos],text[*pos]);
-// if(text[*pos])goto gettoken_start;
-
  if( out.type != t_nul ) fprintf(stderr,"FUCK OFF!\n"); // this should never FUCKING happen
 
- if( !text[*pos] ){ out.type = t_nul; goto gettoken_normalout; }
+ if( !text[*pos] ){ *pos += 1; out.type = t_nul; goto gettoken_normalout; }
 
  gettoken_failout:
  if(prog) fprintf(stderr,"WARNING: garbage in input: \"");
- while( text[*pos] && !isspace(text[*pos]) ){
+ while( *pos<len && !isspace(text[*pos]) ){
   if(prog) fprintf(stderr,"%c",text[*pos]);
   *pos+=1;
  }
  if(prog) fprintf(stderr,"\"\n");
- while( text[*pos] && isspace(text[*pos]) ){
+ while( *pos<len && isspace(text[*pos]) ){
   *pos+=1;
  }
  return maketoken( t_bad );
 
  gettoken_normalout:
- #if 0
- if(!test_run) fprintf( stderr, "reached gettoken_normal out with %s\n",tokenstring( out) );
- #endif
- while( text[*pos] && isspace(text[*pos]) ){
+
+ while( *pos<len && isspace(text[*pos]) ){
   *pos+=1;
-  _gettoken_skippastcomments(prog,pos,text);
+  _gettoken_skippastcomments(prog,pos,text,len);
  }
 
  // -------- replacements by extensions ----------
@@ -2334,7 +2374,7 @@ gettokens(program *prog, token *tokens_return, int len, unsigned char *text, uns
   }
   //if(TextPosses){ tb(); printf("test this shit: line %d, col %d, '%s'\n",TextPosses[count].line,TextPosses[count].column,tokenstring(t)); }
   // the token itself
-  t = gettoken(prog,!tokens_return,&pos,text); if(tokens_return)tokens_return[count]=t;
+  t = gettoken(prog,&count,!tokens_return,&pos,text,len); if(tokens_return)tokens_return[count]=t;
   count +=1;
  }
  if(line_end_array) { free( (line_end_array-1) ); }
@@ -2377,7 +2417,7 @@ tokenise(program *prog, char *text, int *length_return, char *name_of_source_fil
  gettokens(prog,out,len,text,name_of_source_file_permanent_address);
  if(length_return)*length_return = count;
  #ifdef enable_debugger
- dbg__add_tokens(prog, text);
+ dbg__add_tokens(prog, text, 0);
  #endif
  return out;
 }
@@ -2531,6 +2571,7 @@ tokenstring(token t){
  case t_valS:		return "val$";
  case t_lenS:		return "len$";
  case t_vlenS:		return "vlen$";
+ case t_ulenS:		return "ulen$";
  case t_cmpS:		return "cmp$";
  case t_instrS:		return "instr$";
  case t_vectorS:	return "vector$";
@@ -2879,11 +2920,11 @@ getstringvalue( program *prog, int *pos ){
   out.string = (char*)t.data.pointer;
   out.len = strlen(out.string);
   // convert this string constant into a fast string constant, so we will not need to call strlen() for it ever again
-  stringval *fval = calloc(1,sizeof(stringval)); *fval = out;
+  stringval *fval = calloc(1,sizeof(stringval)); *fval = out;  //fprintf(stderr, "FUCK!!!: *pos == %d	length == %d\n",*pos,prog->length);
   prog->tokens[ *pos -1 ].type = t_stringconstf;
   prog->tokens[ *pos -1 ].data.pointer = (void*)fval;  
   // keep track of the pointer for this ready-made stringval using the stringslist, so it will be freed when the program is unloaded
-  stringslist_addstring(prog->program_strings,(char*)fval);
+  stringslist_addstring_with_p(prog->program_strings,(char*)fval, *pos);
   return out;
  }
  case t_stringconstf:
@@ -3038,15 +3079,14 @@ getstringvalue( program *prog, int *pos ){
  {
   stringval v;
   stringval s = getstringvalue(prog,pos);
-  int h = s.string[s.len]; s.string[s.len]=0;
-  int result = interpreter_eval( prog, eval_getstringvalue, &v, s.string );
-  s.string[s.len]=h;
+  int result = interpreter_eval( prog, eval_getstringvalue, &v, s );
   if( result ) error( prog, *pos, prog->_error_message->string );
   return v;
  }
  case t_sget: // sget [fp] ([optional parameter n])
  {            // If n is greater than 0, it represents the number of bytes to be read. Else, it represents a specific string terminating value. (n <= -256) will read until EOF
-  file *f = getfile(prog, getvalue(pos,prog), 1,0);
+  int this_p = *pos;
+  file *f = getfile(prog, this_p, getvalue(pos,prog), 1,0);
   int num_bytes_to_read = -10;
   if( isvalue( prog->tokens[*pos].type ) ) num_bytes_to_read = getvalue(pos,prog); // FIXME: size_t fix: this needs fixing to enable loading strings longer than signed 32bit int max
   accumulator->len=0;
@@ -3579,6 +3619,11 @@ getvalue(int *p, program *prog){
   stringval sv = getstringvalue(prog,p);
   return (double)(sv.len>>3);
  }
+ case t_ulenS:
+ {
+  stringval sv = getstringvalue(prog,p);
+  return (double)unicode_string_length( sv );
+ }
  case t_cmpS:
  {
   stringval sv1 = getstringvalue(prog,p);
@@ -3681,17 +3726,20 @@ getvalue(int *p, program *prog){
 
  case t_eof:
  {
-  file *f = getfile(prog, getvalue(p,prog), 0,0);
+  int this_p = *p;
+  file *f = getfile(prog,this_p, getvalue(p,prog), 0,0);
   return feof(f->fp);
  }
  case t_bget:
  {
-  file *f = getfile(prog, getvalue(p,prog), 1,0);
+  int this_p = *p;
+  file *f = getfile(prog,this_p, getvalue(p,prog), 1,0);
   return fgetc(f->fp);
  }
  case t_vget:
  {
-  file *f = getfile(prog, getvalue(p,prog), 1,0);
+  int this_p = *p;
+  file *f = getfile(prog,this_p, getvalue(p,prog), 1,0);
   char db[8];
   #if 1
   db[0] = fgetc(f->fp);
@@ -3709,12 +3757,14 @@ getvalue(int *p, program *prog){
  }
  case t_ptr:
  {
-  file *f = getfile(prog, getvalue(p,prog), 0,0);
+  int this_p = *p;
+  file *f = getfile(prog,this_p, getvalue(p,prog), 0,0);
   return ftell(f->fp);
  }
  case t_ext:
  {
-  file *f = getfile(prog, getvalue(p,prog), 0,0);
+  int this_p = *p;
+  file *f = getfile(prog,this_p, getvalue(p,prog), 0,0);
   return Ext(f->fp);
  }
  // ----- end of file related functions ------
@@ -3957,9 +4007,7 @@ getvalue(int *p, program *prog){
  case t_eval: case t_evalexpr: {
   double v;
   stringval s = getstringvalue(prog,p);
-  int h = s.string[s.len]; s.string[s.len]=0;
-  int result = interpreter_eval( prog, t.type==t_evalexpr ? eval_getvalue : eval_interpreter, &v, s.string );
-  s.string[s.len]=h;
+  int result = interpreter_eval( prog, t.type==t_evalexpr ? eval_getvalue : eval_interpreter, &v, s );
   if( result ) error( prog, *p, prog->_error_message->string );
   return v;
  }
@@ -4115,7 +4163,7 @@ int
 __attribute__((aligned(ALIGN_ATTRIB_CONSTANT)))
 #endif
 __attribute__ ((noinline))
-interpreter_eval( program *prog, int action, void *return_value, unsigned char *text ){ //fprintf(stderr, "prog->maxlen	%d	%d\n",prog->maxlen,prog->length);
+interpreter_eval( program *prog, int action, void *return_value, stringval text ){ //fprintf(stderr, "prog->maxlen	%d	%d\n",prog->maxlen,prog->length);
  int setjmp_retval; int tokens_length; int starting_p;
  // . save some existing data to be restored later
  stringslist *tail = stringslist_gettail( prog->program_strings );
@@ -4131,8 +4179,13 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
  //  . process it
  //  . append tokens
  if( ! setjmp_retval ){
-  size_t len = strlen( text );
-  tokens_length = gettokens(prog,NULL,len,text,NULL);
+  size_t len = text.len;
+  for( int i=0; i < text.len; i++ ){
+   if( !text.string[i] ){
+    len = i; break;
+   }
+  }
+  tokens_length = gettokens(prog,NULL,len,text.string,NULL);
   //fprintf(stderr, "s.... %d, %d		%d\n",prog->length,tokens_length,prog->maxlen);
   // handle the scenario where no tokens are generated
   if( !tokens_length ){
@@ -4149,12 +4202,12 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
   }
   // append tokens
   starting_p = prog->length+1;
-  gettokens(prog,prog->tokens + (prog->length+1),len,text,NULL);
+  gettokens(prog,prog->tokens + (prog->length+1),len,text.string,NULL);
   prog->length += tokens_length+1;
   prog->tokens[prog->length].type = t_nul;
   // cement
   #ifdef enable_debugger
-  dbg__add_tokens(prog, text);
+  dbg__add_tokens(prog, text.string, len);
   #endif
  }else{
   // there was a problem when processing the text...
@@ -4196,11 +4249,12 @@ interpreter_eval( program *prog, int action, void *return_value, unsigned char *
  // restore state
  interpreter_load_state( prog, &state );
  // free program strings created for this eval
- free_stringslist( tail->next );
- tail->next = NULL;
+ free_stringslist_from_p( tail->next, tail, prog->length );
+ //tail->next = NULL;
  // restore TTP state
  //*(TTP*)prog->program_strings->string = hold_ttp;
  // the return value is whether or not there was an error
+ //fprintf( stderr, "fuck..... %d\n",stringslist_list_length(prog->program_strings));
  return setjmp_retval;
 }
 
@@ -4268,13 +4322,13 @@ interactive_prompt(program *prog){
    signal(SIGINT, prompt_sigint_handler); // set our handler so that Ctrl+C can break out of loops and stuff
    switch( mode ){
     case eval_interpreter: {
-     if( interpreter_eval( prog, mode, NULL, buf ) ){
+     if( interpreter_eval( prog, mode, NULL, (stringval){buf,strlen(buf)} ) ){
       fprintf( stderr, "%s\n", prog->_error_message->string );
      }
     } break;
     case eval_getvalue: {
      double v;
-     if( interpreter_eval( prog, mode, &v, buf ) )
+     if( interpreter_eval( prog, mode, &v, (stringval){buf,strlen(buf)} ) )
       fprintf( stderr, "%s\n", prog->_error_message->string );
      else{
       if( !MyIsnan(v) && (long long int)v == v )
@@ -4285,7 +4339,7 @@ interactive_prompt(program *prog){
     } break;
     case eval_getstringvalue: {
      stringval v;
-     if( interpreter_eval( prog, mode, &v, buf ) )
+     if( interpreter_eval( prog, mode, &v, (stringval){buf,strlen(buf)} ) )
       fprintf( stderr, "%s\n", prog->_error_message->string );
      else {
       for( int i=0; i<v.len; i++ ) fprintf(stderr, "%c", v.string[i]);
@@ -4481,10 +4535,9 @@ _interpreter_processcaseof(program *prog, int p){ int i;
  prog->tokens[caseofpos].data.pointer = co;
 
  // add the allocated pointers to the strings list
- //void stringslist_addstring(stringslist *s,char *string);
- stringslist_addstring(prog->program_strings, (char *) co );
- stringslist_addstring(prog->program_strings, (char *) co->whens );
- stringslist_addstring(prog->program_strings, (char *) co->whens_ );  
+ stringslist_addstring_with_p(prog->program_strings, (char *) co, caseofpos );
+ stringslist_addstring_with_p(prog->program_strings, (char *) co->whens, caseofpos );
+ stringslist_addstring_with_p(prog->program_strings, (char *) co->whens_, caseofpos );  
  // debug
  #if PROCESSCASEOF_RUBBISH
  for(i=0; i<numwhens; i++){
@@ -4595,7 +4648,7 @@ _interpreter_processfor(program *prog, int p,  double *fromVal, double *toVal, d
  */
  
  forinfo *thisfor = calloc(1,sizeof(forinfo));
- stringslist_addstring(prog->program_strings, (char *) thisfor );
+ stringslist_addstring_with_p(prog->program_strings, (char *) thisfor, p );
  
  int for_p = p; // location of the 'for' token itself
  int endfor_p=0; // location of the 'endfor' corresponding to this 'for'
@@ -5237,9 +5290,7 @@ interpreter(int p, program *prog){
   p+=1;
   double v;
   stringval s = getstringvalue(prog,&p);
-  int h = s.string[s.len]; s.string[s.len]=0;
-  int result = interpreter_eval( prog, eval_interpreter, &v, s.string );
-  s.string[s.len]=h;
+  int result = interpreter_eval( prog, eval_interpreter, &v, s );
   if( result ) error( prog, starting_p, prog->_error_message->string );
  } break;
  // ========================================================
@@ -5451,13 +5502,13 @@ interpreter(int p, program *prog){
  // ========================================================
  case t_sptr:
  {
-  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,0);
+  int this_p = p; p+=1; file *f = getfile(prog,this_p, getvalue(&p,prog), 0,0);
   SetPtr(f->fp, getvalue(&p,prog));
   break;
  }
  case t_bput:
  {
-  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,1);
+  int this_p = p; p+=1; file *f = getfile(prog,this_p, getvalue(&p,prog), 0,1);
   do{
    fputc( getvalue(&p,prog), f->fp );
   }while( isvalue( prog->tokens[p].type ) );
@@ -5465,7 +5516,7 @@ interpreter(int p, program *prog){
  }
  case t_vput:
  {
-  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,1);
+  int this_p = p; p+=1; file *f = getfile(prog,this_p, getvalue(&p,prog), 0,1);
   double val;
   do{
    val = getvalue(&p,prog);
@@ -5475,7 +5526,7 @@ interpreter(int p, program *prog){
  }
  case t_sput:
  {
-  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,1);
+  int this_p = p; p+=1; file *f = getfile(prog,this_p, getvalue(&p,prog), 0,1);
   stringval sv;
   do{
    sv = getstringvalue( prog, &p );
@@ -5486,7 +5537,7 @@ interpreter(int p, program *prog){
  }
  case t_close:
  {
-  p+=1; file *f = getfile(prog, getvalue(&p,prog), 0,0);
+  int this_p = p; p+=1; file *f = getfile(prog,this_p, getvalue(&p,prog), 0,0);
   f->open = 0;
   fclose(f->fp);
   break;

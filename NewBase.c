@@ -1321,11 +1321,97 @@ void CustomChar(unsigned char n, unsigned char b0,unsigned char b1,unsigned char
 }
 void DefaultFont(){
  if( BBCFont == NULL ) return;
- int i;
- for(i=0;i<256;i++){
-  CustomChar(i,0xAA,0x55,0xAA,0x55,0xAA,0x55,0xAA,0x55);
+
+ #define makedigit(a,b,c,d, e,f,g,h)	\
+  ( (unsigned long long int)(a)		\
+  | (unsigned long long int)(b)<<8	\
+  | (unsigned long long int)(c)<<16	\
+  | (unsigned long long int)(d)<<24	\
+  | (unsigned long long int)(e)<<32	\
+  | (unsigned long long int)(f)<<40	\
+  | (unsigned long long int)(g)<<48	\
+  | (unsigned long long int)(h)<<56)	
+
+ unsigned long long int digits[10] = {
+  makedigit(
+   0b11000000,
+   0b11000000,
+   0b11000000,
+   0b11000000,
+   0b11000000, 0, 0, 0),
+  makedigit(
+   0b10000000,
+   0b10000000,
+   0b10000000,
+   0b10000000,
+   0b10000000, 0, 0, 0),
+  makedigit(
+   0b11000000,
+   0b01000000,
+   0b01000000,
+   0b10000000,
+   0b11000000, 0, 0, 0),
+  makedigit(
+   0b11000000,
+   0b01000000,
+   0b10000000,
+   0b01000000,
+   0b11000000, 0, 0, 0),
+  makedigit(
+   0b01000000,
+   0b11000000,
+   0b11000000,
+   0b01000000,
+   0b01000000, 0, 0, 0),
+  makedigit(
+   0b11000000,
+   0b10000000,
+   0b11000000,
+   0b01000000,
+   0b11000000, 0, 0, 0),
+  makedigit(
+   0b01000000,
+   0b10000000,
+   0b10000000,
+   0b11000000,
+   0b11000000, 0, 0, 0),
+  makedigit(
+   0b11000000,
+   0b01000000,
+   0b01000000,
+   0b10000000,
+   0b10000000, 0, 0, 0),
+  makedigit(
+   0b11000000,
+   0b11000000,
+   0b00000000,
+   0b11000000,
+   0b11000000, 0, 0, 0),
+  makedigit(
+   0b11000000,
+   0b11000000,
+   0b01000000,
+   0b01000000,
+   0b01000000, 0, 0, 0)
+ };
+
+ #define positiondigit(d,x,y) \
+  (((d)>>(x))<<(y<<3)) 
+ 
+ unsigned long long int border = makedigit( 0, 0, 0, 0, 0, 0, 0, 0b11111111);
+ for(int i=0;i<256;i++){
+  if(i==32) i=127;
+  unsigned long long int d = ( ( i<100 ? 0 : positiondigit( digits[i/10/10%10], 0,1) )
+                           | (i<10 ? 0 : positiondigit( digits[i/10%10], 3,1))
+                           | positiondigit( digits[i%10], 6,1) ) | border;
+  unsigned char *dp = (unsigned char*)&d;
+  CustomChar(i, dp[0], dp[1], dp[2], dp[3], dp[4], dp[5], dp[6], dp[7] );
  }
- CustomChar(32,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0);
+ #undef positiondigit
+ #undef makedigit
+ for( int i=0; i<3; i++){
+  CustomChar( (int[]){ 9, 10, 32 }[i], 0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0 );
+ }
  CustomChar(33,0x18,0x18,0x18,0x18,0x18,0x0,0x18,0x0);
  CustomChar(34,0x6C,0x6C,0x6C,0x0,0x0,0x0,0x0,0x0);
  CustomChar(35,0x6C,0x6C,0xFE,0x6C,0xFE,0x6C,0x6C,0x0);
@@ -2029,7 +2115,7 @@ void ClearClipRect(){
 
 void SetPlottingMode(int function){
  if(!newbase_is_running)return;
- XSetFunction(Mydisplay,MyGC,function);
+ XSetFunction(Mydisplay,MyGC,function & 0xf);
 }
 // ==========  Quick reference, taken from X11/X.h  =============
 // GXclear		0x0		/* 0 */
