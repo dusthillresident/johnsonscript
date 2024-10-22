@@ -1,0 +1,137 @@
+
+startgraphics 512 512
+
+variable  x1 y1   x2 y2   x3 y3   x4 y4  redraw omz  select oselect i; set redraw 1
+
+set x1 0 
+set y1 0
+set x2 winw
+set y2 0
+set x3 winw
+set y3 winh
+set x4 0
+set y4 winh
+
+refreshmode 1
+
+while 1
+
+ if ! mouseb
+  for i 0 3;
+   if && < abs(- A@x1<<(& i 3)1  mousex) 18  < abs(- A@y1<<(& i 3)1  mousey) 18
+    set select i
+   endif
+  endfor
+ endif
+
+ if || expose != oselect select
+  set redraw 1
+  set oselect select
+ endif
+
+ if & mouseb 1 
+  set A@x1<<(& select 3)1  mousex
+  set A@y1<<(& select 3)1  mousey
+  set redraw 1
+ endif
+
+ if redraw
+  cls
+  for i 0 3;
+   gcol 255 158 neg = select i
+   circlef  A@x1<<(& i 3)1   A@y1<<(& i 3)1  16
+   if = select i
+    gcol 0xffff00
+    circle A@x1<<(& i 3)1   A@y1<<(& i 3)1  20
+   endif
+  endfor 
+  gcol -1
+  drawtext 10 10 0  str$ + 1 & select 3;
+  f2  x1 y1  x2 y2  x3 y3  x4 y4
+  refresh
+  set redraw 0
+ endif
+
+ wait 17
+endwhile
+
+
+; _prompt
+
+
+
+
+
+
+
+function f2 x1 y1  x2 y2  x3 y3  x4 y4  local x y i d nd _x _y _i _X _Y xx yy fx fy lx ly j index;
+ 
+ set lx 0
+ set ly 0
+
+ for j 0 1;
+  for i 0.0 1.0 (/ 1 64);
+
+   # Calculate points
+
+   set x  + x1 * i - x3 x1
+   set y  + y1 * i - y3 y1
+   set xx + x2 * i - x4 x2
+   set yy + y2 * i - y4 y2
+
+   set index  int * i 2
+   set _i  - (* i 2) int * i 2
+   set _x  + A@x1(<< index 1) (* _i - A@x2(<< index 1) A@x1(<< index 1))
+   set _y  + A@y1(<< index 1) (* _i - A@y2(<< index 1) A@y1(<< index 1))
+
+   set _X  + A@x2(<< index 1) (* _i - A@x3(<< index 1) A@x2(<< index 1))
+   set _Y  + A@y2(<< index 1) (* _i - A@y3(<< index 1) A@y2(<< index 1))
+
+   set d  abs * 2 - i 0.5 
+   set d - 1 d; set d * d d 0.333333333333333
+   set nd - 1 d
+   set x  + (* x d)  (* _x nd)
+   set y  + (* y d)  (* _y nd)  
+   set xx + (* xx d) (* _X nd)
+   set yy + (* yy d) (* _Y nd)  
+
+   set fx + (* xx i) (* x - 1 i)
+   set fy + (* yy i) (* y - 1 i)
+
+   # Draw
+
+   if !j
+  
+    # Draw point info  
+
+    gcol (- 255 * d 255) 0 * d 255
+    circlef x y 4
+
+    gcol 0 (- 255 * d 255) * d 255
+    circlef xx yy 4
+
+    gcol 0 128 0
+    circle _x _y 7
+
+    gcol 0 128 255
+    circle _X _Y 5
+
+   else
+
+    # Plot the spline 
+
+    gcol -1
+    if && lx ly
+     option "pensize" 4
+     line lx ly fx fy
+     option "pensize" 0
+    endif
+    set lx fx
+    set ly fy
+ 
+   endif
+
+  endfor
+ endfor
+
+endfunction
