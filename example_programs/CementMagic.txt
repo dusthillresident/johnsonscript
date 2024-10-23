@@ -45,7 +45,7 @@ variable
 #st stm2 stm3 std2 s r h
 a b c d xymul;
 
-constant st 64;
+constant st 48;
 constant adjvv * -7 / 64 st
 variable adjv;
 constant stm2 - st 2
@@ -59,12 +59,10 @@ constant h 96
 variable xa ya i j x y _X _Y ox oy l aayaij aayai1j aayaij1 aayai1j1 aaxai1j aaxaij1 xp yp xd yd dis;
 set xa alloc st
 set ya alloc st
-set i 0
-while < i st
+for i 0 - st 1;
  set Axa(i) alloc st
  set Aya(i) alloc st
- set i + i 1
-endwhile
+endfor
 
 constant wh st
 constant whm1 - wh 1
@@ -98,10 +96,8 @@ while 1
 
 
  REM process velocities
- set x 1
- while < x whm1
-  set y 1
-  while < y whm1
+ for x 1 - wh 2;
+  for y 1 - wh 2;
    set AAvelocities x y
         * frictionv
            - AAvelocities x y
@@ -111,45 +107,33 @@ while 1
                    AAheights(+ x 1)   y  
                    AAheights   x   (- y 1)
                    AAheights   x    + y 1
-   set y + y 1
-  endwhile
-  set x + x 1
- endwhile
+  endfor
+ endfor
 
  REM process heights
- set x 1
- while < x whm1
-  set y 1
-  while < y whm1
+ for x 1 - wh 2;
+  for y 1 - wh 2;
    set AAheights x y   + AAheights x y   AAvelocities x y
-   set y + y 1
-  endwhile
-  set x + x 1
- endwhile
+  endfor
+ endfor
 
  # Calculate x/y points
 
  set xymul fnmin (/ winw 1280) / winh 1024
  set adjv * adjvv xymul
- set j 0
- while < j - st 1
-  set i 0
-  while < i - st 1
+ for j 0 - st 2;
+  for i 0 - st 2;
    set AAxa i j  * xymul + _X * s i
    set AAya i j  * xymul + neg winh (+ _Y * s i) * m 8 + AAheights i j  AAheights(+ i 1 ) j   AAheights i (+ j 1)  AAheights(+ i 1) + j 1
-   set i +  i 1
-  endwhile
+  endfor
   set _X + _X s
   set _Y - _Y s
-  set j + j 1
- endwhile
+ endfor
 
  # Render quads
 
- set j stm3
- while > j 1
-  set i 0
-  while < i stm2
+ for j (- st 3) 2 -1;
+  for i 0 - st 3;
 
    set aaxai1j   AAxa(+i 1)j
    set aaxaij1	 AAxa i + j 1
@@ -168,10 +152,8 @@ while 1
                AAxa(+ i 1)(+ j 1)	aayai1j1
                aaxai1j			aayai1j
 
-   set i + i 1
-  endwhile
-  set j - j 1
- endwhile
+  endfor # i
+ endfor #j
 
  if mouseb
 
@@ -191,7 +173,7 @@ while 1
  endif
 
  refresh
- wait 8.3
+ wait 16.6
  cls
 
  # end main loop
