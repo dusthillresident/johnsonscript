@@ -2389,9 +2389,9 @@ void translate_command(program *prog, int *p){
     PrintVars("SVAR_%s = NewStringvar_svrp();\n",idstring );
 
     // prepare translation table and add this to the program id list
-    char *value_s = calloc(strlen(idstring)+15,1);
-    char *getref_s = calloc(strlen(idstring)+30,1);
-    char *set_s = calloc(strlen(idstring)+10,1);
+    char *value_s = calloc(strlen(idstring)+15+1,1);
+    char *getref_s = calloc(strlen(idstring)+44+1,1);
+    char *set_s = calloc(strlen(idstring)+10+1,1);
     sprintf(value_s,"SVRtoSVL(SVAR_%s)",idstring);
     sprintf(getref_s,"(SVAR_%s->string_variable_number)",idstring);
     sprintf(set_s,"SVAR_%s",idstring);
