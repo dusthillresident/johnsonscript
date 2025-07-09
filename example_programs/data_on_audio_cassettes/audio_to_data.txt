@@ -1,0 +1,212 @@
+
+stringvar sucks originalFilepath fileBasename fileData;
+variable fin fout av frames amplitude side lastSamp threshold;
+
+constant debugMessages 0
+
+# (0.300625 + 0.4775) / 2
+constant highpassStrength 0.3890625;
+constant hpv - 1 highpassStrength;
+variable highpassState;
+
+# (0.0745 + 0.36) / 2
+constant adaptationStrength 0.21725;
+constant adpv - 1 adaptationStrength;
+
+if ! _argc
+ set fin _stdin
+else
+ set fin openin $0
+ if ! fin
+  sput _stderr "cant open file" chr$10
+  quit 1
+ endif
+endif
+
+
+begin;
+
+function highpassFilter v;
+ set highpassState + (* v highpassStrength) (* highpassState hpv)
+return - v highpassState
+
+function getSamp local b blah;
+ set b bget fin
+ #set blah bget fin
+ if < b 0
+  sput _stderr "getSamp: unexpected eof" chr$10;
+  failMsg
+  quit 1
+ endif
+ set b >> << b 24 24
+ set b highpassFilter b
+ set av + (* av 0.999) * b 0.001
+ set lastSamp b
+return b
+
+function max a b;
+ if > a b
+  return a
+ endif
+return b
+
+function read local n;
+ set n av;
+ set frames 0;
+ while ^ side > getSamp av 
+  increment frames
+  set n  max  abs n  abs lastSamp
+ endwhile
+ set side ! side
+ set amplitude n
+ #if debugMessages
+ # set sucks cat$ "frames: " str$ frames "	amplitude: " str$ amplitude; dbgmsg @sucks;
+ #endif
+return n;
+
+function readBit_;
+return > read threshold
+
+function readBit local result;
+ read
+ set result > read threshold
+ if result
+  set threshold + (* amplitude 0.74  adaptationStrength) * threshold adpv
+ else
+  set threshold + (* amplitude 1.7  adaptationStrength) * threshold adpv
+ endif
+ if debugMessages
+  set sucks cat$ "readBit result: " str$ result "	threshold: " str$ threshold "	av: " str$ av  "	amplitude: " str$ amplitude; dbgmsg @sucks;
+ endif
+return result
+
+function readByte local out i;
+ set out 0
+ for i 0 7;
+  set out >> out 1
+  set out | out << readBit 7
+ endfor
+return out
+
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+function specialCalibration local a b i v d1 d2 oa ob;
+ option "seedrnd" 0
+ set a read
+ set b read
+ for i 3 64;
+  set oa a; set a read;
+  set ob b; set b read;
+  set d1 + d1 abs - oa a
+  set d2 + d2 abs - ob b
+ endfor
+ print "d1: " d1;
+ print "d2: " d2;
+ if > d1 d2
+  sput _stderr "calibration: performing extra read" chr$10;
+  read
+ endif
+ read read read read
+
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+function begin local beginCode oldFrames oldAmp i;
+ .retry
+ if debugMessages
+  dbgmsg @"listening for the silence to end";
+ endif
+ while < abs lastSamp 35;
+  getSamp
+ endwhile
+ for i 1 40;
+  read
+ endfor
+ set threshold 0
+ for i 1 44;
+  set threshold + threshold read
+ endfor
+ set threshold / threshold 44
+ if debugMessages
+  dbgmsg @"starting to listen for the start bit";
+ endif
+ while > amplitude threshold;
+  set threshold + (* threshold 0.99) * read 0.74 0.01;
+  read
+ endwhile
+ specialCalibration;
+ while | readBit readBit readBit
+ endwhile
+ while ! readBit
+ endwhile
+ set beginCode readByte
+ if != 54 beginCode
+  sput _stderr "failed to begin, got: " str$ beginCode chr$10;
+  failMsg
+  quit 1
+ endif
+ 
+ readData @fileBasename;
+ readData @originalFilepath;
+ print "File: " fileBasename;
+ print "Original filepath: " originalFilepath;
+ readData @fileData;
+ set fout openout "recovered_file"
+ sput fout fileData
+ close fout;
+ print (cat$ chr$ 0x1b "[" str$ (+ 30 62) "m") "OK"
+
+ oscli "tput init"
+ quit
+
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+function chksum data local i sum;
+ set sum 0x179ab2ef
+ set i 0
+ while < i len$ $data
+  set sum  ^  >> sum 13  << sum 7   C$data(i)
+  set sum  ^  >> sum 1   << sum 30  0xe91bf2c1 ~sum
+  increment i
+ endwhile
+return sum
+
+function readNumber_ local i result;
+ set result 0
+ for i 0 3;
+  set result >>> result 8
+  set result | result << readByte 24
+ endfor
+return result
+
+function readNumber local result b;
+ set result readNumber_
+ set b readNumber_
+ if != b result
+  sput _stderr "number failed to read back successfully: " str$ result " " str$ b chr$10;
+  failMsg
+  quit 1
+ endif
+return result
+
+function readData dataReturn local i sum len;
+ set sum readNumber
+ set len readNumber
+ set $dataReturn  string$ len chr$ 0
+ set i 0
+ while < i len
+  set C $dataReturn i  readByte
+  increment i
+ endwhile
+ if != sum chksum dataReturn
+  sput _stderr "data failed to read back successfully" chr$10;
+  failMsg
+  quit 1
+ endif
+endfunction
+
+function failMsg;
+sput _stderr (cat$ chr$ 0x1b "[" str$ (+ 30 61) "m") "Failure" chr$10
+
+function dbgmsg msg;
+#endfunction
+sput _stderr $ msg chr$10

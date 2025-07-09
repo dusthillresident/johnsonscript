@@ -1,0 +1,128 @@
+variable side fout fin bitRepeatCount;
+set fout _stdout
+
+variable i j k;
+stringvar bitArray fileBasename fileData;
+constant sampsPerBit 8;
+set bitArray vector$ S"" S"" S"" S"";
+
+for i 0 2 2;
+ for j 0 1;
+  for k 0 + -1 sampsPerBit;
+   append$ $ V bitArray(+ i j)  chr$ s8 * (V (vector$ -0.36 0.36 -1 1) + j i) sin( * _pi  / k sampsPerBit )
+  endfor
+ endfor
+endfor
+
+
+if 0
+for i 0 3;
+ sput _stdout $ V bitArray i;
+ for j 0 16;
+  bput _stdout 0;
+ endfor
+endfor
+endif
+
+set fin openin $0
+if ! fin
+ sput _stderr "can't open file" chr$ 10
+ quit 1
+endif
+
+set fileBasename $0
+
+while != -1 instr$ fileBasename "/"
+ set fileBasename right$ fileBasename - len$ fileBasename instr$ fileBasename "/" 1
+endwhile
+
+# ---------------------- encode procedure ----------------------------
+
+# Initial silence
+for i 0 761;
+ bput fout 0
+endfor
+
+# Leader tone
+for i 0 4176;
+ writeBit 1
+endfor
+
+# From here, a full cycle represents a bit
+set bitRepeatCount 1;
+
+# Calibration sequence
+writeBit 0
+for i 1 128;
+ writeBit 0
+ writeBit 1
+endfor
+# Testicle smasher - the ultimate testicle crusher
+for i 1 100;
+ writeBit 0
+endfor
+writeBit 1;
+
+# A landmark used by the decoder to be sure the signal is reading back properly
+writeByte 54;
+
+# Write the name of the file, the original file path, and then the data itself
+writeData @fileBasename
+writeData @$0
+set fileData sget fin -256;
+writeData @fileData
+
+# A landmark used by the decoder to be sure the signal is reading back properly
+writeByte 54
+
+# Trailing tone
+for i 0 761;
+ writeBit 1
+endfor
+
+# Final silence
+for i 0 761;
+ bput fout 0
+endfor
+
+# --------------------------------------------------------------------
+
+function chksum data local i sum;
+ set sum 0x179ab2ef
+ set i 0
+ while < i len$ $data
+  set sum  ^  >> sum 13  << sum 7   C$data(i)
+  set sum  ^  >> sum 1   << sum 30  0xe91bf2c1 ~sum
+  increment i
+ endwhile
+return sum
+
+function writeBit b local i;
+ for i 0 bitRepeatCount;
+  set side ! side
+  sput fout $ V bitArray (+ << !!b 1 side )
+ endfor
+
+function writeByte b local i;
+ for i 0 7;
+  writeBit & (>> b i) 1
+ endfor
+
+function writeNumber n local i j;
+ for j 0 1;
+  for i 0 3;
+   writeByte & 0xff >> n << i 3
+  endfor
+ endfor
+
+function writeData data local i;
+ writeNumber chksum data
+ writeNumber len$ $data
+ set i 0
+ while < i len$ $data
+  writeByte C $data i
+  increment i
+ endwhile
+
+function s8 v; return >>(<< (* v 127) 24)24
+
