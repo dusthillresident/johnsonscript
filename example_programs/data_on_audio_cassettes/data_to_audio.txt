@@ -39,7 +39,7 @@ endwhile
 # ---------------------- encode procedure ----------------------------
 
 # Initial silence
-for i 0 761;
+for i 0 16111;
  bput fout 0
 endfor
 
@@ -81,9 +81,11 @@ for i 0 761;
 endfor
 
 # Final silence
-for i 0 761;
+for i 0 16111;
  bput fout 0
 endfor
+
+close fout
 
 # --------------------------------------------------------------------
 

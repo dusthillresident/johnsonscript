@@ -1,17 +1,22 @@
 
 stringvar sucks originalFilepath fileBasename fileData;
-variable fin fout av frames amplitude side lastSamp threshold;
+variable fin fout av frames amplitude side lastSamp threshold exitOnDataError dataError;
+set exitOnDataError 1
 
 constant debugMessages 0
 
-# (0.300625 + 0.4775) / 2
+# (0.300625 + 0.4775) / 2	=	0.3890625
 constant highpassStrength 0.3890625;
 constant hpv - 1 highpassStrength;
 variable highpassState;
 
-# (0.0745 + 0.36) / 2
+# (0.0745 + 0.36) / 2		=	0.21725
 constant adaptationStrength 0.21725;
 constant adpv - 1 adaptationStrength;
+
+# (0.0029 + 0.1125) / 2		=	0.0577
+constant avAdjustmentStrength 0.0577
+constant avv - 1 avAdjustmentStrength
 
 if ! _argc
  set fin _stdin
@@ -40,7 +45,7 @@ function getSamp local b blah;
  endif
  set b >> << b 24 24
  set b highpassFilter b
- set av + (* av 0.999) * b 0.001
+ set av + (* av avv) * b avAdjustmentStrength
  set lastSamp b
 return b
 
@@ -58,6 +63,7 @@ function read local n;
   set n  max  abs n  abs lastSamp
  endwhile
  set side ! side
+ set n - n av
  set amplitude n
  #if debugMessages
  # set sucks cat$ "frames: " str$ frames "	amplitude: " str$ amplitude; dbgmsg @sucks;
@@ -91,7 +97,8 @@ return out
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 function specialCalibration local a b i v d1 d2 oa ob;
- option "seedrnd" 0
+ set d1 0
+ set d2 0
  set a read
  set b read
  for i 3 64;
@@ -149,11 +156,16 @@ function begin local beginCode oldFrames oldAmp i;
  readData @originalFilepath;
  print "File: " fileBasename;
  print "Original filepath: " originalFilepath;
+ set exitOnDataError 0
  readData @fileData;
  set fout openout "recovered_file"
  sput fout fileData
  close fout;
- print (cat$ chr$ 0x1b "[" str$ (+ 30 62) "m") "OK"
+ if dataError
+  failMsg; quit 1
+ else
+  print (cat$ chr$ 0x1b "[" str$ (+ 30 62) "m") "OK"
+ endif
 
  oscli "tput init"
  quit
@@ -199,8 +211,12 @@ function readData dataReturn local i sum len;
  endwhile
  if != sum chksum dataReturn
   sput _stderr "data failed to read back successfully" chr$10;
-  failMsg
-  quit 1
+  if exitOnDataError
+   failMsg
+   quit 1
+  else
+   set dataError 1
+  endif
  endif
 endfunction
 
