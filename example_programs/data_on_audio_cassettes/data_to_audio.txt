@@ -3,7 +3,7 @@ set fout _stdout
 
 variable i j k;
 stringvar bitArray fileBasename fileData;
-constant sampsPerBit 8;
+constant sampsPerBit 6;
 set bitArray vector$ S"" S"" S"" S"";
 
 for i 0 2 2;
@@ -24,65 +24,73 @@ for i 0 3;
 endfor
 endif
 
-set fin openin $0
-if ! fin
- sput _stderr "can't open file" chr$ 10
- quit 1
-endif
+variable argIndex;
 
-set fileBasename $0
+for argIndex 0 (- _argc 1);
 
-while != -1 instr$ fileBasename "/"
- set fileBasename right$ fileBasename - len$ fileBasename instr$ fileBasename "/" 1
-endwhile
+ set fin openin $argIndex
+ if ! fin
+  sput _stderr "can't open file '" $argIndex "'"chr$ 10
+  quit 1
+ endif 
 
-# ---------------------- encode procedure ----------------------------
+ set fileBasename $argIndex
 
-# Initial silence
-for i 0 16111;
- bput fout 0
-endfor
+ while != -1 instr$ fileBasename "/"
+  set fileBasename right$ fileBasename - len$ fileBasename instr$ fileBasename "/" 1
+ endwhile
 
-# Leader tone
-for i 0 4176;
- writeBit 1
-endfor
+ # ---------------------- encode procedure ----------------------------
 
-# From here, a full cycle represents a bit
-set bitRepeatCount 1;
+ # Initial silence
+ for i 0 16111;
+  bput fout 0
+ endfor
 
-# Calibration sequence
-writeBit 0
-for i 1 128;
+ # Leader tone
+ for i 0 4176;
+  writeBit 1
+ endfor
+
+ # From here, a full cycle represents a bit
+ set bitRepeatCount 1;
+
+ # Calibration sequence
  writeBit 0
- writeBit 1
-endfor
-# Testicle smasher - the ultimate testicle crusher
-for i 1 100;
- writeBit 0
-endfor
-writeBit 1;
+ for i 1 128;
+  writeBit 0
+  writeBit 1
+ endfor
+ # Testicle smasher - the ultimate testicle crusher
+ for i 1 100;
+  writeBit 0
+ endfor
+ writeBit 1;
 
-# A landmark used by the decoder to be sure the signal is reading back properly
-writeByte 54;
+ # A landmark used by the decoder to be sure the signal is reading back properly
+ writeByte 54;
 
-# Write the name of the file, the original file path, and then the data itself
-writeData @fileBasename
-writeData @$0
-set fileData sget fin -256;
-writeData @fileData
+ # Write the name of the file, the original file path, and then the data itself
+ writeData @fileBasename
+ writeData @$argIndex
+ set fileData sget fin -256;
+ writeData @fileData
 
-# A landmark used by the decoder to be sure the signal is reading back properly
-writeByte 54
+ # A landmark used by the decoder to be sure the signal is reading back properly
+ writeByte 54
 
-# Trailing tone
-for i 0 761;
- writeBit 1
-endfor
+ # Trailing tone
+ for i 0 761;
+  writeBit 1
+ endfor
 
-# Final silence
-for i 0 16111;
- bput fout 0
+ # Final silence
+ for i 0 16111;
+  bput fout 0
+ endfor
+ 
+ close fin
+
 endfor
 
 close fout

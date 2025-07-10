@@ -1,35 +1,52 @@
+initCmdArgs;
 
 stringvar sucks originalFilepath fileBasename fileData;
-variable fin fout av frames amplitude side lastSamp threshold exitOnDataError dataError;
+variable fin fout av frames amplitude side lastSamp threshold exitOnDataError dataError forceExtraRead;
 set exitOnDataError 1
+set forceExtraRead  cmdOption @"-extraread" -1
 
-constant debugMessages 0
+constant debugMessages cmdArgIsUsed @"-debugmsgs";
 
-# (0.300625 + 0.4775) / 2	=	0.3890625
-constant highpassStrength 0.3890625;
+#  Lowpass strength
+constant lowpassStrength - 1 (cmdOption @"-lps" 0.476);
+constant lpv - 1 lowpassStrength;
+variable lowpassState;
+
+#  Highpass strength
+constant highpassStrength cmdOption @"-hps" 0.291;
 constant hpv - 1 highpassStrength;
 variable highpassState;
 
-# (0.0745 + 0.36) / 2		=	0.21725
-constant adaptationStrength 0.21725;
+#  Adaptation strength
+constant adaptationStrength cmdOption @"-ads" 0.24;
 constant adpv - 1 adaptationStrength;
 
-# (0.0029 + 0.1125) / 2		=	0.0577
-constant avAdjustmentStrength 0.0577
+#  Zero-point adjustment strength
+constant avAdjustmentStrength cmdOption @"-avs" 0.0577
 constant avv - 1 avAdjustmentStrength
 
-if ! _argc
+cmdArgSetDescription @"-hps" @"High pass filter strength. From 0.0 minimum to 1.0 maximum";
+cmdArgSetDescription @"-ads" @"Adaptation strength. 0.0 minimum, 1.0 maximum";
+cmdArgSetDescription @"-avs" @"Zero-point adjustment strength. 0.0 minimum, 1.0 maximum";
+cmdArgSetDescription @"-extraread" @"Forces enabling or disabling of calibration extra read. 0 to force disabled, 1 to force enabled";
+cmdArgsDisplayHelp;
+
+#if ! _argc
  set fin _stdin
-else
- set fin openin $0
- if ! fin
-  sput _stderr "cant open file" chr$10
-  quit 1
- endif
-endif
+#else
+# set fin openin $0
+# if ! fin
+#  sput _stderr "cant open file" chr$10
+#  quit 1
+# endif
+#endif
 
 
 begin;
+
+function lowpassFilter v;
+ set lowpassState + (* v lowpassStrength) (* lowpassState lpv)
+return lowpassState
 
 function highpassFilter v;
  set highpassState + (* v highpassStrength) (* highpassState hpv)
@@ -45,6 +62,7 @@ function getSamp local b blah;
  endif
  set b >> << b 24 24
  set b highpassFilter b
+ set b lowpassFilter b
  set av + (* av avv) * b avAdjustmentStrength
  set lastSamp b
 return b
@@ -109,7 +127,7 @@ function specialCalibration local a b i v d1 d2 oa ob;
  endfor
  print "d1: " d1;
  print "d2: " d2;
- if > d1 d2
+ if || (&& (= forceExtraRead -1) > d1 d2) forceExtraRead;
   sput _stderr "calibration: performing extra read" chr$10;
   read
  endif
@@ -222,7 +240,103 @@ endfunction
 
 function failMsg;
 sput _stderr (cat$ chr$ 0x1b "[" str$ (+ 30 61) "m") "Failure" chr$10
+oscli "tput init"
 
 function dbgmsg msg;
 #endfunction
 sput _stderr $ msg chr$10
+
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# --------------------------------------------------------------------
+
+function initCmdArgs;
+ stringvar _cmdArgDatabase;
+
+function cmdArgsDisplayHelp local i;
+ defineCmdArg @"-help" @"" -1 @"Displays the help message";
+ if ! cmdArgIsUsed @"-help"
+  endfunction
+ endif
+ sput _stderr "---- Command line options ----" chr$10 chr$10;
+ set i 0
+ while < i vlen$ _cmdArgDatabase;
+  sput _stderr " " ($V$V_cmdArgDatabase(i)(0)) chr$10
+  caseof (V$V_cmdArgDatabase(i)(1));
+   when 0;
+    sput _stderr "  Expects parameter:" chr$10 "   number" chr$10
+   when 1;
+    sput _stderr "  Expects parameter:" chr$10 "   string" chr$10
+  endcase
+  if cmp$ ($V$V_cmdArgDatabase(i)(4)) ""
+   sput _stderr "  Description:" chr$10 "   " ($V$V_cmdArgDatabase(i)(4)) chr$10
+  endif
+  caseof (V$V_cmdArgDatabase(i)(1));
+   when 0;
+    sput _stderr "  Default value:" chr$10 "   "
+    sput _stderr str$(V$V_cmdArgDatabase(i)(3)) chr$10
+   when 1;
+    if cmp$ ($V$V_cmdArgDatabase(i)(2)) ""
+     sput _stderr "  Default value:" chr$10 "   "
+     sput _stderr ($V$V_cmdArgDatabase(i)(2)) chr$10
+    endif
+   otherwise
+    #sput _stderr "oh no" chr$10
+  endcase
+  sput _stderr chr$10
+  increment i
+ endwhile
+ quit
+
+function cmdArgSetDescription argument description local i;
+ set i 0
+ while < i vlen$ _cmdArgDatabase;
+  if ! cmp$  $V$V_cmdArgDatabase(i)(0) $argument
+   set V$V_cmdArgDatabase(i)(4) description
+   endfunction
+  endif
+  increment i
+ endwhile
+
+function defineCmdArg argument default type description local i defv;
+ set i 0
+ while < i vlen$ _cmdArgDatabase;
+  if ! cmp$  $V$V_cmdArgDatabase(i)(0) $argument
+   endfunction
+  endif
+  increment i
+ endwhile
+ if = type 0
+  set defv @""
+  set $defv str$ default
+  set default defv
+ endif
+ append$ _cmdArgDatabase vector$ (S vector$ (S $argument) type (S $default) (val$ $default) description)
+
+function cmdArgIsUsed argument local i;
+ defineCmdArg argument @"" -1 @""
+ for i 0 + -1 _argc;
+  if ! cmp$ $i $argument
+   return 1
+  endif
+ endfor
+return 0
+
+function cmdOptionStr argument default local i;
+ defineCmdArg argument default 1 @"";
+ for i 0 + -1 _argc;
+  if && (< i - _argc 1) ! cmp$ $i $argument
+   return + i 1
+  endif
+ endfor
+return default
+
+function cmdOption argument default local d v;
+ defineCmdArg argument default 0 @"";
+ set d @""
+ set v cmdOptionStr argument d
+ if = v d
+  return default
+ endif
+return val$ $v
