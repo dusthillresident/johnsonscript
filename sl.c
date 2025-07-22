@@ -981,6 +981,7 @@ void process_function_definitions(program *prog,int startpos){
 #define opt_unclaim	4	// unclaim a string (so it can be re-used by 'S')
 #define opt_cleanup	5	// free unused memory from all stringvars and string accs
 #define opt_randomise	6	// get a new random seed based on the current clock time in seconds
+#define opt_unbuffered  7	// set a file handle to unbuffered
 //#define	opt_importreplace 7	// import, but existing functions with the same name are replaced
 //#define opt_evalimport	8	// import, but treating string argument as code containing function definitions
 //#define opt_evalimportreplace 9 // see above
@@ -1030,6 +1031,7 @@ option( program *prog, int *p ){
   if( !strncmp( "randomize", id_string.string, id_string.len)){opt_number= opt_randomise; goto option__identify_option_string_out;}	//	randomise
   if( !strncmp( "unclaim", id_string.string, id_string.len)){opt_number= opt_unclaim; goto option__identify_option_string_out;} //	unclaim [string ref num]	Unclaim a string
   if( !strncmp( "cleanup", id_string.string, id_string.len)){opt_number= opt_cleanup; goto option__identify_option_string_out;} //	cleanup		String var/acc garbage collection
+  if( !strncmp( "unbuffered", id_string.string, id_string.len)){opt_number= opt_unbuffered; goto option__identify_option_string_out;} //	unbuffered	set a file handle to unbuffered mode
 #ifdef enable_graphics_extension
   if( !strncmp( "wintitle", id_string.string, id_string.len ) ){ opt_number=opt_wintitle;	goto option__identify_option_string_out;}	// 
   if( !strncmp( "wmclose", id_string.string, id_string.len ) ){ opt_number=opt_wmclose;	goto option__identify_option_string_out;}	//	
@@ -1170,6 +1172,12 @@ option( program *prog, int *p ){
   for(i=0; i<prog->max_string_accumulator_levels; i++){
    clean_stringvar( prog, prog->string_accumulator[i], 0 );
   }
+ }
+ break;
+ case opt_unbuffered:
+ {
+  file *f = getfile( prog, *p, getvalue(p,prog), 0,0);
+  setvbuf( f->fp, NULL, _IONBF, 0 );
  }
  break;
 #ifdef enable_graphics_extension
@@ -5059,22 +5067,18 @@ interpreter(int p, program *prog){
   int levelIsGiven = isvalue( prog->tokens[p].type );
   int levelIsConstant = expressionIsSimple( prog, p );
   int level = levelIsGiven ? getvalue(&p,prog) : 1;
+  char *commandType = (char*[]){ [t_endloop] = "endloop", [t_continue] = "continue", [t_restart] = "restart" }[t.type];
+  if( level <= 0 ){
+   error( prog, op, "%s: bad level '%d'", commandType, level );
+  }
   int i;
   p = op;
   for(i=0; i<level; i++){
    p = findStartOrEndOfCurrentLoop(prog, p, direction);
   }
   if(p==-1){
-   char *msg=NULL;
-   switch( t.type ){
-    case t_endloop:
-     msg = (level==1 ? "endloop: not in a loop\n" : "endloop: couldn't find loop level specified"); break;
-    case t_continue:
-     msg = (level==1 ? "continue: not in a loop\n" : "continue: couldn't find loop level specified"); break;
-    case t_restart:
-     msg = (level==1 ? "restart: not in a loop\n" : "restart: couldn't find loop level specified"); break;
-   }
-   error(prog, op, msg);
+   char *msg = (level==1 ? "%s: not in a loop" : "%s: couldn't find loop level specified");
+   error(prog, op, msg, msg, commandType);
   }
   if(t.type == t_endloop) p+=1;
   if(levelIsConstant){

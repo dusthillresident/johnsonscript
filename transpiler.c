@@ -756,22 +756,25 @@ void translate_value(program *prog, int *p){
    PrintMain(")");
   }
   break;
- case t_cmpS:
+ case t_cmpS: case t_equalS:
+  PrintMain("(double)(");
+  if( CurTok.type == t_equalS ){
+   PrintMain( "!" );
+  }
   if( trans_reverse_function_params ){
    *p += 1;
-   PrintMain("(double)");
    PrintMain("CmpS(");
    translate_stringvalue(prog, p);    PrintMain(",");
    translate_stringvalue(prog, p); 
    PrintMain(",++SAL)");
   }else{
    *p += 1;
-   PrintMain("(double)");
    PrintMain("CmpS(++SAL,");
    translate_stringvalue(prog, p);    PrintMain(",");
    translate_stringvalue(prog, p); 
    PrintMain(")");
   }
+  PrintMain(")");
   break;
  case t_lenS:
   {
@@ -1996,6 +1999,11 @@ void translate_command(program *prog, int *p){
     #else
     ErrorOut("FUCK OFF!\n");
     #endif
+   }else if( TheseStringsMatch(opstr, "unbuffered") ){
+    PrintMain("{ FIL *f = JohnsonFiles_getFileStructPtr(");
+    translate_value(prog,p);
+    PrintMain(", 0, 0);\n");
+    PrintMain("setvbuf( f->fp, NULL, _IONBF, 0 );\n}\n");
    }else if( TheseStringsMatch(opstr, "seedrnd") ){
 
     int type = translate_determine_valueorstringvalue(prog, *p);
