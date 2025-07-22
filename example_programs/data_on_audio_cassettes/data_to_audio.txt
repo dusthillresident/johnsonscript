@@ -1,7 +1,8 @@
+#!/usr/bin/env gfxbin
 variable side fout fin bitRepeatCount;
 set fout _stdout
 
-variable i j k;
+variable i j k v;
 stringvar bitArray fileBasename fileData;
 constant sampsPerBit 6;
 set bitArray vector$ S"" S"" S"" S"";
@@ -9,20 +10,25 @@ set bitArray vector$ S"" S"" S"" S"";
 for i 0 2 2;
  for j 0 1;
   for k 0 + -1 sampsPerBit;
-   append$ $ V bitArray(+ i j)  chr$ s8 * (V (vector$ -0.36 0.36 -1 1) + j i) sin( * _pi  / k sampsPerBit )
+   append$ $ V bitArray(+ i j)  (chr$ 0)  (chr$ s8 * (V (vector$ -0.36 0.36 -1 1) + j i) sin( * _pi  / k sampsPerBit )) 
   endfor
  endfor
 endfor
 
 
-if 0
-for i 0 3;
- sput _stdout $ V bitArray i;
- for j 0 16;
-  bput _stdout 0;
- endfor
+stringvar wavheader;  set wavheader
+"52 49 46 46 24 00 00 80  57 41 56 45 66 6D 74 20
+ 10 00 00 00 01 00 01 00  80 BB 00 00 00 77 01 00
+ 02 00 10 00 64 61 74 61  00 00 00 80";
+set j 0;  set v 0;
+for i 0 + -1 len$ wavheader;
+ caseof C wavheader(i);
+  when 32 10;
+  otherwise
+   bput fout val$ cat$ "0x" mid$ wavheader i 2
+   increment i
+ endcase
 endfor
-endif
 
 variable argIndex;
 
@@ -44,7 +50,7 @@ for argIndex 0 (- _argc 1);
 
  # Initial silence
  for i 0 16111;
-  bput fout 0
+  bput fout 0 0
  endfor
 
  # Leader tone
@@ -86,7 +92,7 @@ for argIndex 0 (- _argc 1);
 
  # Final silence
  for i 0 16111;
-  bput fout 0
+  bput fout 0 0
  endfor
  
  close fin

@@ -1,46 +1,88 @@
+#!/usr/bin/env gfxbin
 initCmdArgs;
+variable fin;   set fin _stdin
+if cmp$ "" $ cmdOptionStr @"-file" @""
+ set fin openin $ cmdOptionStr @"-file" @""
+ if ! fin
+  sput _stderr "Couldn't open input file" chr$ 10;
+  quit 1
+ endif
+endif
 
 stringvar sucks originalFilepath fileBasename fileData;
-variable fin fout av frames amplitude side lastSamp threshold exitOnDataError dataError forceExtraRead;
+variable fout av frames amplitude side lastSamp threshold exitOnDataError dataError forceExtraRead inputFormat needToSkipWavHeader writeToStdout _writeToStdout saveSignal ssfp sampleCounter quietMode silentMode;
 set exitOnDataError 1
 set forceExtraRead  cmdOption @"-extraread" -1
 
 constant debugMessages cmdArgIsUsed @"-debugmsgs";
+set saveSignal cmdArgIsUsed @"-record"
+if saveSignal
+ set ssfp openout cat$ "recorded_signal_" str$ rnd 1000000 str$ rnd 1000000 ".raw"
+endif
 
+set writeToStdout cmdArgIsUsed @"-stdout";
+if writeToStdout
+ option "unbuffered" _stdin
+ option "unbuffered" _stdout
+endif
+
+constant sampleRate cmdOption @"-r" 48000;
+set quietMode cmdArgIsUsed @"-quiet";
+set silentMode cmdArgIsUsed @"-silent";
+if silentMode
+ set quietMode 1
+endif
 #  Lowpass strength
-constant lowpassStrength - 1 (cmdOption @"-lps" 0.476);
+constant lowpassStrength - 1 (cmdOption @"-lps" 0.6424693456257908);
 constant lpv - 1 lowpassStrength;
 variable lowpassState;
 
 #  Highpass strength
-constant highpassStrength cmdOption @"-hps" 0.291;
+constant highpassStrength cmdOption @"-hps" 0.2574568466318752;
 constant hpv - 1 highpassStrength;
 variable highpassState;
 
 #  Adaptation strength
-constant adaptationStrength cmdOption @"-ads" 0.24;
+constant adaptationStrength cmdOption @"-ads" 0.18177523314154192;
 constant adpv - 1 adaptationStrength;
 
 #  Zero-point adjustment strength
-constant avAdjustmentStrength cmdOption @"-avs" 0.0577
+constant avAdjustmentStrength cmdOption @"-avs" 0.06621990165225652
 constant avv - 1 avAdjustmentStrength
+
+#  Calibration threshold
+constant calibrationThreshold cmdOption @"-cal" 0.5098892694031304
+ # 0.67066     
+ # 0.592
+
+#  Input file format
+stringvar inputFormatChoice;
+set inputFormatChoice $cmdOptionStr @"-format" @"wav"
+caseof inputFormatChoice;
+ when "wav";
+  set inputFormat 0
+  set needToSkipWavHeader 1
+ when "raw" "s8";
+  set inputFormat 1
+ when "s16";
+  set inputFormat 0
+ when "u8";
+  set inputFormat 2
+ when "s16stereo";
+  set inputFormat 3
+ otherwise
+  sput _stderr "invalid input format specified, '" inputFormatChoice "'" chr$10;
+  quit 1
+endcase
 
 cmdArgSetDescription @"-hps" @"High pass filter strength. From 0.0 minimum to 1.0 maximum";
 cmdArgSetDescription @"-ads" @"Adaptation strength. 0.0 minimum, 1.0 maximum";
 cmdArgSetDescription @"-avs" @"Zero-point adjustment strength. 0.0 minimum, 1.0 maximum";
 cmdArgSetDescription @"-extraread" @"Forces enabling or disabling of calibration extra read. 0 to force disabled, 1 to force enabled";
-cmdArgsDisplayHelp;
-
-#if ! _argc
- set fin _stdin
-#else
-# set fin openin $0
-# if ! fin
-#  sput _stderr "cant open file" chr$10
-#  quit 1
-# endif
-#endif
-
+cmdArgSetDescription @"-format" @"Select input format. Supported options are 'wav' (must be signed 16bit), 's8' (alias 'raw'), 's16', 'u8'"
+cmdArgSetDescription @"-cal" @"Polarity calibration threshold value."
+cmdArgSetDescription @"-stdout" @"Write decoded data to stdout."
+;checkCmdArgs;
 
 begin;
 
@@ -53,14 +95,29 @@ function highpassFilter v;
 return - v highpassState
 
 function getSamp local b blah;
- set b bget fin
+ increment sampleCounter
+ caseof inputFormat;
+  when 0; # signed 16 bit
+   set b  / >> (<< (| bget fin << bget fin 8) 16) 16 256
+  when 1; # signed 8 bit 
+   set b  >> << bget fin 24 24
+  when 2; # unsigned 8 bit
+   set b  - bget fin 128
+  when 3; # signed 16 bit STEREO
+   set b  / >> (<< (| bget fin << bget fin 8) 16) 16 256
+   if + bget fin bget fin endif
+ endcase
+ if saveSignal
+  bput ssfp b
+ endif
  #set blah bget fin
- if < b 0
-  sput _stderr "getSamp: unexpected eof" chr$10;
+ if eof fin
+  if ! quietMode
+   sput _stderr "getSamp: unexpected eof" chr$10;
+  endif
   failMsg
   quit 1
  endif
- set b >> << b 24 24
  set b highpassFilter b
  set b lowpassFilter b
  set av + (* av avv) * b avAdjustmentStrength
@@ -74,8 +131,8 @@ function max a b;
 return b
 
 function read local n;
- set n av;
- set frames 0;
+ set n av
+ set frames 0
  while ^ side > getSamp av 
   increment frames
   set n  max  abs n  abs lastSamp
@@ -119,24 +176,55 @@ function specialCalibration local a b i v d1 d2 oa ob;
  set d2 0
  set a read
  set b read
- for i 3 64;
+ for i 1 128;
   set oa a; set a read;
   set ob b; set b read;
   set d1 + d1 abs - oa a
   set d2 + d2 abs - ob b
  endfor
- print "d1: " d1;
- print "d2: " d2;
- if || (&& (= forceExtraRead -1) > d1 d2) forceExtraRead;
-  sput _stderr "calibration: performing extra read" chr$10;
+ if ! quietMode
+  sput _stderr "d1: " str$ d1 chr$ 10;
+  sput _stderr "d2: " str$ d2 chr$ 10;
+ endif
+ if || (&& (= forceExtraRead -1) > (/ d1 d2) calibrationThreshold ) > forceExtraRead 0;
+  if ! quietMode
+   sput _stderr "calibration: performing extra read" chr$10;
+  endif
   read
  endif
- read read read read
+ #read read read read
+ readBit readBit
+function skipWavHeader;
+ if || (cmp$ "RIFF" (sget fin 4)) (cmp$ "WAVE" right$ (sget fin 8) 4)
+  if ! quietMode
+   sput _stderr "Input file is not .wav, we will try reading as input format 's8' (refer to -help)" chr$10
+  endif
+  set inputFormat 1
+  return 0
+ endif
+ if cmp$ (sget fin 24) "" endif
+ if cmp$ (sget fin 4) "data"
+  sput _stderr "oh no, maybe this wav file is damaged or weird" chr$10;
+  quit 1
+ endif
+ if cmp$ (sget fin 4) "" endif
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-function begin local beginCode oldFrames oldAmp i;
- .retry
+function calculateDataRate readCount local bitCount samplesPerBit bitsPerSecond;
+ if quietMode endfunction endif
+ set bitCount / readCount 2
+ set samplesPerBit / sampleCounter bitCount
+ set bitsPerSecond / sampleRate samplesPerBit
+ sput _stderr "Data rate in bits per second: " str$ bitsPerSecond " (" left$ str$ (/ bitsPerSecond * 4000 / sampleRate 48000) 4 "x speed)" chr$ 10;
+
+function begin local beginCode oldFrames oldAmp i leaderToneReadCount;
+ if needToSkipWavHeader
+  if debugMessages
+   dbgmsg @"skipping wav header";
+  endif
+  skipWavHeader
+ endif
  if debugMessages
   dbgmsg @"listening for the silence to end";
  endif
@@ -147,10 +235,13 @@ function begin local beginCode oldFrames oldAmp i;
   read
  endfor
  set threshold 0
- for i 1 44;
+ set sampleCounter 0
+ set leaderToneReadCount 1000
+ for i 1 leaderToneReadCount;
   set threshold + threshold read
  endfor
- set threshold / threshold 44
+ calculateDataRate leaderToneReadCount
+ set threshold * 0.75 / threshold leaderToneReadCount
  if debugMessages
   dbgmsg @"starting to listen for the start bit";
  endif
@@ -165,16 +256,21 @@ function begin local beginCode oldFrames oldAmp i;
  endwhile
  set beginCode readByte
  if != 54 beginCode
-  sput _stderr "failed to begin, got: " str$ beginCode chr$10;
-  failMsg
+  if ! quietMode
+   sput _stderr "failed to begin, got: " str$ beginCode chr$10;
+  endif
+  failMsg;
   quit 1
  endif
  
  readData @fileBasename;
  readData @originalFilepath;
- print "File: " fileBasename;
- print "Original filepath: " originalFilepath;
+ if ! writeToStdout
+  print "File: " fileBasename;
+  print "Original filepath: " originalFilepath;
+ endif
  set exitOnDataError 0
+ set _writeToStdout writeToStdout
  readData @fileData;
  set fout openout "recovered_file"
  sput fout fileData
@@ -182,10 +278,18 @@ function begin local beginCode oldFrames oldAmp i;
  if dataError
   failMsg; quit 1
  else
-  print (cat$ chr$ 0x1b "[" str$ (+ 30 62) "m") "OK"
+  if ! silentMode
+   sput _stderr (cat$ chr$ 0x1b "[" str$ (+ 30 62) "m") "OK" chr$10;
+   resetTerminalColours _stderr
+  endif
  endif
 
- oscli "tput init"
+ if saveSignal
+  for i 1 100;
+   readBit
+  endfor
+ endif
+
  quit
 
 # -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -212,23 +316,36 @@ function readNumber local result b;
  set result readNumber_
  set b readNumber_
  if != b result
-  sput _stderr "number failed to read back successfully: " str$ result " " str$ b chr$10;
+  if ! quietMode
+   sput _stderr "number failed to read back successfully: " str$ result " " str$ b chr$10;
+  endif
   failMsg
   quit 1
  endif
 return result
 
-function readData dataReturn local i sum len;
+function readData dataReturn local i sum len b;
  set sum readNumber
  set len readNumber
  set $dataReturn  string$ len chr$ 0
  set i 0
- while < i len
-  set C $dataReturn i  readByte
-  increment i
- endwhile
+ if _writeToStdout
+  while < i len
+   set b readByte
+   set C $dataReturn i  b
+   bput _stdout b
+   increment i
+  endwhile
+ else
+  while < i len
+   set C $dataReturn i  readByte
+   increment i
+  endwhile
+ endif
  if != sum chksum dataReturn
-  sput _stderr "data failed to read back successfully" chr$10;
+  if ! quietMode
+   sput _stderr "data failed to read back successfully" chr$10;
+  endif
   if exitOnDataError
    failMsg
    quit 1
@@ -239,8 +356,9 @@ function readData dataReturn local i sum len;
 endfunction
 
 function failMsg;
+ if silentMode return 0 endif
 sput _stderr (cat$ chr$ 0x1b "[" str$ (+ 30 61) "m") "Failure" chr$10
-oscli "tput init"
+;resetTerminalColours _stderr;
 
 function dbgmsg msg;
 #endfunction
@@ -251,14 +369,34 @@ sput _stderr $ msg chr$10
 # --------------------------------------------------------------------
 # --------------------------------------------------------------------
 
+function resetTerminalColours fp local data i;
+ set data @"1B 5B 21 70 1B 5B 3F 33 3B 34 6C 1B 5B 34 6C 1B 3E 1B 5B 3F 36 39 6C"
+ set i 0
+ while < i len$ $data
+  bput fp val$ cat$ "0x" mid$ $data i 2
+  set i + i 3
+ endwhile
+ 
 function initCmdArgs;
  stringvar _cmdArgDatabase;
+ stringvar _cmdArgsUsed;
+ set _cmdArgsUsed string$ (+ 1 _argc) vector$ 0
+
+function checkCmdArgs local i;
+ defineCmdArg @"-help" @"" -1 @"Displays the help message";
+ if cmdArgIsUsed @"-help"
+  cmdArgsDisplayHelp
+  quit
+ endif
+ for i 0 + -1 _argc;
+  if ! V _cmdArgsUsed i
+   cmdArgsDisplayHelp
+   sput _stderr "Error: unrecognised command-line argument or option: " $ i chr$10 chr$10;
+   quit 1
+  endif
+ endfor
 
 function cmdArgsDisplayHelp local i;
- defineCmdArg @"-help" @"" -1 @"Displays the help message";
- if ! cmdArgIsUsed @"-help"
-  endfunction
- endif
  sput _stderr "---- Command line options ----" chr$10 chr$10;
  set i 0
  while < i vlen$ _cmdArgDatabase;
@@ -287,7 +425,7 @@ function cmdArgsDisplayHelp local i;
   sput _stderr chr$10
   increment i
  endwhile
- quit
+ sput _stderr "------------------------------" chr$10 chr$10;
 
 function cmdArgSetDescription argument description local i;
  set i 0
@@ -318,6 +456,7 @@ function cmdArgIsUsed argument local i;
  defineCmdArg argument @"" -1 @""
  for i 0 + -1 _argc;
   if ! cmp$ $i $argument
+   set V _cmdArgsUsed i 1
    return 1
   endif
  endfor
@@ -326,7 +465,13 @@ return 0
 function cmdOptionStr argument default local i;
  defineCmdArg argument default 1 @"";
  for i 0 + -1 _argc;
-  if && (< i - _argc 1) ! cmp$ $i $argument
+  if ! cmp$ $i $argument
+   if (= i - _argc 1)
+    sput _stderr "Error: command-line option '" $i "' expects a parameter" chr$10 "Try -help for more info" chr$10;
+    quit 1
+   endif
+   set V _cmdArgsUsed i		1 
+   set V _cmdArgsUsed (+ i 1)	1
    return + i 1
   endif
  endfor
